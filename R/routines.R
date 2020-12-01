@@ -1,16 +1,145 @@
+# change the pass flag to match a new target FDR
+rescore <- function(df, target.fdr, use.pon=FALSE, min.pon.dp=10, quiet=TRUE) {
+    newpass <- df$hard.filter &
+        df$lysis.fdr <= target.fdr & df$mda.fdr <= target.fdr
+    if (use.pon)
+        newpass <- newpass & (df$dp >= min.pon.dp & (df$unique.donors <= 1 | df$max.out <= 2))
+    if (!quiet)
+        cat(sprintf("rescore: %d passing -> %d passing\n", sum(df$pass), sum(newpass)))
+    df$pass <- newpass
+    df
+}
+
+
+# Read in number of callable basepairs per sample
+get.callable <- function(ss.dir, verbose=TRUE) {
+    require(yaml)
+    ss.config <- file.path(ss.dir, "scan.yaml")
+    if (!file.exists(ss.config))
+        stop(sprintf("expected SCAN-SNV config file does not exist: %s\n",
+            ss.config))
+
+    yaml <- read_yaml(ss.config)
+    sc.samples <- names(yaml$sc_bams)
+
+    sapply(sc.samples, function(sn) {
+        f <- sprintf('%s/callable_regions/%s/callable_regions.bed', ss.dir, sn)
+        if (verbose)
+            print(f)
+        bed <- read.table(f, sep='\t', header=F)
+        sum(as.numeric(bed[,3]-bed[,2]))
+    })
+}
+
+
+
+# Read in all genotype data frames
+get.scansnv <- function(ss.dir, type='somatic', muttype='snv', verbose=TRUE) {
+    if (!(type %in% c('somatic', 'mosaic', 'hsnp_spikein')))
+        stop(sprintf("type must be either somatic, mosaic or hsnp_spikein, not '%s'", type))
+
+    if (!(muttype %in% c('snv', 'indel')))
+        stop(spritnf("muttype must be either 'snv' or 'indel', not %s", muttype))
+
+    require(yaml)
+    ss.config <- file.path(ss.dir, "scan.yaml")
+    if (!file.exists(ss.config))
+        stop(sprintf("expected SCAN-SNV config file does not exist: %s\n",
+            ss.config))
+
+    yaml <- read_yaml(ss.config)
+    sc.samples <- names(yaml$sc_bams)
+    min.sc.alt <- yaml$min_sc_alt
+
+    ret <- lapply(sc.samples, function(s) {
+        path.fmt <- "%s_genotypes.rda"
+        if (muttype == 'indel' & type == 'somatic')
+            path.fmt <- "%s_genotypes.pon_filter.rda"
+        f <- file.path(ss.dir, muttype, s, sprintf(path.fmt, type))
+        if (verbose)
+            print(f)
+        load(f)
+        # we assume the loaded variable is called 'somatic' below
+        # but the mosaic results are called 'mosaic'.
+        # just stick it in a variable named somatic anyway. it doesn't matter.
+        somatic <- get(ifelse(type == 'hsnp_spikein', 'spikeins', type))
+
+        scalt <- which(colnames(somatic) == make.names(s))+2
+        somatic$id <- paste(somatic$chr, somatic$pos, somatic$refnt, somatic$altnt)
+        somatic
+    })
+    names(ret) <- sc.samples
+
+    ret 
+}
+
+
+
 # given two data frames of somatic and germline locations, annotate
 # the somatic data frame with the position of the nearest germline entry.
-find.nearest.germline <- function(som, germ, chrs=c(1:22,'X')) {
+find.nearest.germline <- function (som, germ, chrs = c(1:22, "X")) {
     som$nearest.het <- NA
     for (chr in chrs) {
         gpos <- germ$pos[germ$chr == chr]
         spos <- som$pos[som$chr == chr]
         gidx <- findInterval(spos, gpos)
-        nearest.idx <- ifelse(abs(gpos[gidx] - spos) <= abs(gpos[gidx+1] - spos), gidx, gidx+1)
+        gidx[gidx==0] <- 1  # somatic is to the left of lowest germline, so
+                            # the lowest germline is the nearest
+        nearest.idx <- ifelse(abs(gpos[gidx] - spos) <= abs(gpos[gidx + 
+            1] - spos), gidx, gidx + 1)
         som$nearest.het[som$chr == chr] <- gpos[nearest.idx]
     }
     som
 }
+
+# d is a vector of distances to the nearest hSNP
+get.distance.distn <- function(d, min=1, max=5) {
+    h <- hist(d[d >= min & d <= max], breaks=50, plot=FALSE)
+    h$density <- h$density / sum(h$density)
+    h
+}
+
+# som is the 'somatic' dataframe input to scansnv
+# hsnp is the 'data' dataframe from training.rda containing training hSNP sites
+# XXX: M=50 is unlikely to be a good value in general
+resample.hsnps <- function(som, hsnps, chrom, M=50) {
+    # XXX: Random position sampling: maybe add an option to use random
+    # instead of somatic candidates?
+    # Random positioning is not as realistic as all non-ref sites because
+    # it doesn't account for alignability/mappability in the same way as
+    # non-ref sites.
+    #random.pos <- find.nearest.germline(som=data.frame(chr='X',
+    #       pos=sort(as.integer(runif(n=1e5, min=min(spos$pos), max=max(spos$pos))))), 
+    #   germ=data, chrs='X')
+    #random.pos <- random.pos[abs(random.pos$pos-random.pos$nearest.het)>0,]
+
+    # Distribution of candidates
+    # 1. only consider candidates for this sample
+    #tmpsom <- som[!is.na(som$af) & som$af>0,]
+    tmpsom <- find.nearest.germline(som=som[order(som$pos),], germ=hsnps,
+        chrs=chrom)
+    spos <- log10(abs(tmpsom$pos-tmpsom$nearest.het))
+
+    # Distribution of hSNP distances
+    # Since the training data are already sorted, diff() gives the distance
+    # between this SNP and the next. Nearest SNP is the min of the distance
+    # to the left and right.
+    hsnps$nearest.hsnp <- pmin(diff(c(0,hsnps$pos)),
+                               diff(c(hsnps$pos, max(hsnps$pos)+1)))
+    hpos <- log10(hsnps$nearest.hsnp)
+
+    # Approximate the distributions
+    dist.s <- get.distance.distn(spos)
+    dist.h <- get.distance.distn(hpos)
+    ds <- dist.s$density[findInterval(hpos, dist.s$breaks, all.inside=T)]
+    dh <- dist.h$density[findInterval(hpos, dist.h$breaks, all.inside=T)]
+    
+    u <- runif(n=length(ds))
+    list(selection=data.frame(dist=hsnps$nearest.hsnp, ds=ds, dh=dh, u=u, keep=u < ds / (M*dh)),
+        dist.s=dist.s, dist.h=dist.h)
+}
+
+
 
 muttype.map <- c(
     'A>C'='T>G',
@@ -29,7 +158,10 @@ muttype.map <- c(
 
 get.3mer <- function(df) {
     require(BSgenome)
-    require(BSgenome.Hsapiens.UCSC.hg19)
+    #require(BSgenome.Hsapiens.UCSC.hg19)
+    # we use hs37d5; mostly doesn't matter for autosomes, but chrMT is
+    # significantly updated.
+    require(BSgenome.Hsapiens.1000genomes.hs37d5)
 
     comp <- c('A', 'C', 'G', 'T')
     names(comp) <- c('T', 'G', 'C', 'A')
@@ -41,8 +173,10 @@ get.3mer <- function(df) {
         x$muttype <- muttype.map[paste(x$refnt, x$altnt, sep = ">")]
     }
 
-    x$ctx <- getSeq(BSgenome.Hsapiens.UCSC.hg19,
-                    names=paste("chr", x$chr, sep=''),
+    #x$ctx <- getSeq(BSgenome.Hsapiens.UCSC.hg19,
+                    #names=paste("chr", x$chr, sep=''),
+    x$ctx <- getSeq(BSgenome.Hsapiens.1000genomes.hs37d5,
+                    names=x$chr,
                     start=x$pos-1, end=x$pos+1, as.character=TRUE)
     x$ctx.rc <- sapply(strsplit(x$ctx, ""),
                     function(s) paste0(comp[s[c(3,2,1)]], collapse=''))
@@ -99,6 +233,7 @@ apply.fdr.tuning.parameters <- function(somatic, fdr.tuning) {
             fdr.tuning$fcs[[idx]]$pops$max[popbin,]
     }, somatic$dp, somatic$popbin)
 
+    rownames(nt.na) <- c('nt', 'na')
     nt.na
 }
 
@@ -159,24 +294,25 @@ genotype.somatic <- function(gatk, gatk.lowmq, sc.idx, bulk.idx,
         cat(sprintf("        cap.alpha=TRUE: alpha <= %0.3f enforced despite artifact prevalence\n", target.fdr))
 
     nt.na <- apply.fdr.tuning.parameters(somatic, fdr.tuning)
+    somatic <- cbind(somatic, t(nt.na))
 
     cat("        lysis artifact FDR\n")
     somatic <- cbind(somatic,
-                lysis=t(mapply(match.fdr2,
+                lysis=t(mapply(match.fdr3,
+                            pv=somatic$lysis.pv,
                             gp.mu=somatic$gp.mu, gp.sd=somatic$gp.sd,
                             dp=somatic$dp,
-                            nt=nt.na[1,], na=nt.na[2,],
-                            target.fdr=target.fdr, div=2,
-                            cap.alpha=cap.alpha)))
+                            nt=somatic$nt, na=somatic$na,
+                            div=2)))
 
     cat("        MDA artifact FDR\n")
     somatic <- cbind(somatic,
-                mda=t(mapply(match.fdr2,
+                mda=t(mapply(match.fdr3,
+                            pv=somatic$mda.pv,
                             gp.mu=somatic$gp.mu, gp.sd=somatic$gp.sd,
                             dp=somatic$dp,
-                            nt=nt.na[1,], na=nt.na[2,],
-                            target.fdr=target.fdr, div=4,
-                            cap.alpha=cap.alpha)))
+                            nt=somatic$nt, na=somatic$na,
+                            div=4)))
 
 
     cat("step 5: applying optional alignment filters\n")
@@ -218,12 +354,11 @@ genotype.somatic <- function(gatk, gatk.lowmq, sc.idx, bulk.idx,
     somatic$dp.test <- somatic$dp >= min.sc.dp & somatic$bulk.dp >= min.bulk.dp
 
     cat("step 6: calling somatic SNVs\n")
-    somatic$pass <-
-        somatic$abc.pv > 0.05 &
-        somatic$lysis.pv <= somatic$lysis.alpha &
-        somatic$mda.pv <= somatic$mda.alpha &
+    somatic$hard.filter <- somatic$abc.pv > 0.05 &
         somatic$cigar.id.test & somatic$cigar.hs.test &
         somatic$lowmq.test & somatic$dp.test & somatic[,scalt] >= min.sc.alt
+    somatic$pass <- somatic$hard.filter &
+        somatic$lysis.fdr <= target.fdr & somatic$mda.fdr <= target.fdr
     cat(sprintf("        %d passing somatic SNVs\n", sum(somatic$pass)))
     cat(sprintf("        %d filtered somatic SNVs\n", sum(!somatic$pass)))
 
@@ -260,7 +395,10 @@ dreads <- function(ys, d, gp.mu, gp.sd, factor=1, ghd=gaussHermiteData(128)) {
 # note that this is subject to heavy integer effects, specifically
 # when D is low or when af is close to 0 or 1
 # div controls the error model
-estimate.alphabeta2 <- function(gp.mu, gp.sd, dp=30, alphas=10^seq(-4,0,0.05), div=2) {
+#
+# Now generates all possible (alpha,beta) pairs by iterating over all
+# possible read supports. No longer needs a "requested alpha" input.
+estimate.alphabeta3 <- function(gp.mu, gp.sd, dp=30, div=2) {
     td <- data.frame(dp=0:dp,
         mut=dreads(0:dp, d=dp, gp.mu=gp.mu, gp.sd=gp.sd),
         err1=dreads(0:dp, d=dp, gp.mu=gp.mu, gp.sd=gp.sd, factor=div),
@@ -275,18 +413,10 @@ estimate.alphabeta2 <- function(gp.mu, gp.sd, dp=30, alphas=10^seq(-4,0,0.05), d
     td <- td[order(td$err),]
     td$cumerr <- cumsum(td$err)
 
-    # FP probability assuming mutation occurs on this allele (wrt mu)
-    fps <- sapply(alphas, function(alpha) {
-        reject <- td$cumerr <= alpha
-        # because there are two potential H0 models, a single alpha
-        # does not make sense. Instead, use the maximum alpha to stay
-        # conservative.
-        max.alpha <- max(c(0, td$cumerr[td$cumerr <= alpha]))
-        c(alpha=max.alpha, beta=sum(c(0, td$mut[reject == TRUE])))
-    })
-
-    list(td=td, alphas=fps[1,], betas=fps[2,], input.alphas=alphas)
+    # cumerr is the test's alpha, cumsum(td$mut) is the corresponding power
+    return(list(td=td, alphas=td$cumerr, betas=cumsum(td$mut)))
 }
+
 
 # NOT equivalent to test(div=1)
 abc2 <- function(altreads, gp.mu, gp.sd, dp, factor=1) {
@@ -417,246 +547,25 @@ nt <- pmax(n*(g/sum(g)), 0.1)
 #             variants that have very high alpha (e.g., cases with
 #             alpha ~ 0.4, beta ~ 0.7). This puts significant pressure
 #             on the accuracy of the nt and na estimates.
-match.fdr2 <- function(gp.mu, gp.sd, dp, nt, na, target.fdr=0.1, div=2, cap.alpha=TRUE) {
-    alphabeta <- estimate.alphabeta2(gp.mu=gp.mu, gp.sd=gp.sd, dp=dp, div=div)
-    x <- data.frame(alpha=alphabeta$alphas, beta=alphabeta$betas,
-               fdr=ifelse(alphabeta$alphas*na + alphabeta$betas*nt > 0,
-                          alphabeta$alphas*na / (alphabeta$alphas*na + alphabeta$betas*nt), 0))
-    x <- rbind(c(0, 0, 0), x)  # when no parameter meets target fdr
-    # use (a,) from the highest FDR <= target.fdr
-    x <- x[x$fdr <= target.fdr,] 
-    if (cap.alpha)
-        x <- x[x$alpha <= target.fdr,]
-    x <- x[x$fdr == max(x$fdr),]  # may be more than one row
-    # breaking ties by minimum alpha, maximum beta
-    x <- x[x$alpha == min(x$alpha),]
-    x <- x[x$beta == max(x$beta),]
-    unlist(x[1,])
-}
-
-
-
-
-###############################################################################
-# various plotting routines
-###############################################################################
-
-
-plot.ab <- function(ab) {
-    layout(matrix(1:4,nrow=2,byrow=T))
-    td <- ab$td[order(ab$td$dp),]
-    plot(td$dp, td$mut, type='l', ylim=range(td[,c('mut', 'err1', 'err2')]),
-        xlab="Depth", ylab="Model probabiblity")
-    lines(td$dp, pmax(td$err1,td$err2), lty='dotted', col=2)
-    plot(x=ab$input.alphas, y=ab$alphas, xlab="Requested alpha", ylab="Estimated alpha", log="xy")
-    plot(ab$alphas, ab$betas, xlab='FP rate', ylab='Power')
-    abline(h=0, lty='dotted')
-    plot(ab$alphas, ab$betas, log='x', xlab='log(FP rate)', ylab='Power')
-    abline(h=0, lty='dotted')
-}
-
-
-# for 96 dimensional mut sigs
-mutsig.cols <- rep(c('deepskyblue', 'black', 'firebrick2', 'grey', 'chartreuse3', 'pink2'), each=16)
-
-plot.3mer <- function(x, no.legend=FALSE, ...) {
-    bases <- c("A", 'C', 'G', 'T')
-
-    # need to make a table of all possible contexts because they may not
-    # be observed after filtering.
-    t <- rep(0, 96)
-    names(t) <- paste0(rep(bases, each=4),
-                      rep(c('C', 'T'), each=48),
-                      rep(bases, times=4),
-                      ":",
-                      rep(c('C', 'T'), each=48),
-                      ">",
-                      c(rep(c('A', 'G', 'T'), each=16),
-                        rep(c('A', 'C', 'G'), each=16)))
-    print(table(x$ctx))
-    t2 <- table(x$type.and.ctx)
-    t[names(t2)] <- t2
-    tn <- do.call(rbind, strsplit(names(t), ":"))
-    t <- t[order(tn[,2])]
-    print(t)
-    p <- barplot(t, las=3, col=mutsig.cols, names.arg=tn[order(tn[,2]), 1], space=0.5, border=NA, ...)
-    abline(v=(p[seq(4,length(p)-1,4)] + p[seq(5,length(p),4)])/2, col='grey')
-    if (!no.legend)
-        legend('topright', ncol=2, legend=sort(unique(tn[,2])),
-            fill=mutsig.cols[seq(1, length(mutsig.cols), 16)])
-}
-
-
-plot.fcontrol <- function(fc) {
-    layout(matrix(1:(1+length(fc$pops)), nrow=1))
-    plot(fc$binmids, fc$g/sum(fc$g),
-        ylim=range(c(fc$g/sum(fc$g), fc$s/sum(fc$s))),
-        type='l', lwd=2)
-    lines(fc$binmids, fc$s/sum(fc$s), col=2, lwd=2)
-
-    for (i in 1:length(fc$pops)) {
-        pop <- fc$pops[[i]]
-        barplot(names.arg=fc$binmids, t(pop), col=1:2,
-            main=sprintf('Assumption: ~%d true sSNVs', sum(round(pop[,1],0))), las=2)
-        legend('topright', fill=1:2, legend=c('Ntrue', 'Nartifact'))
-    }
-}
-
-
-# using the (alpha, beta) relationships and fcontrol population
-# estimations, determine average sensitivity per AF with a
-# (theoretically) controlled FDR
-plot.fdr <- function(fc, dps=c(10,20,30,60,100,200), target.fdr=0.1, div=2) {
-    afs <- fc$binmids
-    layout(matrix(1:(3*length(fc$pops)), nrow=3))
-    for (i in 1:length(fc$pops)) {
-        # from fcontrol: pops[[i]] has rows corresponding to afs
-        pop <- fc$pops[[i]]
-        l <- lapply(dps, function(dp) {
-            sapply(1:length(afs), function(i)
-                match.fdr(afs[i], dp, nt=pop[i,1], na=pop[i,2],
-                    target.fdr=target.fdr, div=div)
-            )
-        })
-        matplot(x=afs, sapply(l, function(ll) ll[3,]), type='l', lty=1,
-            main=sprintf("Assuming %d true sSNVs", sum(pop[,1])),
-            xlab="AF (binned)", ylab="FDR", ylim=c(0, 1.1*target.fdr))
-        abline(h=target.fdr, lty='dotted')
-        matplot(x=afs, sapply(l, function(ll) ll[1,]), type='l', lty=1,
-            xlab="AF (binned)", ylab="log(alpha)", log='y', ylim=c(1e-5,1))
-        abline(h=10^-(1:5), lty=2)
-        matplot(x=afs, sapply(l, function(ll) ll[2,]), type='l', lty=1,
-            xlab="AF (binned)", ylab="Power", ylim=0:1)
-    }
-}
-
-
-plot.ssnv.region <- function(chr, pos, alt, ref, fits, fit.data, upstream=5e4, downstream=5e4, gp.extend=1e5, n.gp.points=100, blocks=50) {
-    d <- fit.data[fit.data$chr==chr & fit.data$pos >= pos - upstream &
-                  fit.data$pos <= pos + downstream,]
-
-    cat("estimating AB in region..\n")
-    # ensure that we estimate at exactly pos
-    est.at <- c(seq(pos - upstream, pos-1, length.out=n.gp.points/2), pos,
-                seq(pos+1, pos + downstream, length.out=n.gp.points/2))
-    fit.chr <- fits[[chr]]
-    cat("WARNING: if this function produces NA predictions, try reducing the value of 'blocks'\n")
-    # infer.gp can fail when using chunk>1.
-    # this does not affect the calling code, just this plot
-    gp <- infer.gp(ssnvs=data.frame(pos=est.at),
-        fit=fit.chr, hsnps=fit.data[fit.data$chr == chr,],
-        chunk=blocks, flank=gp.extend, max.hsnp=500)
-    gp$pos <- est.at
-    plot.gp.confidence(df=gp, add=FALSE)
-    points(d$pos, d$hap1/d$dp, pch=20, ylim=0:1)
-    af <- alt/(alt+ref) # adjust to closest AB
-    gp.at <- gp[gp$pos == pos,]$gp.mu
-    ab <- 1/(1+exp(-gp.at))
-    af <- ifelse(abs(af - ab) <= abs(af - (1-ab)), af, 1-af)
-    points(pos, af, pch=20, cex=1.25, col=2)
-}
-
-
-# NOTE: the 95% probability interval is in the NORMAL space, not the
-# fraction space [0,1]. After the logistic transform, the region in
-# fraction space may not be an HDR.
-plot.gp.confidence <- function(pos, gp.mu, gp.sd, df, sd.mult=2,
-    logspace=FALSE, tube.col=rgb(0.9, 0.9, 0.9),
-    line.col='black', tube.lty='solid', line.lty='solid', add=TRUE)
+#
+# Now returns the (alpha, beta, fdr) values for the smallest FDR such
+# that pv <= alpha.
+# THE ONLY DIFFERENCE between this calculation and the published version
+# is that there is no cap.alpha. This only kept (a,b,fdr) triplets such
+# that alpha <= target.fdr. When nt >> na, the fdr can be severely
+# deflated, allowing sites that are clearly concordant with the error
+# mode to pass.
+match.fdr3 <-
+function (pv, gp.mu, gp.sd, dp, nt, na, div = 2)
 {
-    if (!missing(df)) {
-        pos <- df$pos
-        gp.mu <- df$gp.mu
-        gp.sd <- df$gp.sd
-    }
-
-    # maybe the analytical solution exists, but why derive it
-    if (!logspace) {
-        cat("transforming to AF space...\n")
-        sd.upper <- 1 / (1 + exp(-(gp.mu + sd.mult*gp.sd)))
-        sd.lower <- 1 / (1 + exp(-(gp.mu - sd.mult*gp.sd)))
-        gp.mu <- 1 / (1 + exp(-gp.mu))
-    } else {
-        sd.upper <- gp.mu + sd.mult*gp.sd
-        sd.lower <- gp.mu - sd.mult*gp.sd
-    }
-
-    if (!add) {
-        plot(NA, NA, xlim=range(pos), ylim=0:1)
-    }
-
-    polygon(c(pos, rev(pos)), c(gp.mu, rev(sd.lower)),
-        col=tube.col, border=line.col, lty=tube.lty)
-    polygon(c(pos, rev(pos)), c(gp.mu, rev(sd.upper)),
-        col=tube.col, border=line.col, lty=tube.lty)
-    lines(pos, gp.mu, lwd=2, col=line.col, lty=line.lty)
-}
-
-
-
-#############################################################################
-# routines for joint calling
-#############################################################################
-
-joint.caller <- function(dfs, hdfs) {
-    jdf <- jhelper(dfs)
-    jhdf <- jhelper(hdfs)
-    cutoffs <- get.joint.cutoffs(jhdf, n=length(dfs))
-    jdf$pass <- apply.joint.cutoffs(jdf, cutoffs)
-    dfs <- lapply(dfs, function(df) {
-        # af > 1/dp is a roundabout way to enforce alt>1, because
-        # at this point in the pipeline the column corresponding to
-        # alt counts for this sample has been lost.
-        df$jpass <- as.logical(jdf$pass * (df$af > 0) &
-            df$dp.test & df$lowmq.test & df$af > 1/df$dp)
-        df$jabc <- jdf$jabc
-        df
-    })
-    dfs
-}
-
-
-
-jhelper <- function(dfs, gp.sd.penalty=0.1, gp.sd.cutoff=1) {
-    n=length(dfs)
-    cps <- 4 # columns per sample
-    jdf <- do.call(cbind, lapply(dfs,function(df) df[,c('af','dp','abc.pv','gp.sd')]))
-
-    jdf$ncells <- rowSums(!apply(jdf[,seq(1,n*cps,cps)], 1:2, is.nan) & jdf[,seq(1,n*cps,cps)]>0)
-
-    # column reordering makes it easy to recover af, dp, pv
-    jdf$jabc <- apply(jdf[,c(seq(1,n*cps,cps), seq(2,n*cps,cps), seq(3,n*cps,cps), seq(4,n*cps,cps))], 1,
-        function(row) {
-            afs <- row[1:n]
-            dps <- row[(n+1):(2*n)]
-            pvs <- row[(2*n+1):(3*n)]
-            sds <- row[(3*n+1):(4*n)]
-            n.penalties <- sum(sds[dps>0 & afs>0] >= gp.sd.cutoff)
-            prod(pvs[dps>0 & afs>0]) * prod(rep(gp.sd.penalty, n.penalties))
-    })
-    jdf
-}
-
-# n - number of samples
-get.joint.cutoffs <- function(jdf, n, q=0.1) {
-    counts <- sapply(2:n, function(i) sum(jdf$ncells == i))
-    if (any(counts) == 0) {
-        cat("counts for ncells:\n")
-        for (i in 2:n)
-            cat(sprintf("ncells=%2d, count=%d\n", i, counts[i-1]))
-        stop("Found ncell count=0 (see above).  Try increasing the number of hSNP spikeins")
-    }
-
-    cutoffs <- sapply(2:n, function(i)
-        quantile(jdf$jabc[jdf$ncells == i], prob=q))
-    # ncells=0,1: don't pass any of these. they will be determined only by
-    # single sample statistics
-    data.frame(ncells=0:n, cutoff=c(Inf, Inf, cutoffs))
-}
-
-
-apply.joint.cutoffs <- function(jdf, cutoffs) {
-    mapply(function(ncells, jabc)
-        jabc >= cutoffs$cutoff[cutoffs$ncells == ncells],
-        ncells=jdf$ncells, jabc=jdf$jabc)
+    alphabeta <- estimate.alphabeta3(gp.mu = gp.mu, gp.sd = gp.sd, 
+        dp = dp, div = div)
+    x <- data.frame(alpha = alphabeta$alphas, beta = alphabeta$betas, 
+        fdr = ifelse(alphabeta$alphas * na + alphabeta$betas * 
+            nt > 0, alphabeta$alphas * na/(alphabeta$alphas * 
+            na + alphabeta$betas * nt), 0))
+    x <- rbind(c(1, 0, 1), x)
+    x <- x[pv <= x$alpha,] # passing values
+    x <- x[x$fdr == min(x$fdr),,drop=F]
+    unlist(x[1,])
 }

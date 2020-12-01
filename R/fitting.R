@@ -141,23 +141,58 @@ infer.gp.block <- function(ssnvs, fit, hsnps, ctx, flank=1e5, max.hsnps=150, ver
 }
 
 
+# Update: 3/24/2020: now allows inference at a single hSNP by leaving the
+# hSNP out of the fitting set.
 # "chunks" here are NOT the 250 hSNP blocks used in parameter fitting.
 # "ssnvs" are the candidate sSNVs. the data frame need only have a 'pos'
 #        column, but should only contain candidates from one chromosome
 # "hsnps" should be the phased hSNPs used for fitting, but again only
 #        from one chromosome corresponding to ssnvs.
+# spikein - if set to TRUE, then ssnvs is expected to be a subset of hsnps.
+#           for each spikein snp, AB is estimated by temporarily leaving
+#           the single hsnp out of the training set.
+#           WARNING: spikein is only meant to be used with chunk=1!
 infer.gp <- function(ssnvs, fit, hsnps, chunk=2500, flank=1e5, max.hsnps=150,
-    verbose=FALSE) {
+    verbose=FALSE, spikein=FALSE) {
+
+    if (verbose) cat(sprintf("mode=%s\n", ifelse(spikein, 'spikein', 'somatic')))
+    if (spikein) {
+        if (chunk != 1)
+            stop("infer.gp: can only run in spikein mode with chunk=1\n")
+        ssnv.is.hsnp <- ssnvs$pos %in% hsnps$pos
+        cat("infer.gp: building ssnvs <-> hsnps map\n")
+        hsnp.map <- sapply(1:nrow(ssnvs), function(i) {
+            if (!ssnv.is.hsnp[i]) NA
+            else which(hsnps$pos == ssnvs$pos[i])
+        })
+        #if (length(hsnp.map) != nrow(ssnvs))
+            #stop(sprintf("For spike-in mode, 'ssnvs' (%d rows) must be a subset of 'hsnps' (%d rows), but only %d hsnps are in ssnvs", nrow(ssnvs), nrow(hsnps), length(hsnp.map)))
+        #ssnvs <- hsnps[ssnvs,,drop=FALSE]
+        cat(sprintf("infer.gp: performing %d leave-1-out hSNP AB estimations\n", nrow(ssnvs)))  
+    }
+
     nchunks <- ceiling(nrow(ssnvs)/chunk)
 
     ctx <- abmodel.approx.ctx(c(), c(), c(), hsnp.chunksize=2*max.hsnps + 10)
     do.call(rbind, lapply(1:nchunks, function(i) {
-            if (verbose) cat(sprintf("block %d\n", i))
+            if (i %% 100 == 0)
+                cat(sprintf("infer.gp: progress: finished %d of %d sites (%0.1f%%)\n",
+                    i, nchunks, 100*i/nchunks))
             start <- 1 + (i-1)*chunk
             stop <- min(i*chunk, nrow(ssnvs))
+            h <- hsnps
+            if (spikein) {
+                if (ssnv.is.hsnp[i])
+                    # ssnv i is hsnp hsnp.map[i], so remove it from the training set
+                    h <- hsnps[-hsnp.map[i],]
+            }
             infer.gp.block(ssnvs[start:stop,,drop=FALSE],
-                fit, hsnps, ctx=ctx, flank=flank, max.hsnps=max.hsnps,
+                fit, h,
+                ctx=ctx, flank=flank, max.hsnps=max.hsnps,
                 verbose=verbose)
         })
     )
 }
+
+
+
