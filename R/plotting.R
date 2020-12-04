@@ -82,8 +82,7 @@ plot.ab <- function(ab) {
     td <- ab$td[order(ab$td$dp),]
     plot(td$dp, td$mut, type='l', ylim=range(td[,c('mut', 'err1', 'err2')]),
         xlab="Depth", ylab="Model probabiblity")
-    lines(td$dp, pmax(td$err1,td$err2), lty='dotted', col=2)
-    plot(x=ab$input.alphas, y=ab$alphas, xlab="Requested alpha", ylab="Estimated alpha", log="xy")
+    lines(td$dp, td$err, lty='dotted', col=2)
     plot(ab$alphas, ab$betas, xlab='FP rate', ylab='Power')
     abline(h=0, lty='dotted')
     plot(ab$alphas, ab$betas, log='x', xlab='log(FP rate)', ylab='Power')
