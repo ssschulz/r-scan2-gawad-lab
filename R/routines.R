@@ -272,50 +272,16 @@ genotype.somatic <- function(gatk, gatk.lowmq, sc.idx, bulk.idx,
     somatic$ab <- 1/(1+exp(-somatic$gp.mu))
 
 
-    cat("step 2: computing p-values for filters\n")
-    cat("        allele balance consistency\n")
-    somatic$abc.pv <-
-        mapply(abc2, altreads=somatic[,scalt], gp.mu=somatic$gp.mu,
-            gp.sd=somatic$gp.sd, factor=1, dp=somatic$dp)
-
-    cat("        lysis artifacts\n")
-    somatic$lysis.pv <-
-        mapply(test2, altreads=somatic[,scalt], gp.mu=somatic$gp.mu,
-            gp.sd=somatic$gp.sd, dp=somatic$dp, div=2)
-
-    cat("        MDA artifacts\n")
-    somatic$mda.pv <-
-        mapply(test2, altreads=somatic[,scalt], gp.mu=somatic$gp.mu,
-            gp.sd=somatic$gp.sd, dp=somatic$dp, div=4)
-
-
-    cat(sprintf("step 3: tuning FDR = %0.3f\n", target.fdr))
-    if (cap.alpha)
-        cat(sprintf("        cap.alpha=TRUE: alpha <= %0.3f enforced despite artifact prevalence\n", target.fdr))
-
+    cat("step 2: computing p-values and FDR components for models\n")
+    cat("        calculating p-values and powers..\n")
+    scores <- score.sites(somatic, scalt)
+    somatic <- cbind(somatic, scores)
+    cat("        estimating FDRs..\n")
     nt.na <- apply.fdr.tuning.parameters(somatic, fdr.tuning)
-    somatic <- cbind(somatic, t(nt.na))
-
-    cat("        lysis artifact FDR\n")
-    somatic <- cbind(somatic,
-                lysis=t(mapply(match.fdr3,
-                            pv=somatic$lysis.pv,
-                            gp.mu=somatic$gp.mu, gp.sd=somatic$gp.sd,
-                            dp=somatic$dp,
-                            nt=somatic$nt, na=somatic$na,
-                            div=2)))
-
-    cat("        MDA artifact FDR\n")
-    somatic <- cbind(somatic,
-                mda=t(mapply(match.fdr3,
-                            pv=somatic$mda.pv,
-                            gp.mu=somatic$gp.mu, gp.sd=somatic$gp.sd,
-                            dp=somatic$dp,
-                            nt=somatic$nt, na=somatic$na,
-                            div=4)))
+    somatic <- estimate.fdr(somatic, nt=nt.na[1,], na=nt.na[2,])
 
 
-    cat("step 5: applying optional alignment filters\n")
+    cat("step 3: applying optional alignment filters\n")
     if (missing(gatk.lowmq)) {
         cat("        WARNING: skipping low MQ filters. will increase FP rate\n")
         somatic$lowmq.test <- TRUE
@@ -353,7 +319,7 @@ genotype.somatic <- function(gatk, gatk.lowmq, sc.idx, bulk.idx,
 
     somatic$dp.test <- somatic$dp >= min.sc.dp & somatic$bulk.dp >= min.bulk.dp
 
-    cat("step 6: calling somatic SNVs\n")
+    cat("step 4: calling somatic SNVs\n")
     somatic$hard.filter <- somatic$abc.pv > 0.05 &
         somatic$cigar.id.test & somatic$cigar.hs.test &
         somatic$lowmq.test & somatic$dp.test & somatic[,scalt] >= min.sc.alt
@@ -367,6 +333,106 @@ genotype.somatic <- function(gatk, gatk.lowmq, sc.idx, bulk.idx,
     return(c(call.fingerprint, list(somatic=somatic)))
 }
 
+
+# For each site, calculate:
+#    - ABC-test p-value (mut)
+#    - pre-amplification artifact p-value (pre)
+#    - MDA amplification artifact p-value (mda)
+#    - max. target.fdr at which the site would be called under
+#       H_pre-amplification artifact
+#    - max. target.fdr at which the site would be called under
+#       H_MDA amplification artifact
+# This is where the majority of genotyping time is spent. It is critical
+# not to recompute the read distributions (dreads()) multiple times.
+# The order of the final column set is the following (to match older
+# versions of the pipeline):
+#    abc.pv lysis.pv mda.pv (Nt) (Na) lysis.alpha lysis.beta lysis.fdr mda.alpha mda.beta mda.fdr
+score.sites <- function(somatic, scalt) {
+    vals <- data.frame(t(mapply(function(altreads, dp, gp.mu, gp.sd) {
+            # Step1: compute dreads for all relevant models:
+            # XXX: speeding up this block is the most effective way to
+            # increase performance.
+            dps <- 0:dp
+            mut=dreads(dps, d=dp, gp.mu=gp.mu, gp.sd=gp.sd)
+            pre1=dreads(dps, d=dp, gp.mu=gp.mu, gp.sd=gp.sd, factor=2)
+            pre2=dreads(dps, d=dp, gp.mu=-gp.mu, gp.sd=gp.sd, factor=2)
+            pre <- (pre1 + pre2)/2
+            mda1=dreads(dps, d=dp, gp.mu=gp.mu, gp.sd=gp.sd, factor=4)
+            mda2=dreads(dps, d=dp, gp.mu=-gp.mu, gp.sd=gp.sd, factor=4)
+            mda <- (mda1 + mda2)/2
+
+            # Step 2: Determine the p-value calling threshold
+            #
+            # The alpha cutoff:
+            # For each candidate SNV, we can compute the probability of a
+            # more extreme event (in terms of the number of alt reads)
+            # under each artifact model. This roughly corresponds to alpha,
+            # the type I error rate (false positive rate).
+            #
+            # How to determine an alpha cutoff for calling:
+            # To determine a good calling threshold, we want to know how
+            # various p-value cutoffs map to false discovery rates (FDRs).
+            # For example, if our set of candidate SNVs is 99% artifacts,
+            # then an alpha cutoff of 0.05 would produce an FDR of at
+            # least 5:1 (~5% of all candidates would be called, 99% of
+            # which are artifacts; and we don't know how many of the
+            # remaining true mutations would be called, but it must be
+            # less than 1% of all candidates). The same 0.05 cutoff would
+            # perform very differently on a set of candidate mutations
+            # that is only 1% artifact.
+            #
+            # Estimating the FDR:
+            # The FDR estimate is:
+            #    FDR = alpha N_A / (alpha N_A + beta N_T).
+            # N_T and N_A are estimates for the relative rates of true
+            # mutations and artifacts, respectively, and were calculated
+            # by comparing VAF distributions between hSNPs and SNV
+            # candidates. 'alpha' and 'beta' are computed here:
+            # alpha is the probability of incorrectly calling
+            # an artifact as a mutation and beta is the probability of
+            # correctly calling a true mutation.
+            #
+            # N.B.:
+            # Since these distributions are not unimodal, we define "more
+            # significant" as any event with lower probability.
+            abc.pv <- sum(mut[mut <= mut[altreads + 1]])
+            lysis.pv <- sum(pre[pre <= pre[altreads + 1]])
+            lysis.alpha <- lysis.pv  # to match older code
+            lysis.beta <- sum(mut[pre <= pre[altreads + 1]])
+            mda.pv <- sum(mda[mda <= mda[altreads + 1]])
+            mda.alpha <- mda.pv  # to match older code
+            mda.beta <- sum(mut[mda <= mda[altreads + 1]])
+
+            c(abc.pv, lysis.pv, mda.pv, NA, NA,
+                lysis.alpha, lysis.beta, NA,
+                mda.alpha, mda.beta, NA)
+        },
+        somatic[,scalt], somatic$dp, somatic$gp.mu, somatic$gp.sd)))
+
+    colnames(vals) <- c('abc.pv', 'lysis.pv', 'mda.pv', 'nt', 'na',
+            'lysis.alpha', 'lysis.beta', 'lysis.fdr',
+            'mda.alpha', 'mda.beta', 'mda.fdr')
+
+    vals
+}
+
+
+# Given N_T and N_A estimates, calculate FDR 
+estimate.fdr <- function(somatic, nt, na) {
+    somatic$nt <- nt
+    somatic$na <- na
+
+    # avoid division by 0
+    denom <- somatic$lysis.pv*somatic$na + somatic$lysis.beta*somatic$nt
+    somatic$lysis.fdr <- ifelse(denom > 0, somatic$lysis.pv*somatic$na / denom, 0)
+
+    denom <- somatic$mda.pv*somatic$na + somatic$mda.beta*somatic$nt
+    somatic$mda.fdr <- ifelse(denom > 0, somatic$mda.pv*somatic$na / denom, 0)
+
+    somatic
+}
+
+
 # probability distribution of seeing y variant reads at a site with
 # depth d with the estimate (gp.mu, gp.sd) of the local AB. model is
 #     Y|p ~ Bin(d, 1/(1+exp(-b))),    b ~ N(gp.mu, gp.sd)
@@ -377,7 +443,12 @@ genotype.somatic <- function(gatk, gatk.lowmq, sc.idx, bulk.idx,
 # 'factor' allows changing the relationship of ab -> af
 # NOTE: for many calls, is best for the caller to compute ghd once
 # and supply it to successive calls.
-dreads <- function(ys, d, gp.mu, gp.sd, factor=1, ghd=gaussHermiteData(128)) {
+
+# IMPORTANT!! recomputing this in the function increases runtime
+# by approximately 5-fold! Setting this as a global constant is critical!
+# XXX: ..but it would be nice if users could change it.
+ghd = gaussHermiteData(128)
+dreads <- function(ys, d, gp.mu, gp.sd, factor=1) { #, ghd=gaussHermiteData(128)) {
     require(fastGHQuad)
     
     sapply(ys, function(y)
@@ -389,49 +460,6 @@ dreads <- function(ys, d, gp.mu, gp.sd, factor=1, ghd=gaussHermiteData(128)) {
             }, ghd
         )
     )
-}
-
-# determine the beta (power) as a function of alpha (FP rate)
-# note that this is subject to heavy integer effects, specifically
-# when D is low or when af is close to 0 or 1
-# div controls the error model
-#
-# Now generates all possible (alpha,beta) pairs by iterating over all
-# possible read supports. No longer needs a "requested alpha" input.
-estimate.alphabeta3 <- function(gp.mu, gp.sd, dp=30, div=2) {
-    td <- data.frame(dp=0:dp,
-        mut=dreads(0:dp, d=dp, gp.mu=gp.mu, gp.sd=gp.sd),
-        err1=dreads(0:dp, d=dp, gp.mu=gp.mu, gp.sd=gp.sd, factor=div),
-        err2=dreads(0:dp, d=dp, gp.mu=-gp.mu, gp.sd=gp.sd, factor=div))
-
-    # (td[,4]+td[,5])/2 corresponds to an even mixture of errors on the p
-    # and 1-p alleles.
-    # XXX: i really don't know how I feel about this mixture. but use it
-    # for now, maybe later come up with a better prior for the two error
-    # modes.
-    td$err <- (td$err1 + td$err2)/2
-    td <- td[order(td$err),]
-    td$cumerr <- cumsum(td$err)
-
-    # cumerr is the test's alpha, cumsum(td$mut) is the corresponding power
-    return(list(td=td, alphas=td$cumerr, betas=cumsum(td$mut)))
-}
-
-
-# NOT equivalent to test(div=1)
-abc2 <- function(altreads, gp.mu, gp.sd, dp, factor=1) {
-    pmf <- dreads(0:dp, d=dp, gp.mu=gp.mu, gp.sd=gp.sd, factor=factor)
-    p.value <- sum(pmf[pmf <= pmf[altreads + 1]])
-    c(p.value=p.value)  # just names the return
-}
-
-test2 <- function(altreads, gp.mu, gp.sd, dp, div) {
-    # equal mixture of errors in cis and trans
-    err <- (dreads(0:dp, d=dp, gp.mu=gp.mu, gp.sd=gp.sd, factor=div) +
-            dreads(0:dp, d=dp, gp.mu=-gp.mu, gp.sd=gp.sd, factor=div))/2
-
-    p.value <- sum(err[err <= err[altreads + 1]])
-    c(p.value=p.value)  # just names the return
 }
 
 
@@ -522,50 +550,3 @@ nt <- pmax(n*(g/sum(g)), 0.1)
          g=g, s=s, pops=pops))
 }
 
-# SUMMARY
-# given a target FDR, try to match the FDR as best as we can without
-# exceeding it.
-#
-# DETAILS
-# for a given (af, dp), find the relation (alpha, beta) to determine
-# what sensitivities and specificities are achievable.  using the
-# estimated numbers of true mutations nt and artifacts na in the
-# population, calculate the corresponding FDRs (alpha,beta,FDR).
-# return (alpha, beta, FDR) such that
-# FDR = arg max { FDR : FDR <= target.fdr }
-# to break ties (when more than one (alpha,beta) produce the same
-# FDR), select the triplet with minimal alpha and maximal beta.
-# cap.alpha - because there is often such a strong spike at low VAF
-#             amongst somatic candidate sites, the FDR control
-#             procedure sometimes results in prior error rates of <1%
-#             amongst high VAF candidate sSNVs. In this case, it will
-#             often accept variants that are very clearly more consistent
-#             with the artifact model(s) than with a true mutation. The
-#             cap.alpha parameter helps to address this issue by requiring
-#             alpha <= target FDR.
-#             To be more clear: when nt >> na, FDR matching can pass
-#             variants that have very high alpha (e.g., cases with
-#             alpha ~ 0.4, beta ~ 0.7). This puts significant pressure
-#             on the accuracy of the nt and na estimates.
-#
-# Now returns the (alpha, beta, fdr) values for the smallest FDR such
-# that pv <= alpha.
-# THE ONLY DIFFERENCE between this calculation and the published version
-# is that there is no cap.alpha. This only kept (a,b,fdr) triplets such
-# that alpha <= target.fdr. When nt >> na, the fdr can be severely
-# deflated, allowing sites that are clearly concordant with the error
-# mode to pass.
-match.fdr3 <-
-function (pv, gp.mu, gp.sd, dp, nt, na, div = 2)
-{
-    alphabeta <- estimate.alphabeta3(gp.mu = gp.mu, gp.sd = gp.sd, 
-        dp = dp, div = div)
-    x <- data.frame(alpha = alphabeta$alphas, beta = alphabeta$betas, 
-        fdr = ifelse(alphabeta$alphas * na + alphabeta$betas * 
-            nt > 0, alphabeta$alphas * na/(alphabeta$alphas * 
-            na + alphabeta$betas * nt), 0))
-    x <- rbind(c(1, 0, 1), x)
-    x <- x[pv <= x$alpha,] # passing values
-    x <- x[x$fdr == min(x$fdr),,drop=F]
-    unlist(x[1,])
-}
