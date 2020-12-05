@@ -61,7 +61,7 @@ scansnv.df.to.vcf <- function(df, out.file, ss.config, yaml, sample.name,
 
     vcf.header <- c(
         '##fileformat=VCFv4.0',
-        '##source=scansnv',
+        '##source=SCAN2',
         '##FORMAT=<ID=GT,Number=1,Type=String,Description="Genotype">')
     if (!missing(ss.config) | !missing(yaml))
         vcf.header <- c(vcf.header, 
