@@ -13,13 +13,12 @@ rescore <- function(df, target.fdr, use.pon=FALSE, min.pon.dp=10, quiet=TRUE) {
 
 # Read in number of callable basepairs per sample
 get.callable <- function(ss.dir, verbose=TRUE) {
-    require(yaml)
     ss.config <- file.path(ss.dir, "scan.yaml")
     if (!file.exists(ss.config))
         stop(sprintf("expected SCAN-SNV config file does not exist: %s\n",
             ss.config))
 
-    yaml <- read_yaml(ss.config)
+    yaml <- yaml::read_yaml(ss.config)
     sc.samples <- names(yaml$sc_bams)
 
     sapply(sc.samples, function(sn) {
@@ -41,13 +40,12 @@ get.scansnv <- function(ss.dir, type='somatic', muttype='snv', verbose=TRUE) {
     if (!(muttype %in% c('snv', 'indel')))
         stop(spritnf("muttype must be either 'snv' or 'indel', not %s", muttype))
 
-    require(yaml)
     ss.config <- file.path(ss.dir, "scan.yaml")
     if (!file.exists(ss.config))
         stop(sprintf("expected SCAN-SNV config file does not exist: %s\n",
             ss.config))
 
-    yaml <- read_yaml(ss.config)
+    yaml <- yaml::read_yaml(ss.config)
     sc.samples <- names(yaml$sc_bams)
     min.sc.alt <- yaml$min_sc_alt
 
@@ -447,10 +445,8 @@ estimate.fdr <- function(somatic, nt, na) {
 # IMPORTANT!! recomputing this in the function increases runtime
 # by approximately 5-fold! Setting this as a global constant is critical!
 # XXX: ..but it would be nice if users could change it.
-ghd = gaussHermiteData(128)
+ghd = fastGHQuad::gaussHermiteData(128)
 dreads <- function(ys, d, gp.mu, gp.sd, factor=1) { #, ghd=gaussHermiteData(128)) {
-    require(fastGHQuad)
-    
     sapply(ys, function(y)
         ghQuad(function(x) {
                 # ghQuad requires the weight function on x to be exp(-x^2)
