@@ -1,2 +1,3 @@
-useDynLib(scansnv)
+useDynLib(scan2)
 exportPattern(".")
+importFrom(fastGHQuad, ghQuad)
