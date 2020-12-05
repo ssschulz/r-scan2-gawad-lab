@@ -120,11 +120,9 @@ rescue <- function(df, lysis.sig, good.sig, rescue.fdr, ...) {
 
 
 get.sig.score <- function(ssnvs, good.sig, lysis.sig, eps=0.001) {
-    require(pracma)    # loads lsqnonneg
-
     test.sig <- df.to.sbs96(ssnvs)
     sigs <- cbind(good.sig, lysis.sig)
-    weights <- lsqnonneg(sigs, test.sig)$x
+    weights <- pracma::lsqnonneg(sigs, test.sig)$x
     recon <- as.vector(sigs %*% weights)
 
     # Make sure no channels = 0
