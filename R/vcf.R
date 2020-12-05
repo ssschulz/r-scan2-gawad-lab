@@ -8,13 +8,12 @@ scansnv.to.vcf <- function(ss.dir, output.fmt, type='somatic', muttype='snv', ov
     if (!(muttype %in% c('snv', 'indel')))
         stop(spritnf("muttype must be either 'snv' or 'indel', not %s", muttype))
 
-    require(yaml)
     ss.config <- file.path(ss.dir, "scan.yaml")
     if (!file.exists(ss.config))
         stop(sprintf("expected SCAN-SNV config file does not exist: %s\n",
             ss.config))
 
-    yaml <- read_yaml(ss.config)
+    yaml <- yaml::read_yaml(ss.config)
     sc.samples <- names(yaml$sc_bams)
     for (s in sc.samples) {
         path.fmt <- "%s_genotypes.rda"
@@ -43,7 +42,7 @@ scansnv.df.to.vcf <- function(df, out.file, ss.config, yaml, sample.name,
         stop('only one of "ss.config" or "yaml" can be specified')
 
     if (!missing(ss.config))
-        yaml <- read_yaml(ss.config)
+        yaml <- yaml::read_yaml(ss.config)
 
     if (!missing(yaml) | !missing(ss.config)) {
         ref.genome <- yaml$ref
@@ -78,9 +77,11 @@ scansnv.df.to.vcf <- function(df, out.file, ss.config, yaml, sample.name,
         ss <- s[s$chr==chr,]
         ss[order(ss$pos),]
     }))
-    writeLines(paste(s$chr, s$pos, s$dbsnp, s$refnt, s$altnt,
-        '.', 'PASS', '.', 'GT', '0/1', sep='\t'),
-        con=f)
+    if (nrow(s) > 0) {
+        writeLines(paste(s$chr, s$pos, s$dbsnp, s$refnt, s$altnt,
+            '.', 'PASS', '.', 'GT', '0/1', sep='\t'),
+            con=f)
+    }
     close(f)
 }
 
