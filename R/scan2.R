@@ -1,14 +1,19 @@
 setClassUnion('null.or.df', c('NULL', 'data.frame'))
+setClassUnion('null.or.list', c('NULL', 'list'))
 setClass("SCAN2", slots=c(
     single.cell='character',
     bulk='character',
     gatk="null.or.df",
     gatk.lowmq="null.or.df",
-    ab.estimates='null.or.df'))
+    ab.estimates='null.or.df',
+    mut.models='null.or.df',
+    cigar.data='null.or.df',
+    cigar.training='null.or.df'))
 
 make.scan <- function(single.cell, bulk) {
     new("SCAN2", single.cell=single.cell, bulk=bulk,
-        gatk=NULL, gatk.lowmq=NULL, ab.estimates=NULL)
+        gatk=NULL, gatk.lowmq=NULL, ab.estimates=NULL, mut.models=NULL,
+        cigar.data=NULL)
 }
 
 setValidity("SCAN2", function(object) {
@@ -35,8 +40,16 @@ setValidity("SCAN2", function(object) {
     }
 
     if (!is.null(object@ab.estimates)) {
-        TRUE
+        if (!all(colnames(object@ab.estimates == c('ab', 'gp.mu', 'gp.sd'))))
+            return("@ab.estimates is improperly formatted")
     }
+
+    if (!is.null(object@mut.models)) {
+        if (!all(colnames(object@mut.models == c('abc.pv', 'lysis.pv', 'lysis.beta',
+            'mda.pv', 'mda.beta'))))
+            return("@mut.models is improperly formatted")
+    }
+
     return(TRUE)
 })
 
@@ -59,17 +72,32 @@ setMethod("show", "SCAN2", function(object) {
         cat('', nrow(object@gatk.lowmq), "raw sites\n")
     }
 
-    cat("#   Allele balance:\n")
+    cat("#   Allele balance:")
     if (is.null(object@ab.estimates)) {
         cat(" (no data)\n")
     } else {
         s <- summary(object@ab.estimates$gp.sd)
-        cat('#       mean (0 is neutral):',
+        cat('\n#       mean (0 is neutral):',
             round(mean(object@ab.estimates$gp.mu), 3), '\n')
         cat('#       uncertainty (Q25, median, Q75):',
             round(s['1st Qu.'], 3),
             round(s['Median'], 3),
             round(s['3rd Qu.'], 3), '\n')
+    }
+
+    cat("#   Mutation models:")
+    if (is.null(object@mut.models)) {
+        cat(" (no data)\n")
+    } else {
+        cat(" computed\n")
+    }
+
+    cat("#   CIGAR data:")
+    if (is.null(object@cigar.data)) {
+        cat(" (no data)\n")
+    } else {
+        cat("\n#      ", nrow(object@cigar.data), "sites\n")
+        cat("#      ", nrow(object@cigar.training), "training sites\n")
     }
 })
 
@@ -161,10 +189,67 @@ setMethod("add.ab.estimates", "SCAN2", function(object, path) {
     ab <- get(load(path))
     ab <- merge(object@gatk[,c('chr','pos','refnt','altnt')], ab, all.x=TRUE)
     rownames(ab) <- rownames(object@gatk)
-    object@ab.estimates <- ab[,c('gp.mu','gp.sd')]
 
+    # choose the AB nearest to the AF of each candidate
+    # af can be NA if the site has 0 depth
+    ab$gp.mu <- ifelse(!is.na(object@gatk$af) & object@gatk$af < 1/2,
+        -abs(ab$gp.mu), abs(ab$gp.mu))
+    ab$ab <- 1/(1+exp(-ab$gp.mu))
+
+    object@ab.estimates <- ab[,c('ab', 'gp.mu','gp.sd')]
     object
 })
 
+
+setGeneric("compute.models", function(object)
+    standardGeneric("compute.models"))
+setMethod("compute.models", "SCAN2", function(object) {
+    if (is.null(object@gatk))
+        stop("must import GATK read counts first (see: read.gatk())")
+    if (is.null(object@ab.estimates))
+        stop("must attach allele balance estimates first (see: add.ab.estimates())")
+
+    object@mut.models <- compute.pvs.and.betas(
+        object@gatk$scalt, object@gatk$dp,
+        object@ab.estimates$gp.mu, object@ab.estimates$gp.sd)
+    object
+})
+
+
+setGeneric("add.cigar.data", function(object, sc.cigars, bulk.cigars, cigar.training)
+    standardGeneric("add.cigar.data"))
+setMethod("add.cigar.data", "SCAN2", function(object, sc.cigars, bulk.cigars, cigar.training) {
+    if (is.null(object@gatk))
+        stop("must import GATK read counts first (see: read.gatk())")
+
+    sc <- merge(object@gatk[,c('chr','pos')], sc.cigars,
+        by=c('chr', 'pos'), all.x=T)
+    bulk <- merge(object@gatk[,c('chr','pos')], bulk.cigars,
+        by=c('chr', 'pos'), all.x=T)
+    colnames(bulk) <- paste0(colnames(bulk), '.bulk')
+
+    # XXX: this is saved in the cigar data object for some reason
+    cigar.emp.score <- function (training, test, which = c("id", "hs")) {
+        xt <- training[, paste0(which, ".score.x")]
+        yt <- training[, paste0(which, ".score.y")]
+        x <- test[, paste0(which, ".score.x")]
+        y <- test[, paste0(which, ".score.y")]
+        mapply(function(xi, yi) mean(xt >= xi & yt >= yi, na.rm = T), x, y)
+    }
+    cigar.data <- cbind(sc[,-(1:2)], bulk[,-(1:2)])
+    cigar.data$id.score.y <- cigar.data$ID.cigars / cigar.data$dp.cigars
+    cigar.data$id.score.x <- cigar.data$ID.cigars.bulk / cigar.data$dp.cigars.bulk
+    cigar.data$id.score <- cigar.emp.score(training=cigar.training, test=cigar.data, which='id')
+    cigar.data$hs.score.y <- cigar.data$HS.cigars / cigar.data$dp.cigars
+    cigar.data$hs.score.x <- cigar.data$HS.cigars.bulk / cigar.data$dp.cigars.bulk
+    cigar.data$hs.score <- cigar.emp.score(training=cigar.training, test=cigar.data, which='hs')
+
+    object@cigar.data <- cigar.data
+    object@cigar.training <- cigar.training
+    object
+})
+
+
+# XXX: TODO
 # make another function to add mutation type info
 #    gatk$muttype <- muttype.map[paste(gatk$refnt, gatk$altnt, sep=">")]
