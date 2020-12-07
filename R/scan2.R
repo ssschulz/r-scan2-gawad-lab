@@ -1,5 +1,6 @@
 setClassUnion('null.or.df', c('NULL', 'data.frame'))
 setClassUnion('null.or.list', c('NULL', 'list'))
+setClassUnion('null.or.logical', c('NULL', 'logical'))
 setClass("SCAN2", slots=c(
     single.cell='character',
     bulk='character',
@@ -10,14 +11,14 @@ setClass("SCAN2", slots=c(
     cigar.data='null.or.df',
     cigar.training='null.or.df',
     static.filters='null.or.df',
-    static.filter='logical',
+    static.filter='null.or.logical',
     static.filter.params='null.or.list'))
 
 make.scan <- function(single.cell, bulk) {
     new("SCAN2", single.cell=single.cell, bulk=bulk,
         gatk=NULL, gatk.lowmq=NULL, ab.estimates=NULL, mut.models=NULL,
         cigar.data=NULL, cigar.training=NULL,
-        static.filters=NULL, static.filter=NA, static.filter.params=NULL)
+        static.filters=NULL, static.filter=NULL, static.filter.params=NULL)
 }
 
 setValidity("SCAN2", function(object) {
@@ -113,6 +114,36 @@ setMethod("show", "SCAN2", function(object) {
             sum(!object@static.filter, na.rm=TRUE), "removed",
             sum(is.na(object@static.filter)), "NA\n")
     }
+})
+
+
+internal.subset <- function(x, i) {
+    if (!is.null(x@gatk))
+        x@gatk <- x@gatk[i,]
+    if (!is.null(x@gatk.lowmq))
+        x@gatk.lowmq <- x@gatk.lowmq[i,]
+    if (!is.null(x@ab.estimates))
+        x@ab.estimates<- x@ab.estimates[i,]
+    if (!is.null(x@mut.models))
+        x@mut.models <- x@mut.models[i,]
+    if (!is.null(x@cigar.data))
+        x@cigar.data <- x@cigar.data[i,]
+    if (!is.null(x@static.filters))
+        x@static.filters <- x@static.filters[i,]
+    if (!is.null(x@static.filter))
+        x@static.filter <- x@static.filter[i]
+
+    x
+}
+
+#setMethod("[", signature=c("SCAN2", 'logical', 'missing', 'ANY'), function(x, i, j, drop=TRUE) {
+    #internal.subset(x, i)
+#})
+
+setMethod("[", signature=c("SCAN2", 'ANY', 'missing', 'ANY'), function(x, i, j, drop=TRUE) {
+    if (!(mode(i) %in% c('logical', 'numeric', 'integer')))
+        stop("subset [ requires logical, integer indeces")
+    internal.subset(x, i)
 })
 
 
