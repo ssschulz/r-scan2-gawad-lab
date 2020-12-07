@@ -8,12 +8,16 @@ setClass("SCAN2", slots=c(
     ab.estimates='null.or.df',
     mut.models='null.or.df',
     cigar.data='null.or.df',
-    cigar.training='null.or.df'))
+    cigar.training='null.or.df',
+    static.filters='null.or.df',
+    static.filter='logical',
+    static.filter.params='null.or.list'))
 
 make.scan <- function(single.cell, bulk) {
     new("SCAN2", single.cell=single.cell, bulk=bulk,
         gatk=NULL, gatk.lowmq=NULL, ab.estimates=NULL, mut.models=NULL,
-        cigar.data=NULL)
+        cigar.data=NULL, cigar.training=NULL,
+        static.filters=NULL, static.filter=NA, static.filter.params=NULL)
 }
 
 setValidity("SCAN2", function(object) {
@@ -50,6 +54,7 @@ setValidity("SCAN2", function(object) {
             return("@mut.models is improperly formatted")
     }
 
+    # XXX: add validator for static.filters
     return(TRUE)
 })
 
@@ -98,6 +103,15 @@ setMethod("show", "SCAN2", function(object) {
     } else {
         cat("\n#      ", nrow(object@cigar.data), "sites\n")
         cat("#      ", nrow(object@cigar.training), "training sites\n")
+    }
+
+    cat("#   Static filters: ")
+    if (is.null(object@static.filters)) {
+        cat("(not applied)\n")
+    } else {
+        cat(sum(object@static.filter, na.rm=TRUE), "retained",
+            sum(!object@static.filter, na.rm=TRUE), "removed",
+            sum(is.na(object@static.filter)), "NA\n")
     }
 })
 
@@ -246,6 +260,36 @@ setMethod("add.cigar.data", "SCAN2", function(object, sc.cigars, bulk.cigars, ci
 
     object@cigar.data <- cigar.data
     object@cigar.training <- cigar.training
+    object
+})
+
+
+setGeneric("add.static.filters", function(object, min.sc.alt=2, min.sc.dp=6,
+    max.bulk.alt=0, min.bulk.dp=11, exclude.dbsnp=TRUE, cg.id.q=0.05, cg.hs.q=0.05)
+        standardGeneric("add.static.filters"))
+setMethod("add.static.filters", "SCAN2",
+function(object, min.sc.alt=2, min.sc.dp=6, max.bulk.alt=0, min.bulk.dp=11,
+    exclude.dbsnp=TRUE, cg.id.q=0.05, cg.hs.q=0.05)
+{
+    if (is.null(object@gatk))
+        stop("must import GATK read counts first (see: read.gatk())")
+
+    object@static.filters <- data.frame(
+        cigar.id.test=object@cigar.data$id.score >
+            quantile(object@cigar.training$id.score, prob=cg.id.q, na.rm=T),
+        cigar.hs.test=object@cigar.data$hs.score >
+            quantile(object@cigar.training$hs.score, prob=cg.hs.q, na.rm=T),
+        lowmq.test=is.na(object@gatk.lowmq$balt) | object@gatk.lowmq$balt <= max.bulk.alt,
+        dp.test=object@gatk$dp >= min.sc.dp & object@gatk$bulk.dp >= min.bulk.dp,
+        abc.test=object@mut.models$abc.pv > 0.05,
+        min.sc.alt.test=object@gatk$scalt >= min.sc.alt,
+        max.bulk.alt.test=object@gatk$balt <= max.bulk.alt
+    )
+    object@static.filter <- rowSums(object@static.filters) == 0
+    object@static.filter.params <- list(
+        min.sc.alt=min.sc.alt, min.sc.dp=min.sc.dp,
+        max.bulk.alt=max.bulk.alt, min.bulk.dp=min.bulk.dp,
+        exclude.dbsnp=exclude.dbsnp, cg.id.q=cg.id.q, cg.hs.q=cg.hs.q)
     object
 })
 
