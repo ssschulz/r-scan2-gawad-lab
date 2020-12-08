@@ -60,6 +60,13 @@ setValidity("SCAN2", function(object) {
 })
 
 
+# Some getters
+setGeneric("chrom", function(object) standardGeneric("chrom"))
+setMethod("chrom", "SCAN2", function(object) object@gatk$chr)
+setGeneric("pos", function(object) standardGeneric("pos"))
+setMethod("pos", "SCAN2", function(object) object@gatk$pos)
+
+
 setMethod("show", "SCAN2", function(object) {
     cat("#", is(object)[[1]], "\n")
     cat("#   Single cell ID:", object@single.cell, "\n")
@@ -136,9 +143,48 @@ internal.subset <- function(x, i) {
     x
 }
 
-#setMethod("[", signature=c("SCAN2", 'logical', 'missing', 'ANY'), function(x, i, j, drop=TRUE) {
-    #internal.subset(x, i)
-#})
+
+concat2 <- function(x, y) {
+    if (x@single.cell != y@single.cell)
+        stop("c(): can only combine SCAN2 objects from the same single cell")
+    if (x@bulk != y@bulk)
+        stop("c(): can only combine SCAN2 objects from the same bulk")
+
+    x@gatk <- rbind(x@gatk, y@gatk)
+    x@gatk.lowmq <- rbind(x@gatk.lowmq, y@gatk.lowmq)
+    x@ab.estimates<- rbind(x@ab.estimates, y@ab.estimates)
+    x@mut.models <- rbind(x@mut.models, y@mut.models)
+    x@cigar.data <- rbind(x@cigar.data, y@cigar.data)
+    x@static.filters <- rbind(x@static.filters, y@static.filters)
+    x@static.filter <- c(x@static.filter, y@static.filter)
+
+    x
+}
+
+# think the better one is function(x, ...)
+setGeneric("concat", function(...) standardGeneric("concat"))
+setMethod("concat", signature="SCAN2", function(...) {
+    cat('concat(...) called\n')
+})
+
+setGeneric("concat", function(x, y) standardGeneric("concat"))
+setMethod("concat", signature=c("SCAN2", "SCAN2"), function(x, y) {
+    if (x@single.cell != y@single.cell)
+        stop("c(): can only combine SCAN2 objects from the same single cell")
+    if (x@bulk != y@bulk)
+        stop("c(): can only combine SCAN2 objects from the same bulk")
+
+    x@gatk <- rbind(x@gatk, y@gatk)
+    x@gatk.lowmq <- rbind(x@gatk.lowmq, y@gatk.lowmq)
+    x@ab.estimates<- rbind(x@ab.estimates, y@ab.estimates)
+    x@mut.models <- rbind(x@mut.models, y@mut.models)
+    x@cigar.data <- rbind(x@cigar.data, y@cigar.data)
+    x@static.filters <- rbind(x@static.filters, y@static.filters)
+    x@static.filter <- c(x@static.filter, y@static.filter)
+
+    x
+})
+
 
 setMethod("[", signature=c("SCAN2", 'ANY', 'missing', 'ANY'), function(x, i, j, drop=TRUE) {
     if (!(mode(i) %in% c('logical', 'numeric', 'integer')))
@@ -316,7 +362,7 @@ function(object, min.sc.alt=2, min.sc.dp=6, max.bulk.alt=0, min.bulk.dp=11,
         min.sc.alt.test=object@gatk$scalt >= min.sc.alt,
         max.bulk.alt.test=object@gatk$balt <= max.bulk.alt
     )
-    object@static.filter <- rowSums(object@static.filters) == 0
+    object@static.filter <- rowSums(object@static.filters) == ncol(object@static.filters)
     object@static.filter.params <- list(
         min.sc.alt=min.sc.alt, min.sc.dp=min.sc.dp,
         max.bulk.alt=max.bulk.alt, min.bulk.dp=min.bulk.dp,
