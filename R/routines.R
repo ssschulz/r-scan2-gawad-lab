@@ -220,6 +220,7 @@ get.fdr.tuning.parameters <- function(somatic, hsnps, bins=20, random.seed=0)
 
 
 apply.fdr.tuning.parameters <- function(somatic, fdr.tuning) {
+    cat("        estimating true (N_T) and artifact (N_A) counts in candidate set..\n")
     somatic$popbin <- ceiling(somatic$af * fdr.tuning$bins)
     somatic$popbin[somatic$dp == 0 | somatic$popbin == 0] <- 1
 
@@ -235,68 +236,55 @@ apply.fdr.tuning.parameters <- function(somatic, fdr.tuning) {
     nt.na
 }
 
-genotype.somatic <- function(gatk, gatk.lowmq, sc.idx, bulk.idx,
-    sites.with.ab, sc.cigars, bulk.cigars, cigar.training, cigar.emp.score,
-    fdr.tuning, spikein=FALSE,
-    cap.alpha=TRUE, cg.id.q=0.05, cg.hs.q=0.05, random.seed=0, target.fdr=0.1,
-    bulkref=bulk.idx+1, bulkalt=bulk.idx+2, scref=sc.idx+1, scalt=sc.idx+2,
-    min.sc.alt=0, min.sc.dp=0, min.bulk.dp=0)
+
+# gatk has the format:
+#   chr pos dbsnp refnt altnt mq mqrs [ (gt, ref, alt) ... ]
+# there should be one (gt, ref alt) triple for each sample. for this
+# function, we assume that ONLY the triple corresponding to the bulk
+# and single cell being analyzed are relevant; the rest are discarded,
+# with a warning.
+# IMPORTANT: gatk and gatk.lowmq must have identical columns
+prepare.data <- function(gatk, gatk.lowmq, sc.idx, bulk.idx, sites.with.ab,
+    bulkref=bulk.idx+1, bulkalt=bulk.idx+2, scref=sc.idx+1, scalt=sc.idx+2)
 {
-    call.fingerprint <- as.list(environment())
-    # almost all of this information is saved in the results
-    dont.save <- c('gatk', 'gatk.lowmq', 'sites.with.ab',
-        'sc.cigars', 'bulk.cigars')
-    call.fingerprint <- call.fingerprint[!(names(call.fingerprint) %in% dont.save)]
+    cat("preparing data\n")
+    if (ncol(gatk) > 13)
+        cat("WARNING: gatk dataframe larger than expected; samples beyond the single cell and bulk specified in sc.idx and bulk.idx are ignored.\n")
+    gatk <- gatk[,c(1:2,4:5,3,6:7,c(sc.idx,scref,scalt,bulk.idx,bulkref,bulkalt))]
+    colnames(gatk)[c(9,10,12,13)] <- c('scref', 'scalt', 'bref', 'balt')
 
-    # N.B.: there used to be some randomness in this function, but I
-    # believe all of it now resides elsewhere. To be safe, I've left
-    # this set.seed so that results can be reproduced.
-    set.seed(random.seed)
-
-    cat("step 1: preparing data\n")
+    # Add some convenient calculations
+    gatk$dp <- gatk$scalt + gatk$scref
+    gatk$af <- gatk$scalt / gatk$dp
+    gatk$bulk.dp <- gatk$balt + gatk$bref
     gatk$muttype <- muttype.map[paste(gatk$refnt, gatk$altnt, sep=">")]
-    gatk$dp <- gatk[,scalt] + gatk[,scref]
-    gatk$af <- gatk[,scalt] / gatk$dp
-    gatk$bulk.dp <- gatk[,bulkalt] + gatk[,bulkref]
 
     # sites only has columns 'chr','pos','refnt','altnt', which match gatk.
     # so this merge call is really just subsetting gatk.
-    somatic <- merge(gatk, sites.with.ab, all.y=TRUE)
-    cat(sprintf("        %d somatic SNV candidates\n", nrow(somatic)))
+    df <- merge(gatk, sites.with.ab, all.y=TRUE)
+    if (nrow(df) < nrow(gatk))
+        cat("WARNING: AB was not computed for all GATK rows\n")
+
     # choose the AB nearest to the AF of each candidate
     # af can be NA if the site has 0 depth
-    somatic$gp.mu <- ifelse(!is.na(somatic$af) & somatic$af < 1/2,
-        -abs(somatic$gp.mu), abs(somatic$gp.mu))
-    somatic$ab <- 1/(1+exp(-somatic$gp.mu))
+    df$gp.mu <- ifelse(!is.na(df$af) & df$af < 1/2,
+        -abs(df$gp.mu), abs(df$gp.mu))
+    df$ab <- 1/(1+exp(-df$gp.mu))
 
+    lmq <- gatk.lowmq[,c(1:2,4:5,3,6:7,
+        c(sc.idx,scref,scalt,bulk.idx,bulkref,bulkalt))]
+    colnames(lmq)[c(9,10,12,13)] <- c('scref', 'scalt', 'bref', 'balt')
 
-    cat("step 2: computing p-values and FDR components for models\n")
-    cat("        calculating p-values and powers..\n")
-    scores <- score.sites(somatic, scalt)
-    somatic <- cbind(somatic, scores)
-    cat("        estimating FDRs..\n")
-    nt.na <- apply.fdr.tuning.parameters(somatic, fdr.tuning)
-    somatic <- estimate.fdr(somatic, nt=nt.na[1,], na=nt.na[2,])
+    df <- merge(df, lmq, by=c('chr', 'pos', 'refnt', 'altnt'),
+        all.x=TRUE, suffixes=c('', '.lowmq'))
 
+    df 
+}
 
-    cat("step 3: applying optional alignment filters\n")
-    if (missing(gatk.lowmq)) {
-        cat("        WARNING: skipping low MQ filters. will increase FP rate\n")
-        somatic$lowmq.test <- TRUE
-    } else {
-        cat(sprintf("        attaching low MQ data..\n"))
-        lmq <- gatk.lowmq[,c('chr', 'pos', 'refnt', 'altnt',
-                             colnames(gatk.lowmq)[c(scref,scalt,bulkref,bulkalt)])]
-        somatic <- merge(somatic, lmq, by=c('chr', 'pos', 'refnt', 'altnt'),
-            all.x=TRUE, suffixes=c('', '.lowmq'))
-        # At the moment only removing sites that have bulk support when
-        # the MQ threshold is lowered.
-        cn <- paste0(colnames(gatk.lowmq)[bulkalt], '.lowmq')
-        # In spikein mode, known hSNPs are being treated like somatics,
-        # so it is necessary to short circuit this test.
-        somatic$lowmq.test <- is.na(somatic[,cn]) | somatic[,cn] == 0 | spikein
-    }
-
+alignment.filters <- function(somatic, sc.cigars, bulk.cigars,
+    cigar.training, cigar.emp.score, cg.id.q, cg.hs.q)
+{
+    cat("        applying alignment filters\n")
     somatic <- merge(somatic, sc.cigars, by=c('chr', 'pos'), all.x=T)
     somatic <- merge(somatic, bulk.cigars, by=c('chr', 'pos'), all.x=T,
         suffixes=c('', '.bulk'))
@@ -313,22 +301,59 @@ genotype.somatic <- function(gatk, gatk.lowmq, sc.idx, bulk.idx,
     cat("        Excessive clipped read CIGAR ops\n")
     somatic$cigar.hs.test <-
         somatic$hs.score > quantile(cigar.training$hs.score, prob=cg.hs.q, na.rm=T)
-    
 
+    somatic
+}
+
+
+hard.filters <- function(somatic, spikein,
+    sc.cigars, bulk.cigars, cigar.training, cigar.emp.score, cg.id.q, cg.hs.q,
+    min.sc.alt, min.sc.dp, min.bulk.dp)
+{
+    somatic <- alignment.filters(somatic, sc.cigars, bulk.cigars,
+        cigar.training, cigar.emp.score, cg.id.q, cg.hs.q)
+    somatic$lowmq.test <- is.na(somatic$balt.lowmq) | somatic$balt.lowmq == 0 | spikein
     somatic$dp.test <- somatic$dp >= min.sc.dp & somatic$bulk.dp >= min.bulk.dp
-
-    cat("step 4: calling somatic SNVs\n")
     somatic$hard.filter <- somatic$abc.pv > 0.05 &
         somatic$cigar.id.test & somatic$cigar.hs.test &
-        somatic$lowmq.test & somatic$dp.test & somatic[,scalt] >= min.sc.alt
+        somatic$lowmq.test & somatic$dp.test & somatic$scalt >= min.sc.alt
+
+    somatic
+}
+
+
+genotype.somatic <- function(gatk, gatk.lowmq, sc.idx, bulk.idx,
+    sites.with.ab, sc.cigars, bulk.cigars, cigar.training, cigar.emp.score,
+    fdr.tuning, spikein=FALSE,
+    cg.id.q=0.05, cg.hs.q=0.05, random.seed=0, target.fdr=0.1,
+    min.sc.alt=0, min.sc.dp=0, min.bulk.dp=0)
+{
+    # N.B.: there used to be some randomness in this function, but I
+    # believe all of it now resides elsewhere. To be safe, I've left
+    # this set.seed so that results can be reproduced.
+    set.seed(random.seed)
+
+    cat("step 1: gathering data\n")
+    somatic <- prepare.data(gatk, gatk.lowmq, sc.idx, bulk.idx, sites.with.ab)
+
+    cat(sprintf("step 2: scoring %d sites\n", nrow(somatic)))
+    somatic <- cbind(somatic, score.sites(somatic))
+
+    cat("step 3: applying hard filters\n")
+    somatic <- hard.filters(somatic, spikein, sc.cigars, bulk.cigars,
+            cigar.training, cigar.emp.score, cg.id.q, cg.hs.q,
+            min.sc.alt, min.sc.dp, min.bulk.dp)
+
+    cat ("step 4: determining calling thresholds\n")
+    somatic <- estimate.fdr(somatic, fdr.tuning)
+
+    cat ("step 5: calling mutations\n")
     somatic$pass <- somatic$hard.filter &
         somatic$lysis.fdr <= target.fdr & somatic$mda.fdr <= target.fdr
-    cat(sprintf("        %d passing somatic SNVs\n", sum(somatic$pass)))
-    cat(sprintf("        %d filtered somatic SNVs\n", sum(!somatic$pass)))
+    cat(sprintf("        %d passing somatic sites\n", sum(somatic$pass)))
+    cat(sprintf("        %d filtered somatic sites\n", sum(!somatic$pass)))
 
-    # return non-data parameters and the output
-    # the final RDA files are already large enough to be painful to work with
-    return(c(call.fingerprint, list(somatic=somatic)))
+    return(list(somatic=somatic))
 }
 
 
@@ -345,7 +370,8 @@ genotype.somatic <- function(gatk, gatk.lowmq, sc.idx, bulk.idx,
 # The order of the final column set is the following (to match older
 # versions of the pipeline):
 #    abc.pv lysis.pv mda.pv (Nt) (Na) lysis.alpha lysis.beta lysis.fdr mda.alpha mda.beta mda.fdr
-score.sites <- function(somatic, scalt) {
+score.sites <- function(somatic) {
+    cat("        calculating p-values and powers..\n")
     vals <- data.frame(t(mapply(function(altreads, dp, gp.mu, gp.sd) {
             # Step1: compute dreads for all relevant models:
             # XXX: speeding up this block is the most effective way to
@@ -405,7 +431,7 @@ score.sites <- function(somatic, scalt) {
                 lysis.alpha, lysis.beta, NA,
                 mda.alpha, mda.beta, NA)
         },
-        somatic[,scalt], somatic$dp, somatic$gp.mu, somatic$gp.sd)))
+        somatic$scalt, somatic$dp, somatic$gp.mu, somatic$gp.sd)))
 
     colnames(vals) <- c('abc.pv', 'lysis.pv', 'mda.pv', 'nt', 'na',
             'lysis.alpha', 'lysis.beta', 'lysis.fdr',
@@ -416,9 +442,11 @@ score.sites <- function(somatic, scalt) {
 
 
 # Given N_T and N_A estimates, calculate FDR 
-estimate.fdr <- function(somatic, nt, na) {
-    somatic$nt <- nt
-    somatic$na <- na
+estimate.fdr <- function(somatic, fdr.tuning) {
+    cat("        estimating FDRs..\n")
+    nt.na <- apply.fdr.tuning.parameters(somatic, fdr.tuning)
+    somatic$nt <- nt.na[1,]
+    somatic$na <- nt.na[1,]
 
     # avoid division by 0
     denom <- somatic$lysis.pv*somatic$na + somatic$lysis.beta*somatic$nt
