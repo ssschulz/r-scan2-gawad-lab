@@ -6,20 +6,28 @@ setClass("SCAN2", slots=c(
     bulk='character',
     gatk="null.or.df",
     gatk.lowmq="null.or.df",
+    training.data="null.or.df",
+    resampled.training.data="null.or.list",
+    ab.fits='null.or.df',
     ab.estimates='null.or.df',
     mut.models='null.or.df',
     cigar.data='null.or.df',
-    cigar.training='null.or.df',
     static.filters='null.or.df',
     static.filter='null.or.logical',
-    static.filter.params='null.or.list'))
+    static.filter.params='null.or.list',
+    fdr.priors='null.or.df',
+    fdrs='null.or.df'))
+
 
 make.scan <- function(single.cell, bulk) {
     new("SCAN2", single.cell=single.cell, bulk=bulk,
-        gatk=NULL, gatk.lowmq=NULL, ab.estimates=NULL, mut.models=NULL,
-        cigar.data=NULL, cigar.training=NULL,
-        static.filters=NULL, static.filter=NULL, static.filter.params=NULL)
+        gatk=NULL, gatk.lowmq=NULL, training.data=NULL,
+        ab.fits=NULL, ab.estimates=NULL, mut.models=NULL,
+        cigar.data=NULL,
+        static.filters=NULL, static.filter=NULL, static.filter.params=NULL,
+        fdr.priors=NULL, fdrs=NULL)
 }
+
 
 setValidity("SCAN2", function(object) {
     if (length(object@single.cell) != 1)
@@ -44,6 +52,18 @@ setValidity("SCAN2", function(object) {
             return("@gatk.lowmq is improperly formatted")
     }
 
+    if (!is.null(object@training.data)) {
+        if (!all(colnames(object@training.data) ==
+            c('chr', 'pos', 'refnt', 'altnt', 'gt', 'hap1', 'hap2', 'dp', 'phgt')))
+            return("@training.data is improperly formatted")
+    }
+
+    if (!is.null(object@ab.fits)) {
+        # XXX: should also check that relevant chromosomes are present
+        if (!all(colnames(object@ab.fits == c('a', 'b', 'c', 'd', 'logp'))))
+            return("@ab.estimates is improperly formatted")
+    }
+
     if (!is.null(object@ab.estimates)) {
         if (!all(colnames(object@ab.estimates == c('ab', 'gp.mu', 'gp.sd'))))
             return("@ab.estimates is improperly formatted")
@@ -55,10 +75,40 @@ setValidity("SCAN2", function(object) {
             return("@mut.models is improperly formatted")
     }
 
-    # XXX: add validator for static.filters
+    # XXX: add validator for rest of slots
     return(TRUE)
 })
 
+
+# various steps in the pipeline require certain slots to be filled.
+# this function will ensure all slots in 'slots: (character)' are not
+# NULL and will generate an error message otherwise.
+check.slots <- function(object, slots) {
+    error.occurred = FALSE
+    for (s in slots) {
+        if (is.null(slot(object, s))) {
+            error.occurred = TRUE
+            if (s == 'gatk')
+                cat("must import GATK read counts first (see: read.gatk())\n")
+            if (s == 'gatk.lowmq')
+                cat("must import low mapping quality GATK read counts first (see: read.gatk.lowmq())\n")
+            if (s == 'training.data')
+                cat("must import hSNP training data first (see: add.training.data())\n")
+            if (s == 'resampled.training.data')
+                cat("must resample hSNP training data first (see: resample.training.data())\n")
+            if (s == 'ab.estimates')
+                cat("must import allele balance model estimates first (see: add.ab.estimates())\n")
+            if (s == 'cigar.data' | s == 'cigar.training')
+                cat("must import CIGAR data first (see: add.cigar.data())\n")
+            if (s == 'static.filter' | s == 'static.filters' | s == 'static.filter.params')
+                cat("must apply static site filters first (see: add.static.filters())\n")
+            if (s == 'fdr.priors')
+                cat("must compute FDR priors first (see: compute.fdr.priors())\n")
+        }
+    }
+    if (error.occurred)
+        stop("One or more required slots are missing. See above for details.")
+}
 
 # Some getters
 setGeneric("chrom", function(object) standardGeneric("chrom"))
@@ -85,6 +135,20 @@ setMethod("show", "SCAN2", function(object) {
         cat('', nrow(object@gatk.lowmq), "raw sites\n")
     }
 
+    cat("#   AB model training hSNPs:")
+    if (is.null(object@training.data)) {
+        cat(" (no data)\n")
+    } else {
+        cat('', nrow(object@training.data),
+            sprintf("phased sites (hap1=%d, hap2=%d)",
+                sum(object@training.data$phgt=='1|0'),
+                sum(object@training.data$phgt=='0|1')),"\n")
+        if (!is.null(object@resampled.training.data)) {
+            cat('#        ', sum(object@resampled.training.data$selection$keep),
+                'resampled hSNPs\n')
+        }
+    }
+
     cat("#   Allele balance:")
     if (is.null(object@ab.estimates)) {
         cat(" (no data)\n")
@@ -96,6 +160,9 @@ setMethod("show", "SCAN2", function(object) {
             round(s['1st Qu.'], 3),
             round(s['Median'], 3),
             round(s['3rd Qu.'], 3), '\n')
+        cat('#       correlation with VAF at training hSNPs',
+            round(cor(object@gatk$af, object@ab.estimates$ab,
+                use='complete.obs'), 3), '\n')
     }
 
     cat("#   Mutation models:")
@@ -109,8 +176,7 @@ setMethod("show", "SCAN2", function(object) {
     if (is.null(object@cigar.data)) {
         cat(" (no data)\n")
     } else {
-        cat("\n#      ", nrow(object@cigar.data), "sites\n")
-        cat("#      ", nrow(object@cigar.training), "training sites\n")
+        cat('', nrow(object@cigar.data), "sites\n")
     }
 
     cat("#   Static filters: ")
@@ -145,10 +211,14 @@ internal.subset <- function(x, i) {
 
 
 concat2 <- function(x, y) {
+    if (is(x) != 'SCAN2')
+        stop("x must be a SCAN2 instance")
+    if (is(y) != 'SCAN2')
+        stop("y must be a SCAN2 instance")
     if (x@single.cell != y@single.cell)
-        stop("c(): can only combine SCAN2 objects from the same single cell")
+        stop("concat(): can only combine SCAN2 objects from the same single cell")
     if (x@bulk != y@bulk)
-        stop("c(): can only combine SCAN2 objects from the same bulk")
+        stop("concat(): can only combine SCAN2 objects from the same bulk")
 
     x@gatk <- rbind(x@gatk, y@gatk)
     x@gatk.lowmq <- rbind(x@gatk.lowmq, y@gatk.lowmq)
@@ -158,31 +228,47 @@ concat2 <- function(x, y) {
     x@static.filters <- rbind(x@static.filters, y@static.filters)
     x@static.filter <- c(x@static.filter, y@static.filter)
 
+    # IMPORTANT: training data is never subsetted or combined
     x
 }
 
-# think the better one is function(x, ...)
+
 setGeneric("concat", function(...) standardGeneric("concat"))
 setMethod("concat", signature="SCAN2", function(...) {
-    cat('concat(...) called\n')
+    args <- list(...)
+
+    if (length(args) == 0)
+        stop('tried to concat() 0 objects')
+
+    if (length(args) == 1)
+        return(args[[1]])
+
+    ret <- args[[1]]
+    for (i in 2:length(args))
+        ret <- concat2(ret, args[[i]])
+
+    ret
 })
 
-setGeneric("concat", function(x, y) standardGeneric("concat"))
-setMethod("concat", signature=c("SCAN2", "SCAN2"), function(x, y) {
-    if (x@single.cell != y@single.cell)
-        stop("c(): can only combine SCAN2 objects from the same single cell")
-    if (x@bulk != y@bulk)
-        stop("c(): can only combine SCAN2 objects from the same bulk")
 
-    x@gatk <- rbind(x@gatk, y@gatk)
-    x@gatk.lowmq <- rbind(x@gatk.lowmq, y@gatk.lowmq)
-    x@ab.estimates<- rbind(x@ab.estimates, y@ab.estimates)
-    x@mut.models <- rbind(x@mut.models, y@mut.models)
-    x@cigar.data <- rbind(x@cigar.data, y@cigar.data)
-    x@static.filters <- rbind(x@static.filters, y@static.filters)
-    x@static.filter <- c(x@static.filter, y@static.filter)
+# Convenience function for converting to data.frame and stitching together
+# columns from all available annotations.
+setGeneric("df", function(object) standardGeneric("df"))
+setMethod("df", signature=c("SCAN2"), function(object) {
+    check.slots(object, 'gatk')
 
-    x
+    possible.slots <- c('gatk', 'gatk.lowmq', 'ab.estimates',
+        'mut.models', 'cigar.data', 'static.filter',
+        'fdr.priors', 'fdrs')
+
+    slots <- lapply(possible.slots, function(sl) {
+        # special handling to preserve name
+        if (sl == 'static.filter')
+            data.frame(static.filter=object@static.filter)
+        else
+            slot(object=object, sl)
+    })
+    do.call(cbind, Filter(function(x) !is.null(x), slots))
 })
 
 
@@ -259,8 +345,7 @@ setGeneric("read.gatk.lowmq", function(object, path, nrows=-1)
     standardGeneric("read.gatk.lowmq"))
 setMethod("read.gatk.lowmq", "SCAN2",
 function(object, path, nrows=-1) {
-    if (is.null(object@gatk))
-        stop("must import GATK read counts first (see: read.gatk())")
+    check.slots(object, 'gatk')
 
     lowmq <- read.gatk.table.2sample(path, object@single.cell, object@bulk, nrows)
     lowmq <- merge(object@gatk[,c('chr', 'pos', 'refnt', 'altnt')], lowmq, all.x=TRUE)
@@ -271,14 +356,27 @@ function(object, path, nrows=-1) {
 })
 
 
+# Add AB Gaussian process parameter fits for each chromosome.
+# These take a long time to compute, so the snakemake pipeline will almost
+# always be necessary here.
+setGeneric("add.ab.fits", function(object, path)
+    standardGeneric("add.ab.fits"))
+setMethod("add.ab.fits", "SCAN2", function(object, path) {
+    fitlist <- get(load(path))
+    object@ab.fits <- do.call(rbind, fitlist)
+    object
+})
+
+
+# Add estimates from a precomputed RDA
 setGeneric("add.ab.estimates", function(object, path)
     standardGeneric("add.ab.estimates"))
 setMethod("add.ab.estimates", "SCAN2", function(object, path) {
-    if (is.null(object@gatk))
-        stop("must import GATK read counts first (see: read.gatk())")
+    check.slots(object, 'gatk')
 
     ab <- get(load(path))
-    ab <- merge(object@gatk[,c('chr','pos','refnt','altnt')], ab, all.x=TRUE)
+    # order preservation of plyr::join is critical
+    ab <- plyr::join(object@gatk[,c('chr','pos','refnt','altnt')], ab)
     rownames(ab) <- rownames(object@gatk)
 
     # choose the AB nearest to the AF of each candidate
@@ -292,13 +390,41 @@ setMethod("add.ab.estimates", "SCAN2", function(object, path) {
 })
 
 
+# Actually calculate the AB estimates.
+# Currently, computes AB at ALL SITES.
+setGeneric("compute.ab.estimates", function(object, n.cores=1)
+    standardGeneric("compute.ab.estimates"))
+setMethod("compute.ab.estimates", "SCAN2", function(object, n.cores=1) {
+    check.slots(object, c('gatk', 'training.data', 'ab.fits'))
+
+    sites <- object@gatk[,c('chr','pos','refnt','altnt')][1:5000,]
+
+    # Splitting by chromosome is not for parallelization; the AB model
+    # is fit separately for each chromosome and thus applies different
+    # parameter estimates.
+    ab <- do.call(rbind, lapply(unique(sites$chr), function(chrom) {
+        hsnps <- object@training.data[object@training.data$chr == chrom,]
+        fit <- object@ab.fits[chrom,,drop=FALSE]
+        print(fit)
+
+        cat(sprintf("inferring AB for %d sites on chr%s:%d-%d\n", 
+            nrow(sites), chrom, min(sites$pos), max(sites$pos)))
+        time.elapsed <- system.time(z <- infer.gp1(ssnvs=sites, fit=fit,
+            hsnps=hsnps, flank=1e5, verbose=TRUE,
+            n.cores=n.cores))
+        print(time.elapsed)
+        cbind(sites, z)
+    }))
+
+    object@ab.estimates <- ab
+    object
+})
+
+
 setGeneric("compute.models", function(object)
     standardGeneric("compute.models"))
 setMethod("compute.models", "SCAN2", function(object) {
-    if (is.null(object@gatk))
-        stop("must import GATK read counts first (see: read.gatk())")
-    if (is.null(object@ab.estimates))
-        stop("must attach allele balance estimates first (see: add.ab.estimates())")
+    check.slots(object, c('gatk', 'ab.estimates'))
 
     object@mut.models <- compute.pvs.and.betas(
         object@gatk$scalt, object@gatk$dp,
@@ -307,36 +433,149 @@ setMethod("compute.models", "SCAN2", function(object) {
 })
 
 
-setGeneric("add.cigar.data", function(object, sc.cigars, bulk.cigars, cigar.training)
-    standardGeneric("add.cigar.data"))
-setMethod("add.cigar.data", "SCAN2", function(object, sc.cigars, bulk.cigars, cigar.training) {
-    if (is.null(object@gatk))
-        stop("must import GATK read counts first (see: read.gatk())")
-
-    sc <- merge(object@gatk[,c('chr','pos')], sc.cigars,
-        by=c('chr', 'pos'), all.x=T)
-    bulk <- merge(object@gatk[,c('chr','pos')], bulk.cigars,
-        by=c('chr', 'pos'), all.x=T)
-    colnames(bulk) <- paste0(colnames(bulk), '.bulk')
-
-    # XXX: this is saved in the cigar data object for some reason
-    cigar.emp.score <- function (training, test, which = c("id", "hs")) {
-        xt <- training[, paste0(which, ".score.x")]
-        yt <- training[, paste0(which, ".score.y")]
-        x <- test[, paste0(which, ".score.x")]
-        y <- test[, paste0(which, ".score.y")]
-        mapply(function(xi, yi) mean(xt >= xi & yt >= yi, na.rm = T), x, y)
+setGeneric("compute.fdr.priors", function(object, mode='legacy')
+    standardGeneric("compute.fdr.priors"))
+setMethod("compute.fdr.priors", "SCAN2", function(object, mode) {
+    check.slots(object, c('gatk', 'training.data', 'static.filter'))
+    cat("*** FIXME: filtering out static.filter=NA; should not contain NAs.\n")
+    if (mode == 'legacy') {
+        # in legacy mode, all candidate sites passing a small set of pre-genotyping
+        # crtieria were used.
+        cand <- object@gatk[
+            object@gatk$balt == 0 &
+            object@gatk[,11] == '0/0' &
+            object@gatk$dbsnp == '.' &
+            object@gatk$scalt >= gt@static.filter.params$min.sc.alt &
+            object@gatk$dp >= gt@static.filter.params$min.sc.dp &
+            object@gatk$bulk.dp >= gt@static.filter.params$min.bulk.dp &
+            (is.na(object@gatk.lowmq$balt) | object@gatk.lowmq$balt == 0),]
+        hsnps=object@gatk[
+            object@gatk$training.site &
+            object@gatk$scalt >= gt@static.filter.params$min.sc.alt,]
     }
-    cigar.data <- cbind(sc[,-(1:2)], bulk[,-(1:2)])
-    cigar.data$id.score.y <- cigar.data$ID.cigars / cigar.data$dp.cigars
-    cigar.data$id.score.x <- cigar.data$ID.cigars.bulk / cigar.data$dp.cigars.bulk
-    cigar.data$id.score <- cigar.emp.score(training=cigar.training, test=cigar.data, which='id')
-    cigar.data$hs.score.y <- cigar.data$HS.cigars / cigar.data$dp.cigars
-    cigar.data$hs.score.x <- cigar.data$HS.cigars.bulk / cigar.data$dp.cigars.bulk
-    cigar.data$hs.score <- cigar.emp.score(training=cigar.training, test=cigar.data, which='hs')
 
-    object@cigar.data <- cigar.data
-    object@cigar.training <- cigar.training
+    cat(nrow(cand), 'somatic candidates\n')
+    cat(nrow(hsnps), 'hsnps\n')
+    fdr.priors <-
+        estimate.fdr.priors(candidates=cand, hsnps=hsnps, random.seed=0)
+    rownames(fdr.priors) <- rownames(cand)
+
+    join.cols <- c('chr','pos','refnt','altnt')
+    object@fdr.priors <- plyr::join(object@gatk[,join.cols],
+        cbind(cand[,join.cols], fdr.priors))[,-(1:4)]
+    object
+})
+
+
+setGeneric("compute.fdr", function(object, mode='legacy')
+    standardGeneric("compute.fdr"))
+setMethod("compute.fdr", "SCAN2", function(object, mode='legacy') {
+    check.slots(object, c('gatk', 'ab.estimates', 'mut.models', 'fdr.priors'))
+
+    # Legacy computation (finding min FDR over all alphas) and legacy candidate set.
+    # Importantly, the legacy method is far too slow to apply to all genomic loci,
+    # so extra work must be done to only compute over the legacy set.
+    if (mode == 'legacy') {
+        cand <-
+            object@gatk$balt == 0 &
+            object@gatk[,11] == '0/0' &
+            object@gatk$dbsnp == '.' &
+            object@gatk$scalt >= gt@static.filter.params$min.sc.alt &
+            object@gatk$dp >= gt@static.filter.params$min.sc.dp &
+            object@gatk$bulk.dp >= gt@static.filter.params$min.bulk.dp &
+            (is.na(object@gatk.lowmq$balt) | object@gatk.lowmq$balt == 0)
+
+        fdrs <- compute.fdr.legacy(
+            altreads=object@gatk$scalt[cand],
+            dp=object@gatk$dp[cand],
+            gp.mu=object@ab.estimates$gp.mu[cand],
+            gp.sd=object@ab.estimates$gp.sd[cand],
+            nt=object@fdr.priors$nt[cand],
+            na=object@fdr.priors$na[cand])
+
+        join.cols <- c('chr','pos','refnt','altnt')
+        object@fdrs <- plyr::join(object@gatk[,join.cols],
+            cbind(object@gatk[cand,join.cols], fdrs))[,-(1:4)]
+    } else if (mode == 'new')
+        object@fdrs <- compute.fdr.new(object@mut.models, object@fdr.priors)
+    else
+        stop(sprintf("unrecognized mode '%s', expecting either 'legacy' or 'new'", mode))
+
+    object
+})
+
+
+cigar.emp.score <- function (training, test, which = c("id", "hs")) {
+    xt <- training[, paste0(which, ".score.x")]
+    yt <- training[, paste0(which, ".score.y")]
+    x <- test[, paste0(which, ".score.x")]
+    y <- test[, paste0(which, ".score.y")]
+    pbapply::pbmapply(function(xi, yi) mean(xt >= xi & yt >= yi, na.rm = T), x, y)
+}
+
+
+compute.cigar.scores <- function(cigar.data) {
+    data.frame(
+        id.score.y=cigar.data$ID.cigars / cigar.data$dp.cigars,
+        id.score.x=cigar.data$ID.cigars.bulk / cigar.data$dp.cigars.bulk,
+        hs.score.y=cigar.data$HS.cigars / cigar.data$dp.cigars,
+        hs.score.x=cigar.data$HS.cigars.bulk / cigar.data$dp.cigars.bulk
+    )
+}
+
+
+compute.excess.cigar <- function(cigar.data, cigar.training) {
+    cat("excess indel (I/D) ops..\n")
+    cigar.data$id.score <-
+        cigar.emp.score(training=cigar.training, test=cigar.data, which='id')
+    cat("excess clipping (H/S) ops..\n")
+    cigar.data$hs.score <-
+        cigar.emp.score(training=cigar.training, test=cigar.data, which='hs')
+    cigar.data
+}
+
+
+setGeneric("add.cigar.data", function(object, sc.cigars, bulk.cigars)
+    standardGeneric("add.cigar.data"))
+setMethod("add.cigar.data", "SCAN2", function(object, sc.cigars, bulk.cigars) {
+    check.slots(object, c('gatk', 'training.data', 'resampled.training.data'))
+
+    # These merges just subset sc.cigars and bulk.cigars
+    cat('merging CIGAR data with GATK sites..\n')
+    gsc <- merge(object@gatk[,c('chr','pos')], sc.cigars,
+        by=c('chr', 'pos'), all.x=T)
+    gbulk <- merge(object@gatk[,c('chr','pos')], bulk.cigars,
+        by=c('chr', 'pos'), all.x=T)
+    colnames(gbulk) <- paste0(colnames(gbulk), '.bulk')
+
+    cat('merging CIGAR data with training sites..\n')
+    tsc <- merge(object@training.data[,c('chr','pos')], sc.cigars,
+        by=c('chr', 'pos'), all.x=T)
+    tbulk <- merge(object@training.data[,c('chr','pos')], bulk.cigars,
+        by=c('chr', 'pos'), all.x=T)
+    colnames(tbulk) <- paste0(colnames(gbulk), '.bulk')
+
+    cat('computing CIGAR op rates for GATK sites..\n')
+    gatk.cigar.data <- compute.cigar.scores(cbind(gsc[,-(1:2)], gbulk[,-(1:2)]))
+
+    # Legacy calling used only downsampled hSNPs
+    # N.B., even though every site is now scored, this computation is too
+    # slow if CIGAR data from all 2-4 million sites is used.
+    cat('computing CIGAR op rates for training sites..\n')
+    training.cigar.data <- compute.cigar.scores(
+        cbind(tsc[,-(1:2)], tbulk[,-(1:2)])[object@resampled.training.data$selection$keep,])
+
+    # these are the same locations as all training sites in @training.data:
+    # not compatible with subsetted objects
+    #tidxs <- which(object@gatk$training.site)
+    #resampled.tidxs <- tidxs[object@resampled.training.data$selection$keep]
+
+    cat('scoring excess CIGAR ops on all sites, using',
+        nrow(training.cigar.data),
+        'training sites as a reference distribution..\n')
+    object@cigar.data <- compute.excess.cigar(
+        cigar.data=gatk.cigar.data,
+        cigar.training=training.cigar.data)
     object
 })
 
@@ -348,25 +587,64 @@ setMethod("add.static.filters", "SCAN2",
 function(object, min.sc.alt=2, min.sc.dp=6, max.bulk.alt=0, min.bulk.dp=11,
     exclude.dbsnp=TRUE, cg.id.q=0.05, cg.hs.q=0.05)
 {
-    if (is.null(object@gatk))
-        stop("must import GATK read counts first (see: read.gatk())")
+    check.slots(object, c('gatk', 'cigar.data', 'gatk.lowmq', 'mut.models'))
 
     object@static.filters <- data.frame(
         cigar.id.test=object@cigar.data$id.score >
-            quantile(object@cigar.training$id.score, prob=cg.id.q, na.rm=T),
+            quantile(object@cigar.data$id.score[object@gatk$training.site],
+                prob=cg.id.q, na.rm=T),
         cigar.hs.test=object@cigar.data$hs.score >
-            quantile(object@cigar.training$hs.score, prob=cg.hs.q, na.rm=T),
+            quantile(object@cigar.data$hs.score[object@gatk$training.site],
+                prob=cg.hs.q, na.rm=T),
         lowmq.test=is.na(object@gatk.lowmq$balt) | object@gatk.lowmq$balt <= max.bulk.alt,
         dp.test=object@gatk$dp >= min.sc.dp & object@gatk$bulk.dp >= min.bulk.dp,
         abc.test=object@mut.models$abc.pv > 0.05,
         min.sc.alt.test=object@gatk$scalt >= min.sc.alt,
-        max.bulk.alt.test=object@gatk$balt <= max.bulk.alt
+        max.bulk.alt.test=object@gatk$balt <= max.bulk.alt,
+        dbsnp.test=!exclude.dbsnp | object@gatk$dbsnp == '.'
     )
     object@static.filter <- rowSums(object@static.filters) == ncol(object@static.filters)
     object@static.filter.params <- list(
         min.sc.alt=min.sc.alt, min.sc.dp=min.sc.dp,
         max.bulk.alt=max.bulk.alt, min.bulk.dp=min.bulk.dp,
         exclude.dbsnp=exclude.dbsnp, cg.id.q=cg.id.q, cg.hs.q=cg.hs.q)
+    object
+})
+
+
+setGeneric("resample.training.data", function(object, M=20) 
+        standardGeneric("resample.training.data"))
+setMethod("resample.training.data", "SCAN2", function(object, M=20) {
+    check.slots(object, c('gatk', 'training.data'))
+
+    ret <- resample.hsnps(sites=object@gatk[object@gatk$scalt >= 2 &
+            object@gatk$dp >= 6 &
+            object@gatk$bulk.dp >= 11 &
+            object@gatk$balt == 0,],
+        hsnps=object@training.data, M=M)
+
+    object@resampled.training.data <-
+        c(ret, training.data=list(object@training.data[ret$selection$keep,]))
+    object
+})
+
+
+setGeneric("add.training.data", function(object, path) 
+        standardGeneric("add.training.data"))
+setMethod("add.training.data", "SCAN2", function(object, path) {
+    cat('loading', path, '\n')
+    object@training.data <- get(load(path))
+    cat('assigning IDs to training sites..\n')
+    print(system.time(object@training.data$id <- paste(
+        object@training.data$chr,
+        object@training.data$pos,
+        object@training.data$refnt,
+        object@training.data$altnt)))
+
+    cat('annotating GATK table\n')
+cat('new')
+    object@gatk$training.site <- FALSE
+    print(system.time(object@gatk[object@training.data$id,]$training.site <- TRUE))
     object
 })
 
