@@ -175,24 +175,69 @@ infer.gp <- function(ssnvs, fit, hsnps, chunk=2500, flank=1e5, max.hsnps=150,
 
     ctx <- abmodel.approx.ctx(c(), c(), c(), hsnp.chunksize=2*max.hsnps + 10)
     do.call(rbind, lapply(1:nchunks, function(i) {
-            if (i %% 100 == 0)
-                cat(sprintf("infer.gp: progress: finished %d of %d sites (%0.1f%%)\n",
-                    i, nchunks, 100*i/nchunks))
-            start <- 1 + (i-1)*chunk
-            stop <- min(i*chunk, nrow(ssnvs))
-            h <- hsnps
-            if (spikein) {
-                if (ssnv.is.hsnp[i])
-                    # ssnv i is hsnp hsnp.map[i], so remove it from the training set
-                    h <- hsnps[-hsnp.map[i],]
-            }
-            infer.gp.block(ssnvs[start:stop,,drop=FALSE],
-                fit, h,
-                ctx=ctx, flank=flank, max.hsnps=max.hsnps,
-                verbose=verbose)
-        })
-    )
+        if (i %% 100 == 0)
+            cat(sprintf("infer.gp: progress: finished %d of %d sites (%0.1f%%)\n",
+                i, nchunks, 100*i/nchunks))
+        start <- 1 + (i-1)*chunk
+        stop <- min(i*chunk, nrow(ssnvs))
+        h <- hsnps
+        if (spikein) {
+            if (ssnv.is.hsnp[i])
+                # ssnv i is hsnp hsnp.map[i], so remove it from the training set
+                h <- hsnps[-hsnp.map[i],]
+        }
+        infer.gp.block(ssnvs[start:stop,,drop=FALSE],
+            fit, h,
+            ctx=ctx, flank=flank, max.hsnps=max.hsnps,
+            verbose=verbose)
+    }))
 }
 
 
 
+# special case of infer.gp with chunksize=1 and without any assumptions
+# about ssnvs and hsnps overlapping
+infer.gp1 <- function(ssnvs, fit, hsnps, flank=1e5, max.hsnps=150,  #n.cores=1,
+    verbose=FALSE)
+{
+    ssnv.is.hsnp <- ssnvs$pos %in% hsnps$pos
+    cat(sprintf("infer.gp: %d/%d loci scheduled for AB estimation are training hSNPs\n",
+        sum(ssnv.is.hsnp), nrow(ssnvs)))
+    cat(sprintf("infer.gp: using leave-1-out strategy for AB estimation at hSNPs\n"))
+    if (verbose) cat("infer.gp: building ssnvs <-> hsnps map\n")
+    hsnp.map <- sapply(1:nrow(ssnvs), function(i) {
+        if (!ssnv.is.hsnp[i]) NA
+        else which(hsnps$pos == ssnvs$pos[i])
+    })
+
+    # XXX: future_sapply does not work and I can't figure out why.
+    # it spawns 'n.cores' workers, but each worker runs for the same
+    # amount of time that a single core takes to compute
+    # the entire solution.
+    #if (n.cores > 1) {
+        #cat('using', n.cores, 'cores (IMPORTANT: future_sapply does not allow progress reporting)\n')
+        #old.plan <- future::plan(future::multicore, workers=n.cores)
+        #on.exit(future::plan(old.plan), add=TRUE)
+        #applyf <- function(...) future.apply::future_sapply(..., future.seed=1234)
+    #} else {
+        #old.plan <- future::plan(future::transparent)
+        #on.exit(future::plan(old.plan), add=TRUE)
+        applyf <- sapply
+    #}
+
+    ctx <- abmodel.approx.ctx(c(), c(), c(), hsnp.chunksize=2*max.hsnps + 10)
+    ret <- applyf(1:nrow(ssnvs), function(i) {
+        if (verbose & i %% 100 == 0)
+            cat(sprintf("infer.gp: progress: finished %d of %d sites (%0.1f%%)\n",
+                i, nrow(ssnvs), 100*i/nrow(ssnvs)))
+        h <- hsnps
+        if (ssnv.is.hsnp[i])
+            # ssnv i is hsnp hsnp.map[i], so remove it from the training set
+            h <- hsnps[-hsnp.map[i],]
+        # returns (gp.mu, gp.sd) when chunk=1
+        ret <- infer.gp.block(ssnvs[i,,drop=FALSE], fit, h,
+            ctx=ctx, flank=flank, max.hsnps=max.hsnps, verbose=FALSE)
+        c(gp.mu=ret$gp.mu, gp.sd=ret$gp.sd)
+    })
+    t(ret)
+}
