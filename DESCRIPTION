@@ -4,5 +4,5 @@ Date: 2018-10-22
 Title: Single Cell ANalysis 2
 Description: Single cell genotyper using a spatial model of allele balance.
 Author: Lovelace J. Luquette <luquette@g.harvard.edu>
-Imports: methods, fastGHQuad, yaml, pracma
+Imports: plyr, pbapply, methods, fastGHQuad, yaml, pracma
 Maintainer: Lovelace J. Luquette <luquette@g.harvard.edu>
