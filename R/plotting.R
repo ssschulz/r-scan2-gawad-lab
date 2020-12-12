@@ -134,32 +134,95 @@ plot.fdr <- function(fc, dps=c(10,20,30,60,100,200), target.fdr=0.1, div=2) {
     }
 }
 
+
 # Plot the AB model in a genomic window with confidence bands.
 # Optionally: plot a candidate/putative sSNV.
-plot.ssnv.region <- function(chr, pos, alt, ref, fits, fit.data, upstream=5e4, downstream=5e4, gp.extend=1e5, n.gp.points=100, blocks=50) {
-    d <- fit.data[fit.data$chr==chr & fit.data$pos >= pos - upstream &
-                  fit.data$pos <= pos + downstream,]
+# XXX: TODO: restore the ability to compute GP mu/sd at many additional
+# points in the region to give smooth bands/lines.
+setGeneric("plot.region", function(object, site=NA, chrom=NA, pos=NA, upstream=5e4, downstream=5e4, gp.extend=1e5, n.gp.points=100, recompute=FALSE)
+    standardGeneric("plot.region"))
+setMethod("plot.region", "SCAN2", function(object, site=NA, chrom=NA, pos=NA,
+    upstream=5e4, downstream=5e4, gp.extend=1e5, n.gp.points=100, recompute=FALSE)
+{
+    check.slots(object, c('gatk', 'training.data', 'ab.estimates'))
+    if (recompute)
+        check.slots(object, 'ab.fits')
 
-    cat("estimating AB in region..\n")
-    # ensure that we estimate at exactly pos
-    est.at <- c(seq(pos - upstream, pos-1, length.out=n.gp.points/2), pos,
-                seq(pos+1, pos + downstream, length.out=n.gp.points/2))
-    fit.chr <- fits[[chr]]
-    cat("WARNING: if this function produces NA predictions, try reducing the value of 'blocks'\n")
-    # infer.gp can fail when using chunk>1.
-    # this does not affect the calling code, just this plot
-    gp <- infer.gp(ssnvs=data.frame(pos=est.at),
-        fit=fit.chr, hsnps=fit.data[fit.data$chr == chr,],
-        chunk=blocks, flank=gp.extend, max.hsnp=500)
-    gp$pos <- est.at
+    if (!missing(site) & (!missing(chrom) | !missing(pos)))
+        stop("either site or (chrom,pos) must be specified, but not both")
+    if ((!missing(chrom) & missing(pos)) | (missing(chrom) & !missing(pos)))
+        stop("both chrom and pos must be specified")
+
+    if (!missing(site)) {
+        chrom <- object@gatk[site,]$chr
+        pos <- object@gatk[site,]$pos
+    }
+
+    # Sites at which AB was estimated in the genotyper.
+    # Each site in 'd' will be plotted with a point.
+    # Don't keep sites with no reads in this sample, unless it's a training
+    # site. The majority of these 0 read, non-germline sites are here
+    # because they had reads in a different sample.
+    # Also, homozygous sites can be confusing since they appear at 0 or 1.
+    d <- object@gatk[chrom(object) == chrom &
+        pos(object) >= pos - upstream & pos(object) <= pos + upstream &
+        (object@gatk$training.site | object@gatk$scalt > 0) &
+        object@gatk[,11] != '1/1',]  # column 11 is bulk GT
+
+    # Old code that computed GP on a fine grid surrounding the target
+    if (recompute) {
+        cat("estimating AB in region..\n")
+        # ensure that we estimate at exactly pos and at all sites in 'd'
+        # other loci are not sites reported in the GATK table, they are
+        # only there to make smooth lines.
+        est.at <- c(seq(pos - upstream, pos-1, length.out=n.gp.points/2), pos,
+                    seq(pos+1, pos + downstream, length.out=n.gp.points/2),
+                    d$pos)
+        est.at <- sort(unique(est.at))
+        fit.chr <- object@ab.fits[chrom,]
+        gp <- as.data.frame(infer.gp1(ssnvs=data.frame(pos=est.at),
+            fit=fit.chr,
+            hsnps=object@training.data[object@training.data$chr == chrom,],
+            flank=gp.extend, max.hsnp=150))
+        gp$chr <- chrom
+        gp$pos <- est.at
+        gp$ab <- 1/(1+exp(-gp$gp.mu))
+
+        # Need to reflect sites to match the GP
+        d <- merge(d, gp[,c('pos','ab')], all.x=TRUE)  # attach gp estimtes
+        d$af <- ifelse(abs(d$af - d$ab) <= abs(1-d$af - d$ab), d$af, 1-d$af)
+    } else {
+        # Rely on precomputed GP mu/sd (relevant for ALLSITES mode)
+        gp <- cbind(
+            object@gatk[chrom(object) == chrom &
+                pos(object) >= pos - upstream & pos(object) <= pos + upstream,],
+            object@ab.estimates[chrom(object) == chrom &
+                pos(object) >= pos - upstream & pos(object) <= pos + upstream,]
+        )
+    }
+
     plot.gp.confidence(df=gp, add=FALSE)
-    points(d$pos, d$hap1/d$dp, pch=20, ylim=0:1)
-    af <- alt/(alt+ref) # adjust to closest AB
-    gp.at <- gp[gp$pos == pos,]$gp.mu
-    ab <- 1/(1+exp(-gp.at))
-    af <- ifelse(abs(af - ab) <= abs(af - (1-ab)), af, 1-af)
-    points(pos, af, pch=20, cex=1.25, col=2)
-}
+    points(d$pos, d$af, pch=20,
+        cex=ifelse(d$training.site, 1, 1.5),
+        col=2 - d$training.site, ylim=c(-0.2,1))
+    # 5*max : restrict the depth to the bottom 20% of plot
+    lines(d$pos, d$dp/(5*max(d$dp)), type='h', lwd=2)
+    text(d$pos[which.max(d$dp)], 1/5, max(d$dp))
+    abline(h=30/(5*max(d$dp)), lty='dotted', col='grey')
+
+    lines(gp$pos, gp$ab/2, lwd=2, col=2)
+    lines(gp$pos, (1-gp$ab)/2, lwd=2, col=2)
+
+    # If a site was given, plot it specially
+    if (!missing(site)) {
+        abline(v=pos, lty='dotted')
+        abline(h=d$af[d$pos==pos], lty='dotted')
+        points(pos, d$af[d$pos == pos], pch=4, cex=1.5, lwd=2, col=3)
+    }
+
+    legend('topright', legend=c('Training hSNP', 'Other site', 'Target site'),
+        pch=c(20,20,4), col=1:3, pt.cex=c(1,1.5,1.5))
+})
 
 # Add 95% confidence bands for AB model to plot.
 # NOTE: the 95% probability interval is in the NORMAL space, not the
