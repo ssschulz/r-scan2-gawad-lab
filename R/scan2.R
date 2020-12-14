@@ -143,6 +143,18 @@ setMethod("show", "SCAN2", function(object) {
             sprintf("phased sites (hap1=%d, hap2=%d)",
                 sum(object@training.data$phgt=='1|0'),
                 sum(object@training.data$phgt=='0|1')),"\n")
+        zzz <- do.call(rbind, lapply(split(object@training.data, object@training.data$chr),
+            function(td) {
+                td$af <- td$hap1/td$dp
+                cbind(dist=diff(td$pos), af1=td$af[-nrow(td)], af2=td$af[-1])
+        }))
+        cors <- sapply(10^(2:5), function(threshold) {
+            z <- zzz[zzz[,1] <= threshold,]; cor(z[,2], z[,3], use='complete.obs') }) 
+        cat('#       VAF correlation between neighboring hSNPs:\n')
+        cat('#           <100 bp', round(cors[1], 3),
+            '<1000 bp', round(cors[2], 3),
+            '<10 kbp', round(cors[3], 3),
+            '<100 kbp', round(cors[4], 3), '\n')
         if (!is.null(object@resampled.training.data)) {
             cat('#        ', sum(object@resampled.training.data$selection$keep),
                 'resampled hSNPs\n')
@@ -160,9 +172,15 @@ setMethod("show", "SCAN2", function(object) {
             round(s['1st Qu.'], 3),
             round(s['Median'], 3),
             round(s['3rd Qu.'], 3), '\n')
-        cat('#       correlation with VAF at training hSNPs',
-            round(cor(object@gatk$af, object@ab.estimates$ab,
-                use='complete.obs'), 3), '\n')
+        if (!is.null(object@training.data)) {
+            cat('#       mean at training hSNPs:',
+                round(mean(object@ab.estimates$gp.mu[object@gatk$training.site]), 3),
+                '\n')
+            cat('#       correlation with VAF at training hSNPs',
+                round(cor(object@gatk$af[object@gatk$training.site],
+                    object@ab.estimates$ab[object@gatk$training.site],
+                    use='complete.obs'), 3), '\n')
+        }
     }
 
     cat("#   Mutation models:")
@@ -263,7 +281,7 @@ setMethod("df", signature=c("SCAN2"), function(object) {
 
     slots <- lapply(possible.slots, function(sl) {
         # special handling to preserve name
-        if (sl == 'static.filter')
+        if (sl == 'static.filter' & !is.null(object@static.filter))
             data.frame(static.filter=object@static.filter)
         else
             slot(object=object, sl)
@@ -348,7 +366,7 @@ function(object, path, nrows=-1) {
     check.slots(object, 'gatk')
 
     lowmq <- read.gatk.table.2sample(path, object@single.cell, object@bulk, nrows)
-    lowmq <- merge(object@gatk[,c('chr', 'pos', 'refnt', 'altnt')], lowmq, all.x=TRUE)
+    lowmq <- plyr::join(object@gatk[,c('chr', 'pos', 'refnt', 'altnt')], lowmq)
     rownames(lowmq) <- rownames(object@gatk)
 
     object@gatk.lowmq <- lowmq[,c(9:10,12:13)]
@@ -452,6 +470,8 @@ setMethod("compute.fdr.priors", "SCAN2", function(object, mode) {
         hsnps=object@gatk[
             object@gatk$training.site &
             object@gatk$scalt >= gt@static.filter.params$min.sc.alt,]
+    } else {
+        stop("only the legacy mode is currently implemented. check back soon.")
     }
 
     cat(nrow(cand), 'somatic candidates\n')
@@ -510,12 +530,16 @@ cigar.emp.score <- function (training, test, which = c("id", "hs")) {
     yt <- training[, paste0(which, ".score.y")]
     x <- test[, paste0(which, ".score.x")]
     y <- test[, paste0(which, ".score.y")]
-    pbapply::pbmapply(function(xi, yi) mean(xt >= xi & yt >= yi, na.rm = T), x, y)
+    pbapply::pbmapply(function(xi, yi, bulkdp, dp)
+        ifelse(dp == 0 | bulkdp == 0, 0,
+            mean(xt >= xi & yt >= yi, na.rm = T)),
+        x, y, test$dp.cigars.bulk, test$dp.cigars)
 }
 
 
 compute.cigar.scores <- function(cigar.data) {
     data.frame(
+        cigar.data,
         id.score.y=cigar.data$ID.cigars / cigar.data$dp.cigars,
         id.score.x=cigar.data$ID.cigars.bulk / cigar.data$dp.cigars.bulk,
         hs.score.y=cigar.data$HS.cigars / cigar.data$dp.cigars,
@@ -541,18 +565,18 @@ setMethod("add.cigar.data", "SCAN2", function(object, sc.cigars, bulk.cigars) {
     check.slots(object, c('gatk', 'training.data', 'resampled.training.data'))
 
     # These merges just subset sc.cigars and bulk.cigars
-    cat('merging CIGAR data with GATK sites..\n')
-    gsc <- merge(object@gatk[,c('chr','pos')], sc.cigars,
-        by=c('chr', 'pos'), all.x=T)
-    gbulk <- merge(object@gatk[,c('chr','pos')], bulk.cigars,
-        by=c('chr', 'pos'), all.x=T)
+    cat('joining CIGAR data to GATK sites..\n')
+    gsc <- plyr::join(object@gatk[,c('chr','pos')], sc.cigars,
+        by=c('chr', 'pos'))
+    gbulk <- plyr::join(object@gatk[,c('chr','pos')], bulk.cigars,
+        by=c('chr', 'pos'))
     colnames(gbulk) <- paste0(colnames(gbulk), '.bulk')
 
-    cat('merging CIGAR data with training sites..\n')
-    tsc <- merge(object@training.data[,c('chr','pos')], sc.cigars,
-        by=c('chr', 'pos'), all.x=T)
-    tbulk <- merge(object@training.data[,c('chr','pos')], bulk.cigars,
-        by=c('chr', 'pos'), all.x=T)
+    cat('joining CIGAR data to training sites..\n')
+    tsc <- plyr::join(object@training.data[,c('chr','pos')], sc.cigars,
+        by=c('chr', 'pos'))
+    tbulk <- plyr::join(object@training.data[,c('chr','pos')], bulk.cigars,
+        by=c('chr', 'pos'))
     colnames(tbulk) <- paste0(colnames(gbulk), '.bulk')
 
     cat('computing CIGAR op rates for GATK sites..\n')
@@ -564,11 +588,6 @@ setMethod("add.cigar.data", "SCAN2", function(object, sc.cigars, bulk.cigars) {
     cat('computing CIGAR op rates for training sites..\n')
     training.cigar.data <- compute.cigar.scores(
         cbind(tsc[,-(1:2)], tbulk[,-(1:2)])[object@resampled.training.data$selection$keep,])
-
-    # these are the same locations as all training sites in @training.data:
-    # not compatible with subsetted objects
-    #tidxs <- which(object@gatk$training.site)
-    #resampled.tidxs <- tidxs[object@resampled.training.data$selection$keep]
 
     cat('scoring excess CIGAR ops on all sites, using',
         nrow(training.cigar.data),
@@ -642,9 +661,12 @@ setMethod("add.training.data", "SCAN2", function(object, path) {
         object@training.data$altnt)))
 
     cat('annotating GATK table\n')
-cat('new')
-    object@gatk$training.site <- FALSE
-    print(system.time(object@gatk[object@training.data$id,]$training.site <- TRUE))
+    join.cols <- c('chr','pos','refnt','altnt')
+    newdf <- object@training.data[,join.cols]
+    newdf$training.site <- TRUE
+    newdf <- plyr::join(object@gatk[,join.cols], newdf, by=join.cols)
+    newdf$training.site[is.na(newdf$training.site)] <- FALSE
+    object@gatk$training.site <- newdf$training.site
     object
 })
 
