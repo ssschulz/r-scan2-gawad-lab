@@ -254,12 +254,14 @@ compute.fdr.legacy <- function(altreads, dp, gp.mu, gp.sd, nt, na, verbose=TRUE)
         # These dreads() calls are the most expensive part of genotyping
         tb <- mut.model.tables(dp, gp.mu, gp.sd)
     
+        # compute BEFORE sorting, so that altreads+1 is the corret row
         lysis.pv <- sum(tb$pre[tb$pre <= tb$pre[altreads + 1]])
+        mda.pv <- sum(tb$mda[tb$mda <= tb$mda[altreads + 1]])
+
         tb <- tb[order(tb$pre),]
         lysis.fdr <- min.fdr(pv=lysis.pv,
             alphas=cumsum(tb$pre), betas=cumsum(tb$mut), nt=nt, na=na)
         
-        mda.pv <- sum(tb$mda[tb$mda <= tb$mda[altreads + 1]])
         tb <- tb[order(tb$mda),]
         mda.fdr <- min.fdr(pv=mda.pv,
             alphas=cumsum(tb$mda), betas=cumsum(tb$mut), nt=nt, na=na)
