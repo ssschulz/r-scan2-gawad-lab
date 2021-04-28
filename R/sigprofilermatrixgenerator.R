@@ -64,10 +64,10 @@ classify.muts <- function(df, spectype='SNV',
     }))
     if (spectype == 'ID') {
         colnames(annots) <- c('sample', 'chr', 'pos', 'iclass', 'refnt', 'altnt', 'unknown')
-        newdf <- merge(df, annots[2:6], by = colnames(annots)[-c(1, 4, 7)])
+        newdf <- plyr::join(df, annots[2:6], by = colnames(annots)[-c(1, 4, 7)])
     } else if (spectype == 'SNV') {
         colnames(annots) <- c('sample', 'chr', 'pos', 'iclass', 'unknown')
-        newdf <- merge(df, annots[2:4], by = colnames(annots)[-c(1, 4, 5)])
+        newdf <- plyr::join(df, annots[2:4], by = colnames(annots)[-c(1, 4, 5)])
     }
 
     if (save.plot) {
@@ -77,6 +77,10 @@ classify.muts <- function(df, spectype='SNV',
 
     if (auto.delete)
         unlink(spmgd, recursive=TRUE)
+    if (!all(df$chr == newdf$chr))
+        stop('df and newdf do not perfectly correspond: df$chr != newdf$chr')
+    if (!all(df$pos == newdf$pos))
+        stop('df and newdf do not perfectly correspond: df$pos != newdf$pos')
     df$muttype <- newdf$iclass
     df
 }
