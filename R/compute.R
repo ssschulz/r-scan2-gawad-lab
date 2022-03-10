@@ -285,7 +285,7 @@ compute.fdr.new <- function(mut.models, fdr.priors) {
 }
 
 
-resample.hsnps <- function(sites, hsnps, M=50) {
+resample.hsnps <- function(sites, hsnps, M=50, seed=0) {
     # XXX: Random position sampling: maybe add an option to use random
     # instead of somatic candidates?
     # Random positioning is not as realistic as all non-ref sites because
@@ -321,6 +321,7 @@ resample.hsnps <- function(sites, hsnps, M=50) {
     ds <- dist.s$density[findInterval(hpos, dist.s$breaks, all.inside=T)]
     dh <- dist.h$density[findInterval(hpos, dist.h$breaks, all.inside=T)]
     
+    set.seed(seed)
     u <- runif(n=length(ds))
     list(selection=data.frame(dist=hsnps$nearest.hsnp, ds=ds, dh=dh, u=u, keep=u < ds / (M*dh)),
         dist.s=dist.s, dist.h=dist.h)
