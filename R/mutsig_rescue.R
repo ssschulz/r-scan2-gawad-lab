@@ -28,8 +28,10 @@ do.rescue <- function(ldf, lysis.sig, good.sig, min.alt=2, calling.fdr=0.01, res
     # unless user specifies it, just the raw spectrum of calls
     cat('    Step 2: constructing true SNV spectrum..\n')
     if (missing(good.sig)) {
-        x <- do.call(rbind, lapply(ldf, function(s) s[s$pass,1:5]))
-        good.sig <- df.to.sbs96(x)
+        #x <- do.call(rbind, lapply(ldf, function(s) s[s$pass,1:5]))
+        # we just made type.and.ctx in get.3mer from step 1
+        x <- do.call(c, lapply(ldf, function(s) s[s$pass,]$type.and.ctx))
+        good.sig <- df.to.sbs96(data.frame(type.and.ctx=x))
     }
 
     # step 3
@@ -79,7 +81,7 @@ get.filter.reasons <- function(df, fdr.threshold=0.01, min.alt=2) {
 
 
 
-df.to.sbs96 <- function(df) {
+df.to.sbs96 <- function(df, eps=0.1, fraction=TRUE) {
     if (!('type.and.ctx' %in% colnames(df)))
         df <- get.3mer(df)
 
@@ -94,8 +96,10 @@ df.to.sbs96 <- function(df) {
     t[names(t2)] <- t2
     tn <- do.call(rbind, strsplit(names(t), ":"))
     t <- t[order(tn[, 2])]
-    t <- t + 0.1 # add a pseudocount for 0s 
-    t/sum(t)
+    t <- t + eps # add a pseudocount for 0s 
+    if (fraction)
+        t <- t/sum(t)
+    t
 }
 
 
