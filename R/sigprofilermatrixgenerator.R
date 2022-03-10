@@ -39,6 +39,18 @@ classify.muts <- function(df, spectype='SNV',
         ss <- s[s$chr == chr, ]
         ss[order(ss$pos), ]
     }))
+
+    # SigProfilerMatrixGenerator doesn't classify duplicated mutations
+    # from the same sample, it throws errors instead. It also will not
+    # detect duplicates if they are not adjacent in the file.  If the
+    # duplicate is not detected in this way, it causes the bug where
+    # the final newdf dataframe does not match the input df.
+    # To circumvent all these headaches: just remove duplicates up front.
+    mutid <- paste(s$chr, s$pos, s$refnt, s$altnt)
+    dupmut <- duplicated(mutid)
+    cat("Removing", sum(dupmut), "/", nrow(s), "duplicated mutations before annotating\n")
+    s <- s[!dupmut,]
+
     # will write, eg., position=7000000 as 7e6, which will
     # confuse sigprofilermatrixgenerator
     old.opt <- options('scipen')$scipen
@@ -75,12 +87,13 @@ classify.muts <- function(df, spectype='SNV',
         file.copy(plotfiles, '.')
     }
 
-    if (auto.delete)
-        unlink(spmgd, recursive=TRUE)
     if (!all(df$chr == newdf$chr))
         stop('df and newdf do not perfectly correspond: df$chr != newdf$chr')
     if (!all(df$pos == newdf$pos))
         stop('df and newdf do not perfectly correspond: df$pos != newdf$pos')
+
+    if (auto.delete)
+        unlink(spmgd, recursive=TRUE)
     df$muttype <- newdf$iclass
     df
 }
