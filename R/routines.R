@@ -154,30 +154,25 @@ muttype.map <- c(
     'T>G'='T>G'
 )
 
-get.3mer <- function(df) {
-    require(BSgenome)
-    #require(BSgenome.Hsapiens.UCSC.hg19)
-    # we use hs37d5; mostly doesn't matter for autosomes, but chrMT is
-    # significantly updated.
-    require(BSgenome.Hsapiens.1000genomes.hs37d5)
+get.3mer <- function(df, genome=BSgenome.Hsapiens.1000genomes.hs37d5) {
+    if ('type.and.ctx' %in% colnames(df))
+        return(df)
 
-    comp <- c('A', 'C', 'G', 'T')
-    names(comp) <- c('T', 'G', 'C', 'A')
+    require(BSgenome)
 
     x <- df
-
     if (!('muttype' %in% colnames(x))) {
         cat("adding mutation types..\n")
         x$muttype <- muttype.map[paste(x$refnt, x$altnt, sep = ">")]
     }
 
-    #x$ctx <- getSeq(BSgenome.Hsapiens.UCSC.hg19,
-                    #names=paste("chr", x$chr, sep=''),
-    x$ctx <- getSeq(BSgenome.Hsapiens.1000genomes.hs37d5,
-                    names=x$chr,
-                    start=x$pos-1, end=x$pos+1, as.character=TRUE)
-    x$ctx.rc <- sapply(strsplit(x$ctx, ""),
-                    function(s) paste0(comp[s[c(3,2,1)]], collapse=''))
+    tmp <- getSeq(genome, GRanges(seqnames=x$chr,
+                    ranges=IRanges(start=x$pos-1, end=x$pos+1)))
+        #as.character=FALSE)
+    x$ctx <- as.character(tmp)
+    x$ctx.rc <- as.character(reverseComplement(tmp))
+    #x$ctx.rc <- sapply(strsplit(x$ctx, ""),
+                    #function(s) paste0(comp[s[c(3,2,1)]], collapse=''))
 
     x$type.and.ctx <- ifelse(x$refnt == 'C' | x$refnt == 'T',
                        paste0(x$ctx, ":", x$muttype),
