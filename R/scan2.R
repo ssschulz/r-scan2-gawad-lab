@@ -7,6 +7,8 @@ setClass("SCAN2", slots=c(
     gatk="null.or.df",
     gatk.lowmq="null.or.df",
     training.data="null.or.df",
+    #snv.training.data="null.or.df",
+    #indel.training.data="null.or.df",
     resampled.training.data="null.or.list",
     ab.fits='null.or.df',
     ab.estimates='null.or.df',
@@ -83,7 +85,7 @@ setValidity("SCAN2", function(object) {
 # various steps in the pipeline require certain slots to be filled.
 # this function will ensure all slots in 'slots: (character)' are not
 # NULL and will generate an error message otherwise.
-check.slots <- function(object, slots) {
+check.slots <- function(object, slots, abort=TRUE) {
     error.occurred = FALSE
     for (s in slots) {
         if (is.null(slot(object, s))) {
@@ -106,8 +108,9 @@ check.slots <- function(object, slots) {
                 cat("must compute FDR priors first (see: compute.fdr.priors())\n")
         }
     }
-    if (error.occurred)
+    if (error.occurred & abort)
         stop("One or more required slots are missing. See above for details.")
+    return(error.occurred)
 }
 
 # Some getters
@@ -226,6 +229,54 @@ internal.subset <- function(x, i) {
 
     x
 }
+
+
+# try to concat without chaining together concat(x,y)
+# XXX: i'm not sure if this should be more efficient or not
+setGeneric("concatZ", function(...) standardGeneric("concatZ"))
+setMethod("concatZ", signature="SCAN2", function(...) {
+    args <- list(...)
+
+cat('length(args)=', length(args), '\n')
+cat('str(args)=\n')
+str(args, max.lev=3)
+    if (length(args) == 0)
+        stop('tried to concat() 0 objects')
+
+    if (length(args) == 1)
+        return(args[[1]])
+
+    for (i in length(args)) {
+        if (is(args[[i]]) != 'SCAN2')
+            stop('found a non-SCAN2 class in concatZ')
+    }
+
+    if (!all(sapply(args, function(o) o@single.cell) == args[[1]]@single.cell))
+        stop("concat(): can only combine SCAN2 objects from the same single cell")
+    if (!all(sapply(args, function(o) o@bulk) == args[[1]]@bulk))
+        stop("concat(): can only combine SCAN2 objects from the same bulk")
+
+    x <- args[[1]]  # copy the first object's attributes and so forth
+    # then replace all of the relevant slots
+    x@gatk <- do.call(rbind, lapply(args, function(o) o@gatk))
+    cat("combined gatk\n"); print(gc())
+    x@gatk.lowmq <- do.call(rbind, lapply(args, function(o) o@gatk.lowmq))
+    cat("combined gatk.lowmq\n"); print(gc())
+    x@ab.estimates <- do.call(rbind, lapply(args, function(o) o@ab.estimates))
+    cat("combined ab.estimates\n"); print(gc())
+    x@mut.models <- do.call(rbind, lapply(args, function(o) o@mut.models))
+    cat("combined mut.models\n"); print(gc())
+    x@cigar.data <- do.call(rbind, lapply(args, function(o) o@cigar.data))
+    cat("combined cigar.data\n"); print(gc())
+    x@static.filters <- do.call(rbind, lapply(args, function(o) o@static.filters))
+    cat("combined static.filters\n"); print(gc())
+    x@static.filter <- do.call(c, lapply(args, function(o) o@static.filter))
+    cat("combined static.filter\n"); print(gc())
+
+    # IMPORTANT: training data is never subsetted or combined
+    x
+})
+
 
 
 concat2 <- function(x, y) {
@@ -399,8 +450,9 @@ setMethod("add.ab.estimates", "SCAN2", function(object, path) {
 
     # choose the AB nearest to the AF of each candidate
     # af can be NA if the site has 0 depth
-    ab$gp.mu <- ifelse(!is.na(object@gatk$af) & object@gatk$af < 1/2,
-        -abs(ab$gp.mu), abs(ab$gp.mu))
+    # XXX: this discards phasing info at training hSNPs
+    #ab$gp.mu <- ifelse(!is.na(object@gatk$af) & object@gatk$af < 1/2,
+        #-abs(ab$gp.mu), abs(ab$gp.mu))
     ab$ab <- 1/(1+exp(-ab$gp.mu))
 
     object@ab.estimates <- ab[,c('ab', 'gp.mu','gp.sd')]
@@ -454,7 +506,12 @@ setMethod("compute.models", "SCAN2", function(object) {
 setGeneric("compute.fdr.priors", function(object, mode='legacy')
     standardGeneric("compute.fdr.priors"))
 setMethod("compute.fdr.priors", "SCAN2", function(object, mode) {
-    check.slots(object, c('gatk', 'training.data', 'static.filter'))
+    check.slots(object, c('gatk', 'static.filter'))
+    # minimized objects have training.data deleted, but training.site is
+    # annotated in the gatk data frame.
+    if (!('training.site' %in% colnames(object@gatk)))
+        check.slots(object, 'training.data')
+
     cat("*** FIXME: filtering out static.filter=NA; should not contain NAs.\n")
     if (mode == 'legacy') {
         # in legacy mode, all candidate sites passing a small set of pre-genotyping
@@ -463,13 +520,13 @@ setMethod("compute.fdr.priors", "SCAN2", function(object, mode) {
             object@gatk$balt == 0 &
             object@gatk[,11] == '0/0' &
             object@gatk$dbsnp == '.' &
-            object@gatk$scalt >= gt@static.filter.params$min.sc.alt &
-            object@gatk$dp >= gt@static.filter.params$min.sc.dp &
-            object@gatk$bulk.dp >= gt@static.filter.params$min.bulk.dp &
+            object@gatk$scalt >= object@static.filter.params$min.sc.alt &
+            object@gatk$dp >= object@static.filter.params$min.sc.dp &
+            object@gatk$bulk.dp >= object@static.filter.params$min.bulk.dp &
             (is.na(object@gatk.lowmq$balt) | object@gatk.lowmq$balt == 0),]
         hsnps=object@gatk[
             object@gatk$training.site &
-            object@gatk$scalt >= gt@static.filter.params$min.sc.alt,]
+            object@gatk$scalt >= object@static.filter.params$min.sc.alt,]
     } else {
         stop("only the legacy mode is currently implemented. check back soon.")
     }
@@ -500,9 +557,9 @@ setMethod("compute.fdr", "SCAN2", function(object, mode='legacy') {
             object@gatk$balt == 0 &
             object@gatk[,11] == '0/0' &
             object@gatk$dbsnp == '.' &
-            object@gatk$scalt >= gt@static.filter.params$min.sc.alt &
-            object@gatk$dp >= gt@static.filter.params$min.sc.dp &
-            object@gatk$bulk.dp >= gt@static.filter.params$min.bulk.dp &
+            object@gatk$scalt >= object@static.filter.params$min.sc.alt &
+            object@gatk$dp >= object@static.filter.params$min.sc.dp &
+            object@gatk$bulk.dp >= object@static.filter.params$min.bulk.dp &
             (is.na(object@gatk.lowmq$balt) | object@gatk.lowmq$balt == 0)
 
         fdrs <- compute.fdr.legacy(
@@ -631,16 +688,16 @@ function(object, min.sc.alt=2, min.sc.dp=6, max.bulk.alt=0, min.bulk.dp=11,
 })
 
 
-setGeneric("resample.training.data", function(object, M=20) 
+setGeneric("resample.training.data", function(object, M=20, seed=0) 
         standardGeneric("resample.training.data"))
-setMethod("resample.training.data", "SCAN2", function(object, M=20) {
+setMethod("resample.training.data", "SCAN2", function(object, M=20, seed=0) {
     check.slots(object, c('gatk', 'training.data'))
 
     ret <- resample.hsnps(sites=object@gatk[object@gatk$scalt >= 2 &
             object@gatk$dp >= 6 &
             object@gatk$bulk.dp >= 11 &
             object@gatk$balt == 0,],
-        hsnps=object@training.data, M=M)
+        hsnps=object@training.data, M=M, seed=seed)
 
     object@resampled.training.data <-
         c(ret, training.data=list(object@training.data[ret$selection$keep,]))
