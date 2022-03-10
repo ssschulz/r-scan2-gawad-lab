@@ -1,37 +1,54 @@
+# XXX: TODO: Would be nice to update some internal functions to
+# leverage these factors for counting/ordering ID83/SBS96 spectra.
+id83.class.order <- paste(
+    c(rep(1,24), rep(rep(2:5,each=6),2),c(2,3,3,4,4,4,5,5,5,5,5)),
+    c(rep(c('Del', 'Ins'), each=12), rep(c('Del', 'Ins'), each=24), rep('Del', 11)),
+    c(rep(rep(c('C','T'), each=6), 2), rep('R',48), rep('M', 11)),
+    c(rep(0:5, 12), c(1, 1,2, 1:3, 1:5)),
+    sep=':')
+
+# Convert 'x' from string to an ordered factor representing the
+# ID83 indel signature classes.
+id83 <- function(x) {
+    factor(x=x, levels=id83.class.order, ordered=TRUE)
+}
+
+sbs96.class.order <- paste0(rep(c("A", "C", "G", "T"), each = 4), rep(c("C", "T"), 
+    each = 48), rep(c("A", "C", "G", "T"), times = 4), ":", rep(c("C", "T"), 
+    each = 48), ">", c(rep(c("A", "G", "T"), each = 16), 
+    rep(c("A", "C", "G"), each = 16)))
+
+sbs96 <- function(x) {
+    factor(x=x, levels=sbs96.class.order, ordered=TRUE)
+}
+
+
 # for 96 dimensional mut sigs
 mutsig.cols <- rep(c('deepskyblue', 'black', 'firebrick2', 'grey', 'chartreuse3', 'pink2'), each=16)
 
 # Returns the plotted spectrum invisibly
-plot.3mer <- function(x, no.legend=FALSE, ...) {
-    bases <- c("A", 'C', 'G', 'T')
-
-    # need to make a table of all possible contexts because they may not
-    # be observed after filtering.
-    t <- rep(0, 96)
-    names(t) <- paste0(rep(bases, each=4),
-                      rep(c('C', 'T'), each=48),
-                      rep(bases, times=4),
-                      ":",
-                      rep(c('C', 'T'), each=48),
-                      ">",
-                      c(rep(c('A', 'G', 'T'), each=16),
-                        rep(c('A', 'C', 'G'), each=16)))
-    t2 <- table(x$type.and.ctx)
-    t[names(t2)] <- t2
-    tn <- do.call(rbind, strsplit(names(t), ":"))
-    t <- t[order(tn[,2])]
-    p <- barplot(t, las=3, col=mutsig.cols, names.arg=tn[order(tn[,2]), 1], space=0.5, border=NA, ...)
+plot.3mer <- function(x, xaxt='n', legend=FALSE, fraction=FALSE, ...) {
+    spectrum <- df.to.sbs96(x, eps=0, fraction=fraction)
+    p <- barplot(spectrum, las=3, col=mutsig.cols,
+        #names.arg=tn[order(tn[,2]), 1],
+        space=0.5, border=NA, xaxt=xaxt, ...)
     abline(v=(p[seq(4,length(p)-1,4)] + p[seq(5,length(p),4)])/2, col='grey')
-    if (!no.legend)
-        legend('topright', ncol=2, legend=sort(unique(tn[,2])),
+    if (legend) {
+        # mutation types are [context]:[refbase]>[altbase]
+        muttypes <- sort(unique(sapply(strsplit(names(df.to.sbs96(z)), ':'), function(x) x[2])))
+        legend('topright', ncol=2, legend=muttypes,
             fill=mutsig.cols[seq(1, length(mutsig.cols), 16)])
-    invisible(t)
+    }
+    invisible(spectrum)
 }
 
 
 # Returns the ordered channel values invisibly
-plot.indel <- function(iclass, tsb=F, proc, reduce.to.id83=FALSE, xaxt='n',
-    col, border, make.plot=TRUE, ...) {
+# detailed.x.labels - annotate each bar in the barplot with the full
+#      mutation class. E.g., "1:Del:C:0". When plotting many separate
+#      panels over X11, this can be very slow.
+plot.indel <- function(iclass, tsb=F, proc, reduce.to.id83=TRUE, xaxt='n',
+    col, border, make.plot=TRUE, detailed.x.labels=FALSE, ...) {
     # ID83 plotting order
     iclass.order <- paste(
         c(rep(1,24), rep(rep(2:5,each=6),2),c(2,3,3,4,4,4,5,5,5,5,5)),
@@ -45,7 +62,7 @@ plot.indel <- function(iclass, tsb=F, proc, reduce.to.id83=FALSE, xaxt='n',
             paste0("T:", iclass.order),
             paste0("U:", iclass.order)))
 
-    if (reduce.to.id83)
+    if (reduce.to.id83 & !missing(iclass))
         iclass <- substr(iclass,3,11)
 
     if (missing(proc)) {
@@ -60,8 +77,8 @@ plot.indel <- function(iclass, tsb=F, proc, reduce.to.id83=FALSE, xaxt='n',
         mutsig.cols <- as.vector(rbind(mutsig.cols, "#D6C2C2"))
 
     if (make.plot) {
-        par(mar=c(4, 4, 1, 1))
-        p <- barplot(proc, las = 3, col = col, names.arg = iclass.order,
+        x.names <- if (detailed.x.labels) names(proc) else ''
+        p <- barplot(proc, las = 3, col = col, names.arg = x.names,
             space = 0.5, border = border, cex.names=0.7, ...) #xaxt=xaxt, ...)
         abline(v = (p[seq(6, length(p) - 11, 6)] + p[seq(7, length(p)-10,6)])/2,
         col="grey")
