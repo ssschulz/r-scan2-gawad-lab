@@ -2,10 +2,7 @@
 # note that sigprofilermatrixgenerator always generates the most granular classification
 # (e.g., SBS6144 for SNVs and ID415 for indels)
 # mostly useful for indel classification, but also good for doing TSB on SNVs
-# IMPORTANT BUG: the mutation classes are not always in the right order!!!
-# this happens to not affect the SCAN* pipelines because the SCAN mutation
-# order matches this order by chance. but please fix this later.
-classify.muts <- function(df, spectype='SNV',
+classify.muts <- function(df, genome.string, spectype='SNV',
     sample.name='dummy', save.plot=F, auto.delete=T, chrs=1:22)
 {
     if (nrow(df) == 0)
@@ -34,11 +31,12 @@ classify.muts <- function(df, spectype='SNV',
     paste(c("#CHROM", "POS", "ID", "REF", "ALT", 
             "QUAL", "FILTER", "INFO", "FORMAT", sample.name), collapse = "\t"))
     writeLines(vcf.header, con = f)
-    s <- df[!is.na(df$chr),]
-    s <- do.call(rbind, lapply(chrs, function(chr) {
-        ss <- s[s$chr == chr, ]
-        ss[order(ss$pos), ]
-    }))
+    s <- df[!is.na(df$chr) & df$chr %in% chrs,]
+    # ordering is not necessary at all because of the join we do later
+    #s <- do.call(rbind, lapply(chrs, function(chr) {
+        #ss <- s[s$chr == chr, ]
+        #ss[order(ss$pos), ]
+    #}))
 
     # SigProfilerMatrixGenerator doesn't classify duplicated mutations
     # from the same sample, it throws errors instead. It also will not
@@ -60,7 +58,7 @@ classify.muts <- function(df, spectype='SNV',
     close(f)
     options(scipen=old.opt)
 
-    mat <- SigProfilerMatrixGeneratorR(sample.name, 'GRCh37', spmgd, seqInfo=TRUE, plot=TRUE)
+    mat <- SigProfilerMatrixGeneratorR(sample.name, genome.string, spmgd, seqInfo=TRUE, plot=save.plot)
 
     # Read in the types
     annot.files <- paste0(spmgd, '/output/vcf_files/', spectype, '/', c(1:22,'X','Y'), "_seqinfo.txt")
@@ -99,8 +97,27 @@ classify.muts <- function(df, spectype='SNV',
 }
 
 
-# Convenience wrapper for older code
-classify.indels <- function(df, sample.name='dummy', save.plot=F, auto.delete=T, chrs=1:22) {
+# annotates and returns a data.frame
+old.classify.indels <- function(df, sample.name='dummy', save.plot=F, auto.delete=T, chrs=1:22) {
     classify.muts(df=df, spectype='ID', sample.name=sample.name, save.plot=save.plot,
         auto.delete=auto.delete, chrs=chrs)
+}
+
+genome.to.spgmr.format <- c(
+    hs37d5='GRCh37',
+    hg38='GRCh38',
+    mm9='GRCm37')
+
+# new version: just returns the vector of indel classes
+# FORCES ID83 FOR NOW
+classify.indels <- function(df, genome.string='GRCh37', sample.name='dummy', save.plot=F, auto.delete=T, chrs=1:22) {
+    # SigProfilerMatrixGenerator returns ID415 by default, which is ID83 plus one of
+    # 5 transcription strand states: B, N, Q, T, U. The format of the string is, e.g.,
+    #    U:1:Del:T:1
+    # Removing the first two characters "U:" leaves an ID83 type.
+    id415 <- classify.muts(df=df, genome.string=genome.to.spgmr.format[genome.string],
+        spectype='ID', sample.name=sample.name, save.plot=save.plot,
+        auto.delete=auto.delete, chrs=chrs)$muttype
+    # id83() converts strings into a factor
+    id83(substr(id415, 3, nchar(id415[1])))
 }

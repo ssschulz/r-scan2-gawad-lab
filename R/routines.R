@@ -154,30 +154,48 @@ muttype.map <- c(
     'T>G'='T>G'
 )
 
-get.3mer <- function(df, genome=BSgenome.Hsapiens.1000genomes.hs37d5) {
-    if ('type.and.ctx' %in% colnames(df))
+old.get.3mer <- function (df, genome = BSgenome.Hsapiens.1000genomes.hs37d5) 
+{
+    if ("type.and.ctx" %in% colnames(df)) 
         return(df)
-
     require(BSgenome)
-
     x <- df
-    if (!('muttype' %in% colnames(x))) {
+    if (!("muttype" %in% colnames(x))) {
         cat("adding mutation types..\n")
         x$muttype <- muttype.map[paste(x$refnt, x$altnt, sep = ">")]
     }
-
-    tmp <- getSeq(genome, GRanges(seqnames=x$chr,
-                    ranges=IRanges(start=x$pos-1, end=x$pos+1)))
-        #as.character=FALSE)
+    tmp <- getSeq(genome, GRanges(seqnames = x$chr, ranges = IRanges(start = x$pos - 
+        1, end = x$pos + 1)))
     x$ctx <- as.character(tmp)
     x$ctx.rc <- as.character(reverseComplement(tmp))
-    #x$ctx.rc <- sapply(strsplit(x$ctx, ""),
-                    #function(s) paste0(comp[s[c(3,2,1)]], collapse=''))
-
-    x$type.and.ctx <- ifelse(x$refnt == 'C' | x$refnt == 'T',
-                       paste0(x$ctx, ":", x$muttype),
-                       paste0(x$ctx.rc, ":", x$muttype))
+    x$type.and.ctx <- ifelse(x$refnt == "C" | x$refnt == "T", 
+        paste0(x$ctx, ":", x$muttype), paste0(x$ctx.rc, ":", 
+            x$muttype))
     x
+}
+
+
+get.3mer <- function(df, chr, pos, refnt, altnt, genome=BSgenome.Hsapiens.1000genomes.hs37d5,verbose=FALSE) {
+    if (!missing(df)) {
+        chr <- df$chr
+        pos <- df$pos
+        refnt <- df$refnt
+        altnt <- df$altnt
+    } else {
+        if (missing(chr) | missing(pos) | missing(refnt) | missing(altnt))
+            stop('must supply either "df" or all of chr, pos, refnt, alt')
+    }
+    
+    muttype <- muttype.map[paste0(refnt, '>', altnt)]
+
+    tmp <- getSeq(genome, GRanges(seqnames=chr,
+                    ranges=IRanges(start=pos-1, end=pos+1)))
+
+    ctx <- as.character(tmp)
+    ctx.rc <- as.character(reverseComplement(tmp))
+    type.and.ctx <- paste0(ifelse(refnt == 'C' | refnt == 'T', ctx, ctx.rc), ':', muttype)
+    # sbs96 converts the string form into a factor to enforce ordering
+    sbs96(type.and.ctx)
 }
 
 

@@ -1,93 +1,118 @@
-# XXX: TODO: Would be nice to update some internal functions to
-# leverage these factors for counting/ordering ID83/SBS96 spectra.
-id83.class.order <- paste(
+id83.cols <- col <- rep(c('#FBBD75', '#FC7F24', '#B0DB8E', '#3B9F36',
+    '#FBC9B6', '#F8896D', '#EE453A', '#B91C22', '#C5D4E4', '#8DBAD2',
+    '#4D98C6', '#1D65A8', '#E1E1EE', '#B5B6D6', '#8684BA', '#614398'),
+    c(rep(6,12), 1,2,3,5))
+id83.channel.order <- paste(
     c(rep(1,24), rep(rep(2:5,each=6),2),c(2,3,3,4,4,4,5,5,5,5,5)),
     c(rep(c('Del', 'Ins'), each=12), rep(c('Del', 'Ins'), each=24), rep('Del', 11)),
     c(rep(rep(c('C','T'), each=6), 2), rep('R',48), rep('M', 11)),
     c(rep(0:5, 12), c(1, 1,2, 1:3, 1:5)),
     sep=':')
 
-# Convert 'x' from string to an ordered factor representing the
-# ID83 indel signature classes.
-id83 <- function(x) {
-    factor(x=x, levels=id83.class.order, ordered=TRUE)
-}
 
-sbs96.class.order <- paste0(rep(c("A", "C", "G", "T"), each = 4), rep(c("C", "T"), 
+sbs96.cols <- rep(c('deepskyblue', 'black', 'firebrick2', 'grey',
+    'chartreuse3', 'pink2'), each=16)
+sbs96.channel.order <- paste0(rep(c("A", "C", "G", "T"), each = 4), rep(c("C", "T"), 
     each = 48), rep(c("A", "C", "G", "T"), times = 4), ":", rep(c("C", "T"), 
     each = 48), ">", c(rep(c("A", "G", "T"), each = 16), 
     rep(c("A", "C", "G"), each = 16)))
 
-sbs96 <- function(x) {
-    factor(x=x, levels=sbs96.class.order, ordered=TRUE)
+sbs96 <- function(x, colname) {
+    factorize.mutsig(x, sbs96.channel.order)
+}
+
+id83 <- function(x) {
+    factorize.mutsig(x, id83.channel.order)
+}
+
+factorize.mutsig <- function(x, channel.order) {
+    factor(x, levels=channel.order, ordered=TRUE)
+}
+
+# Simple extension of R's base table() function to make normalizing
+# mutation spectra more convenient.
+# 
+# x - a factor()ized vector of mutation signature channels
+# eps - a minimum count value to add to all channels in the spectrum.
+#       added *BEFORE* conversion to fraction, if fraction=TRUE. eps is
+#       ignored if fraction=FALSE.
+# fraction - express the mutation spectrum as a probability density
+#       function rather than counts; i.e., ensure the spectrum sums to 1.
+as.spectrum <- function (x, eps = 0.1, fraction = TRUE) {
+    t <- table(x)  # when acting on factors, table() will report 0 counts
+                   # for channels that have 0 mutations
+    if (fraction) {
+        t <- t + eps
+        t <- t/sum(t)
+    }
+    t
 }
 
 
-# for 96 dimensional mut sigs
-mutsig.cols <- rep(c('deepskyblue', 'black', 'firebrick2', 'grey', 'chartreuse3', 'pink2'), each=16)
+# x - a vector of id83() factors OR a SCAN2 object
+# spectrum - an already-tabulated id83 factor spectrum
+# either x or spectrum can be supplied, but not both
+plot.sbs96 <- function(x, spectrum, xaxt='n', legend=FALSE, ...) {
+    if (missing(x) & missing(spectrum))
+        stop('exactly one of "x" or "spectrum" must be supplied')
 
-# Returns the plotted spectrum invisibly
-plot.3mer <- function(x, xaxt='n', legend=FALSE, fraction=FALSE, ...) {
-    spectrum <- df.to.sbs96(x, eps=0, fraction=fraction)
-    p <- barplot(spectrum, las=3, col=mutsig.cols,
-        #names.arg=tn[order(tn[,2]), 1],
+    if (!missing(x) & is(x, 'SCAN2'))
+        x <- sbs96(x@gatk$mutsig)   # Indels are automatically ignored because they don't match any of the known SBS96 channels
+
+    if (missing(spectrum))
+        spectrum <- table(x)
+
+    p <- barplot(spectrum, las=3, col=sbs96.cols,
         space=0.5, border=NA, xaxt=xaxt, ...)
     abline(v=(p[seq(4,length(p)-1,4)] + p[seq(5,length(p),4)])/2, col='grey')
     if (legend) {
         # mutation types are [context]:[refbase]>[altbase]
-        muttypes <- sort(unique(sapply(strsplit(names(df.to.sbs96(z)), ':'), function(x) x[2])))
-        legend('topright', ncol=2, legend=muttypes,
-            fill=mutsig.cols[seq(1, length(mutsig.cols), 16)])
+        legend('topright', ncol=2, legend=c('C>A','C>G','C>T','T>A','T>C','T>G'),
+            fill=sbs96.cols[seq(1, length(sbs96.cols), 16)])
     }
-    invisible(spectrum)
 }
 
 
-# Returns the ordered channel values invisibly
+# x - a vector of id83() factors OR a SCAN2 object
+# spectrum - an already-tabulated id83 factor spectrum
+# either x or spectrum can be supplied, but not both
+#
 # detailed.x.labels - annotate each bar in the barplot with the full
 #      mutation class. E.g., "1:Del:C:0". When plotting many separate
 #      panels over X11, this can be very slow.
-plot.indel <- function(iclass, tsb=F, proc, reduce.to.id83=TRUE, xaxt='n',
-    col, border, make.plot=TRUE, detailed.x.labels=FALSE, ...) {
-    # ID83 plotting order
-    iclass.order <- paste(
-        c(rep(1,24), rep(rep(2:5,each=6),2),c(2,3,3,4,4,4,5,5,5,5,5)),
-        c(rep(c('Del', 'Ins'), each=12), rep(c('Del', 'Ins'), each=24), rep('Del', 11)),
-        c(rep(rep(c('C','T'), each=6), 2), rep('R',48), rep('M', 11)),
-        c(rep(0:5, 12), c(1, 1,2, 1:3, 1:5)),
-        sep=':')
-    # ID415 (includes transcribed strand)
-    if (tsb)
-        iclass.order <- as.vector(rbind(
-            paste0("T:", iclass.order),
-            paste0("U:", iclass.order)))
+plot.id83 <- function(x, spectrum, proc, xaxt='n',
+    col, border, detailed.x.labels=FALSE, ...) {
 
-    if (reduce.to.id83 & !missing(iclass))
-        iclass <- substr(iclass,3,11)
+    if (missing(x) & missing(spectrum))
+        stop('exactly one of "x" or "spectrum" must be supplied')
 
-    if (missing(proc)) {
-        proc <- sapply(iclass.order, function(ico) sum(iclass==ico))
-    } else
-        proc <- proc[iclass.order]
+    if (!missing(x) & is(x, 'SCAN2'))
+        x <- id83(x@gatk$mutsig)  # SNVs are automatically ignored because they don't match any of the known ID83 channels
+
+    if (missing(spectrum))
+        spectrum <- table(x)
+    # else it's already tabulated
+
     if (missing(border))
-        border <- rep(c('#FBBD75', '#FC7F24', '#B0DB8E', '#3B9F36', '#FBC9B6', '#F8896D', '#EE453A', '#B91C22', '#C5D4E4', '#8DBAD2', '#4D98C6', '#1D65A8', '#E1E1EE', '#B5B6D6', '#8684BA', '#614398'), c(rep(6,12), 1,2,3,5))
+        border <- id83.cols
     if (missing(col))
-        col <- rep(c('#FBBD75', '#FC7F24', '#B0DB8E', '#3B9F36', '#FBC9B6', '#F8896D', '#EE453A', '#B91C22', '#C5D4E4', '#8DBAD2', '#4D98C6', '#1D65A8', '#E1E1EE', '#B5B6D6', '#8684BA', '#614398'), c(rep(6,12), 1,2,3,5))
-    if (tsb)
-        mutsig.cols <- as.vector(rbind(mutsig.cols, "#D6C2C2"))
+        col <- id83.cols
 
-    if (make.plot) {
-        x.names <- if (detailed.x.labels) names(proc) else ''
-        p <- barplot(proc, las = 3, col = col, names.arg = x.names,
-            space = 0.5, border = border, cex.names=0.7, ...) #xaxt=xaxt, ...)
-        abline(v = (p[seq(6, length(p) - 11, 6)] + p[seq(7, length(p)-10,6)])/2,
-        col="grey")
+    x.names <- if (detailed.x.labels) names(spectrum) else ''
+    p <- barplot(spectrum, las = 3, col = col, names.arg = x.names,
+        space = 0.5, border = border, cex.names=0.7, xaxt=xaxt, ...)
+    abline(v = (p[seq(6, length(p) - 11, 6)] + p[seq(7, length(p)-10,6)])/2, col="grey")
+
+    if (xaxt != 'n') {
         mtext(text=c('del C', 'del T', 'ins C', 'ins T', 'del 2', 'del 3', 'del 4',
             'del 5+', 'ins 2', 'ins 3', 'ins 4', 'ins 5+', 'microhom.'),
-            side=1, at=c(mean(p[1:6]), mean(p[7:12]), mean(p[13:18]), mean(p[19:24]), mean(p[25:30]), mean(p[31:36]), mean(p[37:42]), mean(p[43:48]), mean(p[49:54]), mean(p[55:60]), mean(p[61:66]), mean(p[67:72]), mean(p[73:83])))
+            side=1, at=c(mean(p[1:6]), mean(p[7:12]), mean(p[13:18]),
+                mean(p[19:24]), mean(p[25:30]), mean(p[31:36]),
+                mean(p[37:42]), mean(p[43:48]), mean(p[49:54]),
+                mean(p[55:60]), mean(p[61:66]), mean(p[67:72]), mean(p[73:83])))
     }
-    invisible(proc)
 }
+
 
 #######################################################################
 # Plots for AB model and SCAN-SNV internal estimation procedures

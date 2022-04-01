@@ -70,7 +70,7 @@ mut.model.tables <- function(dp, gp.mu, gp.sd) {
 # Since these distributions are not unimodal, we define "more
 # significant" as any event with lower probability.
 compute.pvs.and.betas <- function(altreads, dp, gp.mu, gp.sd) {
-    pab <- mapply(function(altreads, dp, gp.mu, gp.sd) {
+    pab <- pbapply::pbmapply(function(altreads, dp, gp.mu, gp.sd) {
         # Step1: compute dreads for all relevant models:
         # These dreads() calls are the most expensive part of genotyping
         tb <- mut.model.tables(dp, gp.mu, gp.sd)
