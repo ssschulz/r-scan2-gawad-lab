@@ -197,7 +197,17 @@ infer.gp <- function(ssnvs, fit, hsnps, chunk=2500, flank=1e5, max.hsnps=150,
 
 # special case of infer.gp with chunksize=1 and without any assumptions
 # about ssnvs and hsnps overlapping
-infer.gp1 <- function(ssnvs, fit, hsnps, flank=1e5, max.hsnps=150,  #n.cores=1,
+#
+# There are several reasons to use chunksize=1.
+# 1. Most importantly, when hSNPs are included in sSNVs (i.e., to use the
+#    leave-one-out strategy), they must be handled one at a time.  It would
+#    be incorrect to simultaneously score any somatic candidates with an
+#    hSNP left out (because of lost information) and it would also be
+#    incorrect to simultaneously score any other hSNPs.
+# 2. Compute efficiency. infer.gp.block requires matrix inversion, which is
+#    >O(n^2), so it is beneficial to make each matrix as small as possible
+#    without sacrificing accuracy.
+infer.gp1 <- function(ssnvs, fit, hsnps, flank=1e5, max.hsnps=150,
     verbose=FALSE)
 {
     ssnv.is.hsnp <- ssnvs$pos %in% hsnps$pos
@@ -210,26 +220,9 @@ infer.gp1 <- function(ssnvs, fit, hsnps, flank=1e5, max.hsnps=150,  #n.cores=1,
         else which(hsnps$pos == ssnvs$pos[i])
     })
 
-    # XXX: future_sapply does not work and I can't figure out why.
-    # it spawns 'n.cores' workers, but each worker runs for the same
-    # amount of time that a single core takes to compute
-    # the entire solution.
-    #if (n.cores > 1) {
-        #cat('using', n.cores, 'cores (IMPORTANT: future_sapply does not allow progress reporting)\n')
-        #old.plan <- future::plan(future::multicore, workers=n.cores)
-        #on.exit(future::plan(old.plan), add=TRUE)
-        #applyf <- function(...) future.apply::future_sapply(..., future.seed=1234)
-    #} else {
-        #old.plan <- future::plan(future::transparent)
-        #on.exit(future::plan(old.plan), add=TRUE)
-        applyf <- sapply
-    #}
 
     ctx <- abmodel.approx.ctx(c(), c(), c(), hsnp.chunksize=2*max.hsnps + 10)
-    ret <- applyf(1:nrow(ssnvs), function(i) {
-        if (verbose & i %% 100 == 0)
-            cat(sprintf("infer.gp: progress: finished %d of %d sites (%0.1f%%)\n",
-                i, nrow(ssnvs), 100*i/nrow(ssnvs)))
+    ret <- pbapply:pbsapply(1:nrow(ssnvs), function(i) {
         h <- hsnps
         if (ssnv.is.hsnp[i])
             # ssnv i is hsnp hsnp.map[i], so remove it from the training set

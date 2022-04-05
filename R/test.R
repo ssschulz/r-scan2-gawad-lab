@@ -32,9 +32,9 @@ testpipe <- function(use.big=FALSE) {
 
 
     grs <- list(`1MB region 30M-31M`=GRanges(seqnames=22, ranges=IRanges(start=30e6, end=30999999)),
-                #`1MB region 31M-32M`=GRanges(seqnames=22, ranges=IRanges(start=31e6, end=31999999)),
-                `1MB region 32M-33M`=GRanges(seqnames=22, ranges=IRanges(start=32e6, end=32999999)))
-    lapply(1:length(grs), function(i) {
+                `1MB region 31M-32M`=GRanges(seqnames=22, ranges=IRanges(start=31e6, end=31999999)))
+                #`1MB region 32M-33M`=GRanges(seqnames=22, ranges=IRanges(start=32e6, end=32999999)))
+    xs <- lapply(1:length(grs), function(i) {
         cat('testing', names(grs)[i], '\n')
         gr <- grs[[i]]
         gt <- make.scan(single.cell=sc.sample.test, bulk=bulk.sample.test, genome='hs37d5', region=gr)
@@ -48,10 +48,7 @@ testpipe <- function(use.big=FALSE) {
         print(system.time(z1 <- add.training.data(y1, path=hsnps.test)))
         #print(z1)
         cat('After add.training.data:\n') ; print(gc(reset=TRUE))
-        print(system.time(zz1 <- resample.training.data(z1)))
-        #print(zz1)
-        cat('After resample.training.data:\n') ; print(gc(reset=TRUE))
-        print(system.time(w1 <- add.ab.fits(zz1, path=abfits.test)))
+        print(system.time(w1 <- add.ab.fits(z1, path=abfits.test)))
         #print(w1)
         cat('After add.ab.fits:\n') ; print(gc(reset=TRUE))
         print(system.time(v1 <- compute.ab.estimates(w1)))
@@ -63,9 +60,20 @@ testpipe <- function(use.big=FALSE) {
         print(system.time(s1 <- compute.models(r1)))
         print(s1)
         cat('After compute.models:\n') ; print(gc(reset=TRUE))
-        print(system.time(t1 <- compute.excess.cigar.scores(s1)))
-        print(t1)
-        cat('After compute.excess.cigar.scores:\n') ; print(gc(reset=TRUE))
-        t1
+        s1
     })
+
+    x <- do.call(concat, xs)
+    print(system.time(x2 <- resample.training.data(x)))
+    print(x)
+    cat('After resample.training.data:\n') ; print(gc(reset=TRUE))
+    print(system.time(x3 <- compute.excess.cigar.scores(x2)))
+    print(x3)
+    cat('After compute.excess.cigar.scores:\n') ; print(gc(reset=TRUE))
+    x4 <- add.static.filter.params(x3)
+    print(system.time(x5 <- compute.static.filters(x4)))
+    print(x5)
+    cat('After compute.static.filters:\n') ; print(gc(reset=TRUE))
+
+    list(xs, x5)
 }

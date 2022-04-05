@@ -22,11 +22,18 @@ setClass("SCAN2", slots=c(
     mut.models='null.or.df',
     cigar.data='null.or.df',
     excess.cigar.scores='null.or.df',
-    static.filters='null.or.df',
-    static.filter='null.or.logical',
-    fdr.priors='null.or.df',
-    fdrs='null.or.df'))
+    fdr.priors='null.or.list',
+    fdr='null.or.list'))
 
+
+# currently will always fire when SCAN2 is built from chunked objects.
+# firing isn't a problem, just causes a warning message.
+# need to define what the "full genome" is (in terms of GRanges objects)
+# for the recognized genomes.
+check.chunked <- function(object, message) {
+    if (!is.null(object@region))
+        warning(message)
+}
 
 genome.string.to.bsgenome.object <- function(genome=c('hs37d5', 'hg38', 'mm10')) {
     if (genome == 'hs37d5') {
@@ -62,7 +69,7 @@ make.scan <- function(single.cell, bulk, genome=c('hs37d5', 'hg38', 'mm10'), reg
         excess.cigar.scores=NULL,
         static.filter.params=NULL,
         fdr.priors=NULL,
-        fdrs=NULL)
+        fdr=NULL)
 }
 
 
@@ -175,10 +182,8 @@ check.slots <- function(object, slots, abort=TRUE) {
 setMethod("show", "SCAN2", function(object) {
     cat("#", is(object)[[1]], "\n")
     if (!is.null(object@region)) {
-        cat("#   Region:",
-            paste0(as.character(seqnames(object@region)[1]), ':',
-            start(object@region)[1], '-',
-            end(object@region)[1]), '\n')
+        cat("#   Region:\n")
+        print(object@region)
     }
     cat("#   Genome:", object@genome.string, "\n")
     cat("#   Single cell ID:", object@single.cell, "\n")
@@ -265,12 +270,12 @@ setMethod("show", "SCAN2", function(object) {
     }
 
     cat("#   Static filters: ")
-    if (is.null(object@static.filters)) {
+    if (!('static.filter' %in% colnames(object@gatk))) {
         cat("(not applied)\n")
     } else {
-        cat(sum(object@static.filter, na.rm=TRUE), "retained",
-            sum(!object@static.filter, na.rm=TRUE), "removed",
-            sum(is.na(object@static.filter)), "NA\n")
+        cat(sum(object@gatk$static.filter, na.rm=TRUE), "retained",
+            sum(!object@gatk$static.filter, na.rm=TRUE), "removed",
+            sum(is.na(object@gatk$static.filter)), "NA\n")
     }
 })
 
@@ -288,14 +293,42 @@ setMethod("concat", signature="SCAN2", function(...) {
     if (length(args) == 1)
         return(args[[1]])
 
-    # XXX: TODO: would be nice a nice sanity check to make sure each SCAN2
-    # class in the list is compatible (i.e., from the same reference genome/
-    # sample IDs)
     init <- args[[1]]
 
-    ret <- make.scan(init@single.cell, init@bulk, genome=init@genome.string)
-    # rbindlist is a special data.table function for quickly 
+    ret <- make.scan(init@single.cell, init@bulk,
+        genome=init@genome.string,
+        region=reduce(do.call(c, lapply(args, function(a) a@region))))
+
+    # rbindlist quickly concatenates data.tables
     ret@gatk <- rbindlist(lapply(args, function(a) a@gatk))
+
+    ensure.same <- function(l, slot.name, var.name) {
+        # either all slots are NULL or they have the same value
+        if (all(sapply(l, function(element) is.null(slot(element, slot.name))))) {
+            print('returning, not sure why the code below still runs')
+            return()
+        }
+        print(sapply(l, function(element) is.null(slot(l[[1]], slot.name))))
+print('--------------------------------------------------\n')
+print(slot.name)
+print(var.name)
+for (element in l) {
+    str(slot(element, slot.name))
+    str(slot(element, slot.name)[[var.name]])
+}
+        if (!all(sapply(l, function(element)
+            slot(l[[1]], slot.name)[[var.name]] == slot(element, slot.name)[[var.name]])))
+            stop(paste('list of SCAN2 chunks cannot be concatenated; slot', slot.name,
+                'does not have consistent values for', var.name))
+    }
+
+    # XXX: TODO: would be nice to ensure same genome. just not sure how to
+    # check equality at the moment.
+    ensure.same(args, 'training.data', 'path')
+    ensure.same(args, 'gatk.lowmq', 'path')
+    ensure.same(args, 'cigar.data', 'sc.path')
+    ensure.same(args, 'cigar.data', 'bulk.path')
+    ensure.same(args, 'excess.cigar.scores', 'legacy')
 
     ret@training.data <- data.frame(sites=sum(sapply(args, function(a) ifelse(is.null(a@training.data), 0, a@training.data$sites))))
 
@@ -330,7 +363,7 @@ setMethod("concat", signature="SCAN2", function(...) {
     ret@excess.cigar.scores <- data.frame(training.sites=sum(sapply(args, function(a) ifelse(is.null(a@excess.cigar.scores), 0, a@excess.cigar.scores$training.sites))))
 
     ret@fdr.priors <- NULL
-    ret@fdrs <- NULL
+    ret@fdr <- NULL
 
     ret
 })
@@ -447,16 +480,42 @@ setMethod("add.ab.fits", "SCAN2", function(object, path) {
 
 
 # Actually calculate the AB estimates.
-# Currently, computes AB at ALL SITES.
+# Currently, computes AB at ALL SITES rather than just somatic candidates.
+# This will be useful in the future for mosaics and perhaps for using more
+# germline hSNPs to model what somatic mutations should look like.
+#
+# IMPORTANT: AB estimation benefits greatly from chunking. However, because
+# AB estimation uses a window of 100kb up and downstream from every site at
+# which AB is being estimated. For sites at the edge of each chunk, data
+# either upstream or downstream will not be available. To solve this,
+# training data must be read in AGAIN with the 100kb flanking regions added.
 setGeneric("compute.ab.estimates", function(object, n.cores=1)
     standardGeneric("compute.ab.estimates"))
 setMethod("compute.ab.estimates", "SCAN2", function(object, n.cores=1) {
     check.slots(object, c('gatk', 'training.data', 'ab.fits'))
 
+    flank <- 1e5 # currently not configurable by user, partly by design
+
     if (n.cores != 1)
         stop('the n.cores argument is currently unsupported')
 
     sites <- object@gatk[,.(chr,pos,refnt,altnt)]
+
+    # need to extend region only if this is a chunked object. otherwise,
+    # we already have the full table.
+    if (!is.null(object@region)) {
+        path <- object@training.data$path
+        cat('Importing extended hSNP training data from', path, 'using extended range\n')
+        extended.range <- GRanges(seqnames=seqnames(object@region)[1],
+            ranges=IRanges(start=start(object@region)-flank, end=end(object@region)+flank))
+        print(extended.range)
+        extended.training.hsnps <- read.training.data(path, extended.range)
+        cat(sprintf("hSNP training sites: %d, extended training sites: %d\n",
+            nrow(object@gatk[training.site==TRUE]), nrow(extended.training.hsnps)))
+        training.hsnps <- extended.training.hsnps
+    } else {
+        training.hsnps <- object@gatk[training.site == TRUE]
+    }
 
     # Splitting by chromosome is not for parallelization; the AB model
     # is fit separately for each chromosome and thus applies different
@@ -479,10 +538,12 @@ cat("---------------- BECAUSE LAPACKE NOT INSTALLED--------------------\n")
         # slightly more efficient for real use cases with chunked computation
         ab <- do.work(chrom=chroms, sites=sites,
             ab.fit=object@ab.fits[chroms,,drop=FALSE],
-            hsnps=object@gatk[training.site == TRUE,])
+            #hsnps=object@gatk[training.site == TRUE,])
+            hsnps=training.hsnps)
     } else {
         ab <- do.call(rbind, lapply(chroms, function(chrom) {
-            hsnps <- object@gatk[chr == chrom & training.site == TRUE,]
+            #hsnps <- object@gatk[chr == chrom & training.site == TRUE,]
+            hsnps <- training.hsnps[chr == chrom]
             ab.fit <- object@ab.fits[chrom,,drop=FALSE]
             do.work(chrom=chrom, sites=sites, ab.fit=ab.fit, hsnps=hsnps)
         }))
@@ -510,41 +571,45 @@ setMethod("compute.models", "SCAN2", function(object) {
 
 setGeneric("compute.fdr.priors", function(object, mode='legacy')
     standardGeneric("compute.fdr.priors"))
-setMethod("compute.fdr.priors", "SCAN2", function(object, mode) {
-    check.slots(object, c('gatk', 'static.filter'))
-    # minimized objects have training.data deleted, but training.site is
-    # annotated in the gatk data frame.
-    if (!('training.site' %in% colnames(object@gatk)))
-        check.slots(object, 'training.data')
+setMethod("compute.fdr.priors", "SCAN2", function(object, mode='legacy') {
+    check.slots(object, c('gatk', 'training.data', 'static.filter.params'))
 
-    cat("*** FIXME: filtering out static.filter=NA; should not contain NAs.\n")
     if (mode == 'legacy') {
         # in legacy mode, all candidate sites passing a small set of pre-genotyping
         # crtieria were used.
+        bulk.sample <- object@bulk
+        bulk.gt <- object@gatk[[bulk.sample]]
+        min.sc.alt <- object@static.filter.params$min.sc.alt
+        min.sc.dp <- object@static.filter.params$min.sc.dp
+        min.bulk.dp <- object@static.filter.params$min.bulk.dp
+        max.bulk.alt <- object@static.filter.params$max.bulk.alt
         cand <- object@gatk[
-            object@gatk$balt == 0 &
-            object@gatk[,11] == '0/0' &
-            object@gatk$dbsnp == '.' &
-            object@gatk$scalt >= object@static.filter.params$min.sc.alt &
-            object@gatk$dp >= object@static.filter.params$min.sc.dp &
-            object@gatk$bulk.dp >= object@static.filter.params$min.bulk.dp &
-            (is.na(object@gatk.lowmq$balt) | object@gatk.lowmq$balt == 0),]
-        hsnps=object@gatk[
-            object@gatk$training.site &
-            object@gatk$scalt >= object@static.filter.params$min.sc.alt,]
+            balt <= max.bulk.alt &
+            bulk.gt == '0/0' &
+            dbsnp == '.' &
+            scalt >= min.sc.alt &
+            dp >= min.sc.dp &
+            bulk.dp >= min.bulk.dp &
+            (is.na(balt.lowmq) | balt.lowmq <= max.bulk.alt)]
+        hsnps=object@gatk[training.site == TRUE & scalt >= min.sc.alt]
     } else {
         stop("only the legacy mode is currently implemented. check back soon.")
+        # non-legacy mode will apply static filter params, which is almost what is
+        # done above.
+        if (!('static.filter' %in% colnames(object@gatk)))
+            stop('must compute static filters before running compute.fdr.priors')
     }
 
     cat(nrow(cand), 'somatic candidates\n')
     cat(nrow(hsnps), 'hsnps\n')
-    fdr.priors <-
+    fdr.prior.data <-
         estimate.fdr.priors(candidates=cand, hsnps=hsnps, random.seed=0)
-    rownames(fdr.priors) <- rownames(cand)
 
-    join.cols <- c('chr','pos','refnt','altnt')
-    object@fdr.priors <- plyr::join(object@gatk[,join.cols],
-        cbind(cand[,join.cols], fdr.priors))[,-(1:4)]
+    # cand is not object@gatk, it's a copy of a subset
+    cand[, c('nt', 'na') := list(fdr.prior.data$nt, fdr.prior.data$na)]
+    # join back to object@gatk
+    object@gatk[cand, on=.(chr,pos,refnt,altnt), c('nt', 'na') := list(i.nt, i.na)]
+    object@fdr.priors <- fdr.prior.data[c('fcs', 'burden')]
     object
 })
 
@@ -555,32 +620,31 @@ setMethod("compute.fdr", "SCAN2", function(object, mode='legacy') {
     check.slots(object, c('gatk', 'ab.estimates', 'mut.models', 'fdr.priors'))
 
     # Legacy computation (finding min FDR over all alphas) and legacy candidate set.
-    # Importantly, the legacy method is far too slow to apply to all genomic loci,
-    # so extra work must be done to only compute over the legacy set.
+    # This extra code is necessary since the legacy method is too slow for all sites.
     if (mode == 'legacy') {
-        cand <-
-            object@gatk$balt == 0 &
-            object@gatk[,11] == '0/0' &
-            object@gatk$dbsnp == '.' &
-            object@gatk$scalt >= object@static.filter.params$min.sc.alt &
-            object@gatk$dp >= object@static.filter.params$min.sc.dp &
-            object@gatk$bulk.dp >= object@static.filter.params$min.bulk.dp &
-            (is.na(object@gatk.lowmq$balt) | object@gatk.lowmq$balt == 0)
+        bulk.sample <- object@bulk
+        bulk.gt <- object@gatk[[bulk.sample]]
+        cand <- object@gatk[
+            balt == 0 &
+            bulk.gt == '0/0' &
+            dbsnp == '.' &
+            scalt >= object@static.filter.params$min.sc.alt &
+            dp >= object@static.filter.params$min.sc.dp &
+            bulk.dp >= object@static.filter.params$min.bulk.dp &
+            (is.na(balt.lowmq) | balt.lowmq == 0)]
 
-        fdrs <- compute.fdr.legacy(
-            altreads=object@gatk$scalt[cand],
-            dp=object@gatk$dp[cand],
-            gp.mu=object@ab.estimates$gp.mu[cand],
-            gp.sd=object@ab.estimates$gp.sd[cand],
-            nt=object@fdr.priors$nt[cand],
-            na=object@fdr.priors$na[cand])
-
-        join.cols <- c('chr','pos','refnt','altnt')
-        object@fdrs <- plyr::join(object@gatk[,join.cols],
-            cbind(object@gatk[cand,join.cols], fdrs))[,-(1:4)]
-    } else if (mode == 'new')
-        object@fdrs <- compute.fdr.new(object@mut.models, object@fdr.priors)
-    else
+        cand[, c('lysis.fdr', 'mda.fdr') :=
+            compute.fdr.legacy(altreads=scalt, dp=dp,
+                gp.mu=gp.mu, gp.sd=gp.sd, nt=nt, na=na)]
+        object@gatk[cand, on=.(chr,pos,refnt,altnt),
+            c('lysis.fdr', 'mda.fdr') := list(i.lysis.fdr, i.mda.fdr)]
+        object@fdr <- list(mode=mode, sites=nrow(cand))
+    } else if (mode == 'new') {
+        object@gatk[, c('lysis.fdr', 'mda.fdr') :=
+            list(lysis.pv*na / (lysis.pv*na + lysis.beta*nt),
+                 mda.pv*na / (mda.pv*na + mda.beta*nt))]
+        object@fdr <- list(mode=mode, sites=nrow(object@gatk))
+    } else
         stop(sprintf("unrecognized mode '%s', expecting either 'legacy' or 'new'", mode))
 
     object
@@ -664,6 +728,9 @@ setMethod("add.cigar.data", "SCAN2", function(object, sc.cigars.path, bulk.cigar
 setGeneric("compute.excess.cigar.scores", function(object, legacy=TRUE)
     standardGeneric("compute.excess.cigar.scores"))
 setMethod("compute.excess.cigar.scores", "SCAN2", function(object, legacy=TRUE) {
+    check.chunked(object,
+        'excess cigar scores should be computed on full chr1-chr22 data, not chunked data')
+
     if (legacy) {
         check.slots(object, c('gatk', 'training.data', 'cigar.data', 'resampled.training.data'))
         null.sites <- object@gatk[resampled.training.site==TRUE]
@@ -683,14 +750,14 @@ setMethod("compute.excess.cigar.scores", "SCAN2", function(object, legacy=TRUE) 
 })
 
 
-setGeneric("add.static.filter.parameters", function(object, min.sc.alt=2, min.sc.dp=6,
+setGeneric("add.static.filter.params", function(object, min.sc.alt=2, min.sc.dp=6,
     max.bulk.alt=0, min.bulk.dp=11, exclude.dbsnp=TRUE, cg.id.q=0.05, cg.hs.q=0.05)
-        standardGeneric("add.static.filter.parameters"))
-setMethod("add.static.filter.parameters", "SCAN2",
+        standardGeneric("add.static.filter.params"))
+setMethod("add.static.filter.params", "SCAN2",
 function(object, min.sc.alt=2, min.sc.dp=6, max.bulk.alt=0, min.bulk.dp=11,
     exclude.dbsnp=TRUE, cg.id.q=0.05, cg.hs.q=0.05)
 {
-    object@static.filter.parameters <- list(
+    object@static.filter.params <- list(
         min.sc.alt=min.sc.alt, min.sc.dp=min.sc.dp,
         max.bulk.alt=max.bulk.alt, min.bulk.dp=min.bulk.dp,
         exclude.dbsnp=exclude.dbsnp, cg.id.q=cg.id.q, cg.hs.q=cg.hs.q)
@@ -703,20 +770,22 @@ setGeneric("compute.static.filters", function(object, exclude.dbsnp=TRUE)
 setMethod("compute.static.filters", "SCAN2", function(object, exclude.dbsnp=TRUE) {
     check.slots(object, c('gatk', 'cigar.data', 'gatk.lowmq', 'mut.models'))
 
-    qid <- quantile(object@gatk[training.site == TRUE]$id.score, prob=cg.id.q, na.rm=TRUE)
-    qhs <- quantile(object@gatk[training.site == TRUE]$hs.score, prob=cg.hs.q, na.rm=TRUE)
+    qid <- quantile(object@gatk[training.site == TRUE]$id.score,
+        prob=object@static.filter.params$cg.id.q, na.rm=TRUE)
+    qhs <- quantile(object@gatk[training.site == TRUE]$hs.score,
+        prob=object@static.filter.params$cg.hs.q, na.rm=TRUE)
 
     # having some issues with data.table accessing objects/dataframes inside the expression
-    max.bulk.alt <- gatk@static.filter.params$max.bulk.alt
-    min.sc.dp <- gatk@static.filter.params$min.sc.dp
-    min.bulk.dp <- gatk@static.filter.params$min.bulk.dp
-    min.sc.alt <- gatk@static.filter.params$min.sc.alt
+    max.bulk.alt <- object@static.filter.params$max.bulk.alt
+    min.sc.dp <- object@static.filter.params$min.sc.dp
+    min.bulk.dp <- object@static.filter.params$min.bulk.dp
+    min.sc.alt <- object@static.filter.params$min.sc.alt
     object@gatk[, c('cigar.id.test', 'cigar.hs.test', 'lowmq.test',
             'dp.test', 'abc.test', 'min.sc.alt.test', 'max.bulk.alt.test',
             'dbsnp.test') :=
                 list(id.score > qid,
                      hs.score > qhs,
-                     is.na(balt.lowmq) | gatk.lowmq$balt <= max.bulk.alt,
+                     is.na(balt.lowmq) | balt.lowmq <= max.bulk.alt,
                      dp >= min.sc.dp & bulk.dp >= min.bulk.dp,
                      abc.pv > 0.05,
                      scalt >= min.sc.alt,
@@ -733,6 +802,9 @@ setGeneric("resample.training.data", function(object, M=20, seed=0)
         standardGeneric("resample.training.data"))
 setMethod("resample.training.data", "SCAN2", function(object, M=20, seed=0) {
     check.slots(object, c('gatk', 'training.data'))
+
+    check.chunked(object,
+        'resampling should be performed on full chr1-chr22 data, not chunked data')
 
     ret <- resample.hsnps(
         sites=object@gatk[training.site == FALSE & scalt >= 2 & dp >= 6 & bulk.dp >= 11 & balt == 0,],

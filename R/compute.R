@@ -162,8 +162,8 @@ fcontrol <- function(germ.df, som.df, bins=20, rough.interval=0.99) {
         rough.interval=rough.interval)
 
     cat(sprintf("fcontrol: dp=%d, max.s=%d (%d), n.subpops=%d, min=%d, max=%d\n",
-    germ.df$dp[1], nrow(som.df), sum(s), min(nrow(som.df),100),
-    as.integer(approx.ns[1]), as.integer(approx.ns[2])))
+        germ.df$dp[1], nrow(som.df), sum(s), min(nrow(som.df),100),
+        as.integer(approx.ns[1]), as.integer(approx.ns[2])))
     pops <- lapply(approx.ns, function(n) {
         #        nt <- pmax(n*(g/sum(g))*1*(s > 0), 0.1)
         nt <- pmax(n*(g/sum(g)), 0.1)
@@ -190,15 +190,14 @@ estimate.fdr.priors <- function(candidates, hsnps, bins=20, random.seed=0)
 
     # split candidates by depth; collapse all depths beyond the 80th
     # percentile into one bin
-    #hsnps$af <- hsnps$hap1/ hsnps$dp
     max.dp <- as.integer(quantile(hsnps$dp, prob=0.8))
-    fcs <- lapply(0:max.dp, function(dp)
-        fcontrol(germ.df=hsnps[hsnps$dp == dp,],
-                som.df=candidates[candidates$dp == dp,],
+    fcs <- lapply(0:max.dp, function(thisdp)
+        fcontrol(germ.df=hsnps[dp == thisdp],
+                som.df=candidates[dp == thisdp],
                 bins=bins)
     )
-    fc.max <- fcontrol(germ.df=hsnps[hsnps$dp > max.dp,],
-                som.df=candidates[candidates$dp > max.dp,],
+    fc.max <- fcontrol(germ.df=hsnps[dp > max.dp],
+                som.df=candidates[dp > max.dp],
                 bins=bins)
     fcs <- c(fcs, list(fc.max))
 
@@ -226,7 +225,7 @@ estimate.fdr.priors <- function(candidates, hsnps, bins=20, random.seed=0)
             fcs[[idx]]$pops$max[popbin,]
     }, candidates$dp, popbin)
 
-    data.frame(nt=nt.na[1,], na=nt.na[2,])
+    list(fcs=fcs, burden=burden, nt=nt.na[1,], na=nt.na[2,])
 }
 
 
@@ -273,13 +272,15 @@ compute.fdr.legacy <- function(altreads, dp, gp.mu, gp.sd, nt, na, verbose=TRUE)
 }
 
 
-compute.fdr.new <- function(mut.models, fdr.priors) {
+compute.fdr.new <- function(lysis.pv, lysis.beta, mda.pv, mda.beta, nt, na) {
     # avoid division by 0
-    denom <- mut.models$lysis.pv*fdr.priors$na + mut.models$lysis.beta*fdr.priors$nt
-    lysis.fdr <- ifelse(denom > 0, mut.models$lysis.pv*fdr.priors$na / denom, 0)
+    x <- lysis.pv*na
+    denom <- x + lysis.beta*nt
+    lysis.fdr <- ifelse(denom > 0, x / denom, 0)
 
-    denom <- mut.models$mda.pv*fdr.priors$na + mut.models$mda.beta*fdr.priors$nt
-    mda.fdr <- ifelse(denom > 0, mut.models$mda.pv*fdr.priors$na / denom, 0)
+    x <- mda.pv*na
+    denom <- x + mda.beta*nt
+    mda.fdr <- ifelse(denom > 0, x / denom, 0)
 
     data.frame(lysis.fdr=lysis.fdr, mda.fdr=mda.fdr)
 }
