@@ -227,10 +227,6 @@ setMethod("plot.region", "SCAN2", function(object, site=NA, chrom=NA, position=N
         gp <- infer.gp1(ssnvs=data.frame(chr=chrom, pos=est.at),
             fit=fit.chr, hsnps=newdt, flank=gp.extend, max.hsnps=150)
         gp <- data.frame(chr=chrom, pos=est.at, ab=1/(1+exp(-gp[,'gp.mu'])), gp)
-
-        # Need to reflect sites to match the GP
-        #d <- merge(d, gp[,c('pos','ab')], all.x=TRUE)  # attach gp estimtes
-        #d$af <- ifelse(abs(d$af - d$ab) <= abs(1-d$af - d$ab), d$af, 1-d$af)
     } else {
         # Rely on precomputed GP mu/sd (relevant for ALLSITES mode)
         gp <- object@gatk[chr == chrom &
