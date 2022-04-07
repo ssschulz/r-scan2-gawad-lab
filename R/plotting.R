@@ -181,23 +181,23 @@ plot.fdr <- function(fc, dps=c(10,20,30,60,100,200), target.fdr=0.1, div=2) {
 # Optionally: plot a candidate/putative sSNV.
 # XXX: TODO: restore the ability to compute GP mu/sd at many additional
 # points in the region to give smooth bands/lines.
-setGeneric("plot.region", function(object, site=NA, chrom=NA, pos=NA, upstream=5e4, downstream=5e4, gp.extend=1e5, n.gp.points=100, recompute=FALSE)
+setGeneric("plot.region", function(object, site=NA, chrom=NA, position=NA, upstream=5e4, downstream=5e4, gp.extend=1e5, n.gp.points=100, recompute=FALSE)
     standardGeneric("plot.region"))
-setMethod("plot.region", "SCAN2", function(object, site=NA, chrom=NA, pos=NA,
+setMethod("plot.region", "SCAN2", function(object, site=NA, chrom=NA, position=NA,
     upstream=5e4, downstream=5e4, gp.extend=1e5, n.gp.points=100, recompute=FALSE)
 {
     check.slots(object, c('gatk', 'training.data', 'ab.estimates'))
     if (recompute)
         check.slots(object, 'ab.fits')
 
-    if (!missing(site) & (!missing(chrom) | !missing(pos)))
+    if (!missing(site) & (!missing(chrom) | !missing(position)))
         stop("either site or (chrom,pos) must be specified, but not both")
-    if ((!missing(chrom) & missing(pos)) | (missing(chrom) & !missing(pos)))
+    if ((!missing(chrom) & missing(position)) | (missing(chrom) & !missing(position)))
         stop("both chrom and pos must be specified")
 
     if (!missing(site)) {
         chrom <- object@gatk[site,]$chr
-        pos <- object@gatk[site,]$pos
+        position <- object@gatk[site,]$pos
     }
 
     # Sites at which AB was estimated in the genotyper.
@@ -205,11 +205,10 @@ setMethod("plot.region", "SCAN2", function(object, site=NA, chrom=NA, pos=NA,
     # Don't keep sites with no reads in this sample, unless it's a training
     # site. The majority of these 0 read, non-germline sites are here
     # because they had reads in a different sample.
-    # Also, homozygous sites can be confusing since they appear at 0 or 1.
-    d <- object@gatk[chrom(object) == chrom &
-        pos(object) >= pos - upstream & pos(object) <= pos + upstream &
-        (object@gatk$training.site | object@gatk$scalt > 0) &
-        object@gatk[,11] != '1/1',]  # column 11 is bulk GT
+    bulk.gt <- object@gatk[[object@bulk]]
+    d <- object@gatk[chr == chrom &
+        pos >= position - upstream & pos <= position + upstream &
+        (training.site | scalt > 0) & bulk.gt != '1/1']
 
     # Old code that computed GP on a fine grid surrounding the target
     if (recompute) {
@@ -217,36 +216,37 @@ setMethod("plot.region", "SCAN2", function(object, site=NA, chrom=NA, pos=NA,
         # ensure that we estimate at exactly pos and at all sites in 'd'
         # other loci are not sites reported in the GATK table, they are
         # only there to make smooth lines.
-        est.at <- c(seq(pos - upstream, pos-1, length.out=n.gp.points/2), pos,
-                    seq(pos+1, pos + downstream, length.out=n.gp.points/2),
-                    d$pos)
+        est.at <- c(seq(position - upstream, position-1, length.out=n.gp.points/2), position,
+                    seq(position+1, position + downstream, length.out=n.gp.points/2),
+                    d$position)
         est.at <- sort(unique(est.at))
-        fit.chr <- object@ab.fits[chrom,]
-        gp <- as.data.frame(infer.gp1(ssnvs=data.frame(pos=est.at),
-            fit=fit.chr,
-            hsnps=object@training.data[object@training.data$chr == chrom,],
-            flank=gp.extend, max.hsnp=150))
-        gp$chr <- chrom
-        gp$pos <- est.at
-        gp$ab <- 1/(1+exp(-gp$gp.mu))
+        fit.chr <- object@ab.fits[chrom,,drop=FALSE]
+        newdt <- object@gatk[training.site == TRUE & chr == chrom]
+        # infer.gp requires hsnps to have hap1 and hap2 columns
+        newdt[, c('hap1', 'hap2') := list(training.hap1, training.hap2)]
+        gp <- infer.gp1(ssnvs=data.frame(chr=chrom, pos=est.at),
+            fit=fit.chr, hsnps=newdt, flank=gp.extend, max.hsnps=150)
+        gp <- data.frame(chr=chrom, pos=est.at, ab=1/(1+exp(-gp[,'gp.mu'])), gp)
 
         # Need to reflect sites to match the GP
-        d <- merge(d, gp[,c('pos','ab')], all.x=TRUE)  # attach gp estimtes
-        d$af <- ifelse(abs(d$af - d$ab) <= abs(1-d$af - d$ab), d$af, 1-d$af)
+        #d <- merge(d, gp[,c('pos','ab')], all.x=TRUE)  # attach gp estimtes
+        #d$af <- ifelse(abs(d$af - d$ab) <= abs(1-d$af - d$ab), d$af, 1-d$af)
     } else {
         # Rely on precomputed GP mu/sd (relevant for ALLSITES mode)
-        gp <- cbind(
-            object@gatk[chrom(object) == chrom &
-                pos(object) >= pos - upstream & pos(object) <= pos + upstream,],
-            object@ab.estimates[chrom(object) == chrom &
-                pos(object) >= pos - upstream & pos(object) <= pos + upstream,]
-        )
+        gp <- object@gatk[chr == chrom &
+                pos >= position - upstream & pos <= position + upstream]
     }
 
+    # the GP is inferred using "hap1" and "hap2", which are determined by
+    # the phaser. which chromosome is chosen to be "hap1" or "hap2" is
+    # arbitrary, but consistent (once chosen) for all sites on a chrom.
+    # VAF (which always refers to the non-reference allele) destroys this
+    # information, so plotting VAF is not informative.
     plot.gp.confidence(df=gp, add=FALSE)
-    points(d$pos, d$af, pch=20,
-        cex=ifelse(d$training.site, 1, 1.5),
-        col=2 - d$training.site, ylim=c(-0.2,1))
+    points(d[training.site==TRUE]$pos,
+        d[training.site==TRUE, training.hap1/(training.hap1+training.hap2)],
+        pch=20, cex=1, col=1, ylim=c(-0.2,1))
+
     # 5*max : restrict the depth to the bottom 20% of plot
     lines(d$pos, d$dp/(5*max(d$dp)), type='h', lwd=2)
     text(d$pos[which.max(d$dp)], 1/5, max(d$dp))
@@ -255,11 +255,11 @@ setMethod("plot.region", "SCAN2", function(object, site=NA, chrom=NA, pos=NA,
     lines(gp$pos, gp$ab/2, lwd=2, col=2)
     lines(gp$pos, (1-gp$ab)/2, lwd=2, col=2)
 
-    # If a site was given, plot it specially
+    # If a site was given, emphasize it
     if (!missing(site)) {
-        abline(v=pos, lty='dotted')
-        abline(h=d$af[d$pos==pos], lty='dotted')
-        points(pos, d$af[d$pos == pos], pch=4, cex=1.5, lwd=2, col=3)
+        abline(v=position, lty='dotted')
+        abline(h=object@gatk[pos==position]$af, lty='dotted')
+        points(position, object@gatk[pos == position]$af, pch=4, cex=1.5, lwd=2, col=3)
     }
 
     legend('topright', legend=c('Training hSNP', 'Other site', 'Target site'),
