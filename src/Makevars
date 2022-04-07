@@ -1,0 +1,6 @@
+#PKG_LIBS=-L/usr/local/opt/openblas/lib -L/usr/local/opt/lapack/lib
+#PKG_LDFLAGS=-L/usr/local/opt/openblas/lib -L/usr/local/opt/lapack/lib
+#PKG_CPPFLAGS=-I/usr/local/opt/lapack/include -I/usr/local/opt/openblas/include
+#PKG_CFLAGS=-L/usr/local/opt/openblas/lib -L/usr/local/opt/lapack/lib
+#PKG_CXXFLAGS=-L/usr/local/opt/openblas/lib -L/usr/local/opt/lapack/lib
+PKG_LIBS = $(LAPACK_LIBS) $(BLAS_LIBS) $(FLIBS)

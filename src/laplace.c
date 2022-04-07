@@ -1,3 +1,6 @@
+// must be before Rconfig.h
+#define USE_FC_LEN_T
+
 #include <R.h>
 #include <Rdefines.h>
 #include <stdio.h>
@@ -15,8 +18,13 @@
     #include <mkl.h>
     #include <mkl_lapacke.h>
 #else
-    #include <lapacke.h>
-    #include <cblas.h>
+    //#include <lapacke.h>
+    //#include <cblas.h>
+    #include <R_ext/Lapack.h>
+    #include <R_ext/BLAS.h>
+    #ifndef FCONE
+    # define FCONE
+    #endif
 #endif
 
 #ifdef PACKED
@@ -79,6 +87,11 @@ printf("]\n"); \
  *           0.8% - Computing logp at the end of iteration
  *          <0.1% - Every other loop
  */
+/*
+ * UPDATE: 3/1/2022 - Using F77_CALL and R's internal BLAS/LAPACK
+ * libraries rather than openblas. This will supposedly allow compilation
+ * on most platforms.
+ */
 double
 laplace_approx_cpu(
     double a, double b, double c, double paramd,
@@ -91,7 +104,9 @@ laplace_approx_cpu(
     double k;
     double logp = -1.0, lastlogp = -INFINITY;
     double sqrt_eps = sqrt(2.2e-16);
-    lapack_int info, m, n, lda, ldb, nrhs;
+    //lapack_int info, m, n, lda, ldb, nrhs;
+    // not supported by R's R_ext/Lapack.h
+    int info, m, n, lda, ldb, nrhs, oneint = 1, oneint2 = 1;
     double one = 1.0, zero = 0.0;
     double alpha = 1.0, beta = 0.0;
     double r;
@@ -147,9 +162,11 @@ laplace_approx_cpu(
         m = len;
         lda = m;
 #ifdef PACKED
-        info = LAPACKE_dpptrf(LAPACK_COL_MAJOR, 'U', m, A);
+        //info = LAPACKE_dpptrf(LAPACK_COL_MAJOR, 'U', m, A);
+        F77_CALL(dpptrf)("U", &m, A, &info FCONE);
 #else
-        info = LAPACKE_dpotrf(LAPACK_COL_MAJOR, 'L', m, A, lda);
+        //info = LAPACKE_dpotrf(LAPACK_COL_MAJOR, 'L', m, A, lda);
+        F77_CALL(dpotrf)("L", &m, A, &lda, &info FCONE);
 #endif
         if (info != 0) {
             printf("laplace_approx: CPU Cholesky factorization failed: %d\n",
@@ -165,9 +182,11 @@ laplace_approx_cpu(
          */
         /* U <- K V */
 #ifdef PACKED
-        cblas_dspmv(CblasColMajor, CblasUpper, len, 1.0, K, V, 1, 0.0, U, 1);
+        //cblas_dspmv(CblasColMajor, CblasUpper, len, 1.0, K, V, 1, 0.0, U, 1);
+        F77_CALL(dspmv)("U", &len, &alpha, K, V, &oneint, &beta, U, &oneint2 FCONE);
 #else
-        cblas_dsymv(CblasColMajor, CblasLower, len, 1.0, K, len, V, 1, 0.0, U, 1);
+        //cblas_dsymv(CblasColMajor, CblasLower, len, 1.0, K, len, V, 1, 0.0, U, 1);
+        F77_CALL(dsymv)("L", &len, &alpha, K, len, V, &oneint, &beta, U, &oneint2 FCONE);
 #endif
 
         /* U <- sqrtW U.  Note: sqrtW is a diagonal matrix */
@@ -179,9 +198,11 @@ laplace_approx_cpu(
         nrhs = 1;
         lda = m;
 #ifdef PACKED
-        info = LAPACKE_dpptrs(LAPACK_COL_MAJOR, 'U', n, nrhs, A, U, lda);
+        //info = LAPACKE_dpptrs(LAPACK_COL_MAJOR, 'U', n, nrhs, A, U, lda);
+        F77_CALL(dpptrs)("U", &n, &nrhs, A, U, &lda, &info FCONE);
 #else
-        info = LAPACKE_dpotrs(LAPACK_COL_MAJOR, 'L', n, nrhs, A, lda, U, lda);
+        //info = LAPACKE_dpotrs(LAPACK_COL_MAJOR, 'L', n, nrhs, A, lda, U, lda);
+        F77_CALL(dpotrs)("L", &n, &nrhs, A, &lda, U, &lda, &info FCONE);
 #endif
         if (info != 0) {
             printf("laplace_approx: CPU Cholesky solve failed\n");
@@ -196,9 +217,19 @@ laplace_approx_cpu(
 
         /* Compute the new B, storing in U for now: B <- K V */
 #ifdef PACKED
-        cblas_dspmv(CblasColMajor, CblasUpper, len, 1.0, K, V, 1, 0.0, B, 1);
+        //cblas_dspmv(CblasColMajor, CblasUpper, len, 1.0, K, V, 1, 0.0, B, 1);
+        alpha = 1.0;
+        beta = 0.0;
+        one = 1.0;
+        oneint = 1;
+        F77_CALL(dspmv)("U", &len, &alpha, K, V, &oneint, &beta, B, &oneint2 FCONE);
 #else
-        cblas_dsymv(CblasColMajor, CblasLower, len, 1.0, K, len, V, 1, 0.0, B, 1);
+        //cblas_dsymv(CblasColMajor, CblasLower, len, 1.0, K, len, V, 1, 0.0, B, 1);
+        alpha = 1.0;
+        beta = 0.0;
+        one = 1.0;
+        oneint = 1;
+        F77_CALL(dsymv)("L", &len, &alpha, K, len, V, &oneint, &beta, B, &oneint2 FCONE);
 #endif
         
         /* Compute the approximate log likelihood for this iteration */
