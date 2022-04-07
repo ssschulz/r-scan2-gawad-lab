@@ -211,9 +211,12 @@ infer.gp1 <- function(ssnvs, fit, hsnps, flank=1e5, max.hsnps=150,
     verbose=FALSE)
 {
     ssnv.is.hsnp <- ssnvs$pos %in% hsnps$pos
-    cat(sprintf("infer.gp: %d/%d loci scheduled for AB estimation are training hSNPs\n",
-        sum(ssnv.is.hsnp), nrow(ssnvs)))
-    cat(sprintf("infer.gp: using leave-1-out strategy for AB estimation at hSNPs\n"))
+    if (verbose) {
+        cat(sprintf("infer.gp: %d/%d loci scheduled for AB estimation are training hSNPs\n",
+            sum(ssnv.is.hsnp), nrow(ssnvs)))
+        cat(sprintf("infer.gp: using leave-1-out strategy for AB estimation at hSNPs\n"))
+    }
+
     if (verbose) cat("infer.gp: building ssnvs <-> hsnps map\n")
     hsnp.map <- sapply(1:nrow(ssnvs), function(i) {
         if (!ssnv.is.hsnp[i]) NA
@@ -221,8 +224,12 @@ infer.gp1 <- function(ssnvs, fit, hsnps, flank=1e5, max.hsnps=150,
     })
 
 
+    if (verbose)
+        applyfun <- pbapply::pbsapply
+    else
+        applyfun <- sapply
     ctx <- abmodel.approx.ctx(c(), c(), c(), hsnp.chunksize=2*max.hsnps + 10)
-    ret <- pbapply:pbsapply(1:nrow(ssnvs), function(i) {
+    ret <- applyfun(1:nrow(ssnvs), function(i) {
         h <- hsnps
         if (ssnv.is.hsnp[i])
             # ssnv i is hsnp hsnp.map[i], so remove it from the training set
