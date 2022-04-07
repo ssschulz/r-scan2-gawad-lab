@@ -26,6 +26,11 @@ setClass("SCAN2", slots=c(
     fdr='null.or.list'))
 
 
+# "flip" the GP mu around 0 to best match the AF of each candidate mutation. 
+match.ab <- function(af, gp.mu) {
+    ifelse(af < 1/2, -abs(gp.mu), abs(gp.mu))
+}
+
 # currently will always fire when SCAN2 is built from chunked objects.
 # firing isn't a problem, just causes a warning message.
 # need to define what the "full genome" is (in terms of GRanges objects)
@@ -305,17 +310,8 @@ setMethod("concat", signature="SCAN2", function(...) {
     ensure.same <- function(l, slot.name, var.name) {
         # either all slots are NULL or they have the same value
         if (all(sapply(l, function(element) is.null(slot(element, slot.name))))) {
-            print('returning, not sure why the code below still runs')
             return()
         }
-        print(sapply(l, function(element) is.null(slot(l[[1]], slot.name))))
-print('--------------------------------------------------\n')
-print(slot.name)
-print(var.name)
-for (element in l) {
-    str(slot(element, slot.name))
-    str(slot(element, slot.name)[[var.name]])
-}
         if (!all(sapply(l, function(element)
             slot(l[[1]], slot.name)[[var.name]] == slot(element, slot.name)[[var.name]])))
             stop(paste('list of SCAN2 chunks cannot be concatenated; slot', slot.name,
@@ -346,7 +342,8 @@ for (element in l) {
     ret@ab.fits <- init@ab.fits
 
     # policy: same as above: all static filter params must be identical
-    if (any(sapply(args, function(a) any(as.vector(init@static.filter.params) != as.vector(a@static.filter.params)))))
+    # params are all numeric
+    if (any(sapply(args, function(a) any(unlist(init@static.filter.params) != unlist(a@static.filter.params)))))
         stop('@static.filter.params must be identical for all concat() elements')
     ret@static.filter.params <- init@static.filter.params
 
@@ -376,8 +373,8 @@ for (element in l) {
 # region can be a GRanges object with a single interval to read only
 # a subset of the GATK table. The table is tabix indexed, so this can
 # be done quickly.
-read.gatk.table.2sample <- function(path, sc.sample, bulk.sample, region) {
-    cat("Importing GATK table..\n")
+read.gatk.table.2sample <- function(path, sc.sample, bulk.sample, region, quiet=FALSE) {
+    if (!quiet) cat("Importing GATK table..\n")
 
     # Step 1: just get the header and detect the columns corresponding to
     # sc.sample and bulk.sample to avoid reading the full matrix.
@@ -388,21 +385,24 @@ read.gatk.table.2sample <- function(path, sc.sample, bulk.sample, region) {
     tot.cols <- length(col.strings)
     sc.idx <- which(col.strings == sc.sample)
     bulk.idx <- which(col.strings == bulk.sample)
-    cat("Selecting columns:\n")
-    for (i in 1:length(col.strings)) {
-        if (i <= 7) {
-            cat(sprintf("    (%d)", i), col.strings[i], '\n')
-        } else if (any(i == sc.idx + 0:2)) {
-            cat(sprintf("    (%d)", i), col.strings[i], '[single cell]\n')
-        } else if (any(i == bulk.idx + 0:2)) {
-            cat(sprintf("    (%d)", i), col.strings[i], '[bulk]\n')
+    if (!quiet) {
+        cat("Selecting columns:\n")
+        for (i in 1:length(col.strings)) {
+            # First 5 are chr, pos, dbsnp, refnt, altnt
+            if (i <= 5) {
+                cat(sprintf("    (%d)", i), col.strings[i], '\n')
+            } else if (any(i == sc.idx + 0:2)) {
+                cat(sprintf("    (%d)", i), col.strings[i], '[single cell]\n')
+            } else if (any(i == bulk.idx + 0:2)) {
+                cat(sprintf("    (%d)", i), col.strings[i], '[bulk]\n')
+            }
         }
     }
     
     # Step 2: really read the tables in, but only the relevant columns
     cols.to.read <- rep("NULL", tot.cols)
-    # First 7 are chr, pos, dbsnp, refnt, altnt, mq, mqrs
-    cols.to.read[1:7] <- c('character', 'integer', rep('character', 3), 'numeric', 'numeric')
+    # First 5 are chr, pos, dbsnp, refnt, altnt
+    cols.to.read[1:5] <- c('character', 'integer', rep('character', 3))
     # Read 3 columns for the single cell, 3 columns for bulk
     cols.to.read[sc.idx + 0:2] <- c('character', 'integer', 'integer')
     cols.to.read[bulk.idx + 0:2] <- c('character', 'integer', 'integer')
@@ -410,7 +410,7 @@ read.gatk.table.2sample <- function(path, sc.sample, bulk.sample, region) {
         gatk <- data.table::fread(text=c(header, Rsamtools::scanTabix(tf)[[1]]), colClasses=cols.to.read)
     else
         gatk <- data.table::fread(text=c(header, Rsamtools::scanTabix(tf, param=region)[[1]]), colClasses=cols.to.read)
-    cat("Read", nrow(gatk), 'lines\n')
+    if (!quiet) cat("Read", nrow(gatk), 'lines\n')
     close(tf)
     new.sc.idx <- which(colnames(gatk) == sc.sample)
     new.bulk.idx <- which(colnames(gatk) == bulk.sample)
@@ -418,17 +418,18 @@ read.gatk.table.2sample <- function(path, sc.sample, bulk.sample, region) {
     colnames(gatk)[new.bulk.idx+1:2] <- c('bref', 'balt')
 
     # Rearrange columns so that the single cell triplet is first, then bulk triplet
-    cols.to.keep <- c(col.strings[1:7], sc.sample, c('scref', 'scalt'), bulk.sample, c('bref', 'balt'))
+    cols.to.keep <- c(col.strings[1:5], sc.sample, c('scref', 'scalt'), bulk.sample, c('bref', 'balt'))
     gatk <- gatk[,..cols.to.keep]
 
     gatk
 }
 
 
-setGeneric("read.gatk", function(object, path)
+setGeneric("read.gatk", function(object, path, quiet=FALSE)
     standardGeneric("read.gatk"))
-setMethod("read.gatk", "SCAN2", function(object, path) {
-    gatk <- read.gatk.table.2sample(path, object@single.cell, object@bulk, object@region)
+setMethod("read.gatk", "SCAN2", function(object, path, quiet=FALSE) {
+    gatk <- read.gatk.table.2sample(
+        path, object@single.cell, object@bulk, object@region, quiet=quiet)
 
     # Add some convenient calculations
     gatk$dp <- gatk$scalt + gatk$scref
@@ -452,12 +453,12 @@ setMethod("read.gatk", "SCAN2", function(object, path) {
 })
 
 
-setGeneric("read.gatk.lowmq", function(object, path)
+setGeneric("read.gatk.lowmq", function(object, path, quiet=FALSE)
     standardGeneric("read.gatk.lowmq"))
-setMethod("read.gatk.lowmq", "SCAN2", function(object, path) {
+setMethod("read.gatk.lowmq", "SCAN2", function(object, path, quiet=FALSE) {
     check.slots(object, 'gatk')
 
-    lowmq <- read.gatk.table.2sample(path, object@single.cell, object@bulk, object@region)
+    lowmq <- read.gatk.table.2sample(path, object@single.cell, object@bulk, object@region, quiet=quiet)
     data.table::setkey(lowmq, chr, pos, refnt, altnt)
 
     object@gatk[lowmq, on=.(chr,pos,refnt,altnt), c('scref.lowmq', 'scalt.lowmq', 'bref.lowmq', 'balt.lowmq') := list(i.scref, i.scalt, i.bref, i.balt)]
@@ -489,9 +490,9 @@ setMethod("add.ab.fits", "SCAN2", function(object, path) {
 # which AB is being estimated. For sites at the edge of each chunk, data
 # either upstream or downstream will not be available. To solve this,
 # training data must be read in AGAIN with the 100kb flanking regions added.
-setGeneric("compute.ab.estimates", function(object, n.cores=1)
+setGeneric("compute.ab.estimates", function(object, n.cores=1, quiet=FALSE)
     standardGeneric("compute.ab.estimates"))
-setMethod("compute.ab.estimates", "SCAN2", function(object, n.cores=1) {
+setMethod("compute.ab.estimates", "SCAN2", function(object, n.cores=1, quiet=FALSE) {
     check.slots(object, c('gatk', 'training.data', 'ab.fits'))
 
     flank <- 1e5 # currently not configurable by user, partly by design
@@ -505,13 +506,13 @@ setMethod("compute.ab.estimates", "SCAN2", function(object, n.cores=1) {
     # we already have the full table.
     if (!is.null(object@region)) {
         path <- object@training.data$path
-        cat('Importing extended hSNP training data from', path, 'using extended range\n')
+        if (!quiet) cat('Importing extended hSNP training data from', path, 'using extended range\n')
         extended.range <- GRanges(seqnames=seqnames(object@region)[1],
             ranges=IRanges(start=start(object@region)-flank, end=end(object@region)+flank))
-        print(extended.range)
         extended.training.hsnps <- read.training.data(path, extended.range)
-        cat(sprintf("hSNP training sites: %d, extended training sites: %d\n",
-            nrow(object@gatk[training.site==TRUE]), nrow(extended.training.hsnps)))
+        if (!quiet)
+            cat(sprintf("hSNP training sites: %d, extended training sites: %d\n",
+                nrow(object@gatk[training.site==TRUE]), nrow(extended.training.hsnps)))
         training.hsnps <- extended.training.hsnps
     } else {
         training.hsnps <- object@gatk[training.site == TRUE]
@@ -522,27 +523,21 @@ setMethod("compute.ab.estimates", "SCAN2", function(object, n.cores=1) {
     # parameter estimates.
     chroms <- unique(sites$chr)
     do.work <- function(chrom, sites, ab.fit, hsnps) {
-        print(ab.fit)
-        cat(sprintf("inferring AB for %d sites on chr%s:%d-%d\n", 
-            nrow(sites), chrom, min(sites$pos), max(sites$pos)))
-cat("---------------- FIXME FIXME FIXME --------------------\n")
-cat("---------------- GENERATING RANDOM AB ESTS --------------------\n")
-cat("---------------- BECAUSE LAPACKE NOT INSTALLED--------------------\n")
-        return(data.frame(gp.mu=rnorm(nrow(sites)), gp.sd=rgamma(nrow(sites), shape=1)))
+        if (!quiet)
+            cat(sprintf("inferring AB for %d sites on chr%s:%d-%d\n", 
+                nrow(sites), chrom, min(sites$pos), max(sites$pos)))
         time.elapsed <- system.time(z <- infer.gp1(ssnvs=sites, fit=ab.fit,
-            hsnps=hsnps, flank=1e5, verbose=TRUE))
-        print(time.elapsed)
+            hsnps=hsnps, flank=1e5, verbose=!quiet))
+        if (!quiet) print(time.elapsed)
         z
     }
     if (length(chroms) == 1) {
         # slightly more efficient for real use cases with chunked computation
         ab <- do.work(chrom=chroms, sites=sites,
             ab.fit=object@ab.fits[chroms,,drop=FALSE],
-            #hsnps=object@gatk[training.site == TRUE,])
             hsnps=training.hsnps)
     } else {
         ab <- do.call(rbind, lapply(chroms, function(chrom) {
-            #hsnps <- object@gatk[chr == chrom & training.site == TRUE,]
             hsnps <- training.hsnps[chr == chrom]
             ab.fit <- object@ab.fits[chrom,,drop=FALSE]
             do.work(chrom=chrom, sites=sites, ab.fit=ab.fit, hsnps=hsnps)
@@ -550,7 +545,7 @@ cat("---------------- BECAUSE LAPACKE NOT INSTALLED--------------------\n")
     }
 
     object@gatk[, c('ab', 'gp.mu', 'gp.sd') := 
-        list(1/(1+exp(-ab$gp.mu)), ab$gp.mu, ab$gp.sd)]
+        list(1/(1+exp(-ab[,'gp.mu'])), ab[,'gp.mu'], ab[,'gp.sd'])]
     object@ab.estimates <- data.frame(sites=nrow(ab))
     object
 })
@@ -561,8 +556,9 @@ setGeneric("compute.models", function(object)
 setMethod("compute.models", "SCAN2", function(object) {
     check.slots(object, c('gatk', 'ab.estimates'))
 
+    matched.gp.mu <- match.ab(af=object@gatk$af, gp.mu=object@gatk$gp.mu)
     pvb <- compute.pvs.and.betas(object@gatk$scalt, object@gatk$dp,
-                                 object@gatk$gp.mu, object@gatk$gp.sd)
+                                 matched.gp.mu, object@gatk$gp.sd)
     object@gatk[, c('abc.pv', 'lysis.pv', 'lysis.beta', 'mda.pv', 'mda.beta') := pvb]
     object@mut.models <- data.frame(sites=nrow(pvb))
     object
@@ -575,7 +571,7 @@ setMethod("compute.fdr.priors", "SCAN2", function(object, mode='legacy') {
     check.slots(object, c('gatk', 'training.data', 'static.filter.params'))
 
     if (mode == 'legacy') {
-        # in legacy mode, all candidate sites passing a small set of pre-genotyping
+        # in legacy mode, only candidate sites passing a small set of pre-genotyping
         # crtieria were used.
         bulk.sample <- object@bulk
         bulk.gt <- object@gatk[[bulk.sample]]
@@ -609,7 +605,7 @@ setMethod("compute.fdr.priors", "SCAN2", function(object, mode='legacy') {
     cand[, c('nt', 'na') := list(fdr.prior.data$nt, fdr.prior.data$na)]
     # join back to object@gatk
     object@gatk[cand, on=.(chr,pos,refnt,altnt), c('nt', 'na') := list(i.nt, i.na)]
-    object@fdr.priors <- fdr.prior.data[c('fcs', 'burden')]
+    object@fdr.priors <- c(sites=nrow(cand), fdr.prior.data[c('fcs', 'burden')])
     object
 })
 
@@ -629,13 +625,15 @@ setMethod("compute.fdr", "SCAN2", function(object, mode='legacy') {
             bulk.gt == '0/0' &
             dbsnp == '.' &
             scalt >= object@static.filter.params$min.sc.alt &
-            dp >= object@static.filter.params$min.sc.dp &
-            bulk.dp >= object@static.filter.params$min.bulk.dp &
-            (is.na(balt.lowmq) | balt.lowmq == 0)]
+            dp >= object@static.filter.params$min.sc.dp]
+            # legacy did NOT require passing min.bulk.dp or 0 bulk alt reads at low MQ
+            #bulk.dp >= object@static.filter.params$min.bulk.dp]
+            #(is.na(balt.lowmq) | balt.lowmq == 0)]
 
+        matched.gp.mu <- match.ab(af=cand$af, gp.mu=cand$gp.mu)
         cand[, c('lysis.fdr', 'mda.fdr') :=
             compute.fdr.legacy(altreads=scalt, dp=dp,
-                gp.mu=gp.mu, gp.sd=gp.sd, nt=nt, na=na)]
+                gp.mu=matched.gp.mu, gp.sd=gp.sd, nt=nt, na=na)]
         object@gatk[cand, on=.(chr,pos,refnt,altnt),
             c('lysis.fdr', 'mda.fdr') := list(i.lysis.fdr, i.mda.fdr)]
         object@fdr <- list(mode=mode, sites=nrow(cand))
@@ -682,8 +680,8 @@ compute.excess.cigar <- function(data, cigar.training) {
 }
 
 
-read.cigar.data <- function(path, region) {
-    cat('Importing CIGAR stats from', path, '\n')
+read.cigar.data <- function(path, region, quiet=FALSE) {
+    if (!quiet) cat('Importing CIGAR stats from', path, '\n')
     tf <- Rsamtools::TabixFile(path)
     open(tf)
     header <- sub('^#', '', Rsamtools::headerTabix(tf)$header) # strip the leading #
@@ -695,21 +693,21 @@ read.cigar.data <- function(path, region) {
         tab <- data.table::fread(text=c(header, Rsamtools::scanTabix(tf)[[1]]),
             colClasses=col.classes)
     }
-    cat("Read", nrow(tab), 'lines\n')
+    if (!quiet) cat("Read", nrow(tab), 'lines\n')
     close(tf)
     tab
 }
 
         
-setGeneric("add.cigar.data", function(object, sc.cigars.path, bulk.cigars.path)
+setGeneric("add.cigar.data", function(object, sc.cigars.path, bulk.cigars.path, quiet=FALSE)
     standardGeneric("add.cigar.data"))
-setMethod("add.cigar.data", "SCAN2", function(object, sc.cigars.path, bulk.cigars.path) {
+setMethod("add.cigar.data", "SCAN2", function(object, sc.cigars.path, bulk.cigars.path, quiet=FALSE) {
     check.slots(object, 'gatk')
 
-    sc <- read.cigar.data(sc.cigars.path, region=object@region)
-    bulk <- read.cigar.data(bulk.cigars.path, region=object@region)
+    sc <- read.cigar.data(sc.cigars.path, region=object@region, quiet=quiet)
+    bulk <- read.cigar.data(bulk.cigars.path, region=object@region, quiet=quiet)
 
-    cat('joining CIGAR data to GATK sites..\n')
+    if (!quiet) cat('joining CIGAR data..\n')
     object@gatk[sc, on=c('chr', 'pos'),
         c('M.cigars', 'ID.cigars', 'HS.cigars', 'other.cigars', 'dp.cigars') :=
             list(i.M.cigars, i.ID.cigars, i.HS.cigars, i.other.cigars, i.dp.cigars)]
@@ -717,7 +715,7 @@ setMethod("add.cigar.data", "SCAN2", function(object, sc.cigars.path, bulk.cigar
         c('M.cigars.bulk', 'ID.cigars.bulk', 'HS.cigars.bulk', 'other.cigars.bulk', 'dp.cigars.bulk') :=
             list(i.M.cigars, i.ID.cigars, i.HS.cigars, i.other.cigars, i.dp.cigars)]
 
-    cat('computing CIGAR op rates for GATK sites..\n')
+    if (!quiet) cat('computing CIGAR op rates..\n')
     compute.cigar.scores(object@gatk)  # modifies by reference
     object@cigar.data <- data.frame(sc.sites=nrow(sc), bulk.sites=nrow(bulk),
         sc.path=sc.cigars.path, bulk.path=bulk.cigars.path)
@@ -798,16 +796,26 @@ setMethod("compute.static.filters", "SCAN2", function(object, exclude.dbsnp=TRUE
 })
 
 
-setGeneric("resample.training.data", function(object, M=20, seed=0) 
+setGeneric("resample.training.data", function(object, M=20, seed=0, mode='legacy') 
         standardGeneric("resample.training.data"))
-setMethod("resample.training.data", "SCAN2", function(object, M=20, seed=0) {
-    check.slots(object, c('gatk', 'training.data'))
+setMethod("resample.training.data", "SCAN2", function(object, M=20, seed=0, mode='legacy') {
+    check.slots(object, c('gatk', 'training.data', 'static.filter.params'))
 
     check.chunked(object,
         'resampling should be performed on full chr1-chr22 data, not chunked data')
 
-    ret <- resample.hsnps(
-        sites=object@gatk[training.site == FALSE & scalt >= 2 & dp >= 6 & bulk.dp >= 11 & balt == 0,],
+    bulk.gt <- object@gatk[[object@bulk]]
+    somatic.sites <- object@gatk[training.site == FALSE &
+        scalt >= object@static.filter.params$min.sc.alt &
+        balt <= object@static.filter.params$max.bulk.alt &
+        bulk.gt == '0/0' & dbsnp == '.',]
+    # these depth filters weren't used in legacy. i think this was just an oversight.
+    if (mode != 'legacy')
+        somatic.sites <- somatic.sites[
+            bulk.dp >= object@static.filter.params$min.bulk.dp &
+            dp >= object@static.filter.params$min.sc.dp]
+
+    ret <- resample.hsnps(sites=somatic.sites,
         hsnps=object@gatk[training.site == TRUE], M=M, seed=seed)
 
     object@gatk[training.site == TRUE, resampled.training.site := ret$selection$keep]
@@ -837,14 +845,14 @@ read.training.data <- function(path, region=NULL) {
 }
 
 
-setGeneric("add.training.data", function(object, path)
+setGeneric("add.training.data", function(object, path, quiet=FALSE)
         standardGeneric("add.training.data"))
-setMethod("add.training.data", "SCAN2", function(object, path) {
-    cat('Importing hSNP training data from', path, '\n')
+setMethod("add.training.data", "SCAN2", function(object, path, quiet=FALSE) {
+    if (!quiet) cat('Importing hSNP training data from', path, '\n')
     hsnps <- read.training.data(path, object@region)
-    cat('Read', nrow(hsnps), 'hSNPs\n')
+    if (!quiet) cat('Read', nrow(hsnps), 'hSNPs\n')
 
-    cat('Joining training data..\n')
+    if (!quiet) cat('Joining training data..\n')
     object@gatk[hsnps, on=.(chr,pos,refnt,altnt), c('training.phgt', 'training.hap1', 'training.hap2', 'training.site') := list(i.phgt, i.hap1, i.hap2, TRUE)]
     object@gatk[is.na(training.site), training.site := FALSE]
     # index (not key) the data.table so that selecting training sites is fast
