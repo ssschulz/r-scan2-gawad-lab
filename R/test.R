@@ -1,10 +1,10 @@
 testpipe <- function(test.data=c('legacy_tiny', 'legacy_chr22', 'legacy_custom'), verbose=FALSE, custom=NULL) {
     test.data <- match.arg(test.data)
     if (test.data == 'legacy_custom' & is.null(custom))
-        stop('when test.data=legacy_custom, a data.frame must be supplied to "custom"')
+        stop('when test.data=legacy_custom, a list must be supplied to "custom"')
 
     # test parameters and files
-    if (legacy.data != 'legacy_custom') {
+    if (test.data != 'legacy_custom') {
         sc.sample <- 'h25'
         bulk.sample <- 'hunamp'
         fpath <- function(...) system.file('extdata', paste0(test.data, '_', ...), package='scan2')
@@ -14,12 +14,12 @@ testpipe <- function(test.data=c('legacy_tiny', 'legacy_chr22', 'legacy_custom')
         fpath <- function(...) paste0(custom$path, '/', ...)
     }
 
-    mmq60 <- fpath('mmq60.tab.bgz"')
+    mmq60 <- fpath('mmq60.tab.bgz')
     mmq1 <- fpath('mmq1.tab.bgz')
     hsnps <- fpath('hsnps.tab.bgz')
     abfits <- fpath('fits.rda')
-    sccigars <- fpath('h25_somatic_and_hsnp_spikein_cigars.tab.bgz')
-    bulkcigars <- fpath('hunamp_somatic_and_hsnp_spikein_cigars.tab.bgz')
+    sccigars <- fpath('sc_somatic_and_hsnp_spikein_cigars.tab.bgz')
+    bulkcigars <- fpath('bulk_somatic_and_hsnp_spikein_cigars.tab.bgz')
 
 
     require(future)
@@ -104,7 +104,7 @@ testpipe <- function(test.data=c('legacy_tiny', 'legacy_chr22', 'legacy_custom')
 }
 
 
-test.output <- function(pipeline.output, custom.path, test.data=c('legacy_tiny', 'legacy_chr22', 'legacy_custom')) {
+test.output <- function(pipeline.output, custom, test.data=c('legacy_tiny', 'legacy_chr22', 'legacy_custom')) {
     test.data <- match.arg(test.data)
 
     if (test.data != 'legacy_custom') {
@@ -112,7 +112,7 @@ test.output <- function(pipeline.output, custom.path, test.data=c('legacy_tiny',
             system.file('extdata', paste0(test.data, '_somatic_genotypes.rda'),
                 package='scan2')
     } else {
-        legacy.rda <- paste0(custom.path, '/', 'somatic_genotypes.rda')
+        legacy.rda <- paste0(custom$path, '/', 'somatic_genotypes.rda')
     }
     l <- get(load(legacy.rda, verb=F))
 
