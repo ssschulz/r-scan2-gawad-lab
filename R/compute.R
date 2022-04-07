@@ -8,7 +8,7 @@
 # 'factor' allows changing the relationship of ab -> af
 # NOTE: for many calls, is best for the caller to compute ghd once
 # and supply it to successive calls.
-
+#
 # IMPORTANT!! recomputing this in the function increases runtime
 # by approximately 5-fold! Setting this as a global constant is critical!
 # XXX: ..but it would be nice if users could change it.
@@ -25,6 +25,11 @@ dreads <- function(ys, d, gp.mu, gp.sd, factor=1) { #, ghd=gaussHermiteData(128)
     )
 }
 
+# IMPORTANT: both of the artifact models are symmetric w.r.t. gp.mu
+# (i.e., -gp.mu and +gp.mu will give the same p-values).
+# However, the true mutation model assumes that gp.mu
+# has already been matched to the VAF (by #alt reads) of the somatic
+# candidate, so it is not symmetric.
 mut.model.tables <- function(dp, gp.mu, gp.sd) {
     dps=0:dp
     mut=dreads(dps, d=dp, gp.mu=gp.mu, gp.sd=gp.sd)
