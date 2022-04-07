@@ -6,4 +6,5 @@ Description: Single cell genotyper using a spatial model of allele balance.
 Author: Lovelace J. Luquette <luquette@g.harvard.edu>
 Depends: data.table, BSgenome, GenomicRanges
 Imports: plyr, pbapply, methods, fastGHQuad, yaml, pracma, Rsamtools
+Suggests: future, future.apply, progressr
 Maintainer: Lovelace J. Luquette <lovelace_luquette@hms.harvard.edu>
