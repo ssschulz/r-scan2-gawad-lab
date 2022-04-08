@@ -45,7 +45,7 @@ testpipe <- function(test.data=c('legacy_tiny', 'legacy_chr22', 'legacy_custom')
     perfcheck <- function(msg, expr) {
         t <- system.time(eval(expr))
         g <- gc(reset=TRUE)
-        sprintf('%30s |  %10.1f %10.1f %7.1f %7.1', msg,
+        sprintf('%30s |  %10.1f %10.1f %7.1f %7.1f', msg,
             sum(g[,which(colnames(g)=='used')+1]),
             sum(g[,which(colnames(g)=='max used')+1]),
             # combine user, system, and child cpu time
