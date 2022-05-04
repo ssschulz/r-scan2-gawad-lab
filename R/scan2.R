@@ -480,6 +480,31 @@ setMethod("add.ab.fits", "SCAN2", function(object, path) {
 
 
 
+# Using tile subsampling, AB model fitting can feasibly be performed on
+# a single multicore node.
+# AB fits must be computed using all training sites on a chromosome.
+# AB fits are produced by sampling 20,000 random parameter 4-tuples. The
+# highest logP values are considered the best fits. The random sampling
+# is iteratively refined in 'n.steps' steps by restricting random parameter
+# sampling to a smaller subset of the space.
+# Parameters are:
+#   - samples.per.chunk, n.chunks: compute 'samples.per.chunk' random
+#         parameter samplings in 'n.chunks' independent (possibly parallel)
+#         threads. samples.per.chunk*n.chunks should be kept at 20,000.
+#   - n.steps: number of iterative 
+setGeneric("compute.ab.fits", function(object, path, chrom,
+    samples.per.chunk=1000, n.chunks=20, n.steps=4, n.tiles=200)
+    standardGeneric("compute.ab.fits"))
+setMethod("compute.ab.fits", "SCAN2", function(object, path, chrom,
+    samples.per.chunk=1000, n.chunks=20, n.steps=4, n.tiles=200) {
+    stop('this function is not yet implemented; please see the SCAN2 pipeline for an alternative implementation')
+    fitlist <- get(load(path))
+    object@ab.fits <- do.call(rbind, fitlist)
+    object
+})
+
+
+
 # Actually calculate the AB estimates.
 # Currently, computes AB at ALL SITES rather than just somatic candidates.
 # This will be useful in the future for mosaics and perhaps for using more
