@@ -1,3 +1,132 @@
+# n.tiles - if NULL, then downsampling is not performed (uses full set of
+#           hSNP training sites).
+abmodel.fit.one.chrom <- function(path, chrom, genome.object,
+    n.chunks=1, n.logp.samples.per.chunk=20000,  # this default implies no parallelization
+    hsnp.tilesize=100, n.tiles=200,
+    refine.n.steps=4, refine.top.n=50,
+    logp.samples.per.step=20000,
+    alim=c(-7, 2), blim=c(2, 4), clim=c(-7, 2), dlim=c(2, 6))
+{
+    chrom <- as.character(chrom)
+
+    hsnps <- abmodel.read.hsnps(path, chrom, genome.object)
+    hsnps <- abmodel.downsample.hsnps(hsnps, hsnp.tilesize=hsnp.tilesize, n.tiles=n.tiles, verbose=TRUE)
+
+    refine.records <- list()
+    for (i in 1:refine.n.steps) {
+    cat('Chrom:', chrom, 'refinement step', i, 'n.chunks', n.chunks, '\n')
+            refine.record <- abmodel.refine.parameter.space(
+                hsnps, n.chunks=n.chunks, n.logp.samples.per.chunk=n.logp.samples.per.chunk,
+                top.n=refine.top.n, hsnp.tilesize=hsnp.tilesize,
+                alim=alim, blim=blim, clim=clim, dlim=dlim)
+        refine.records[[i]] <- refine.record
+        alim <- refine.record$new.param.space[,'a']
+        blim <- refine.record$new.param.space[,'b']
+        clim <- refine.record$new.param.space[,'c']
+        dlim <- refine.record$new.param.space[,'d']
+    }   
+    refine.records
+}
+
+abmodel.read.hsnps <- function(path, chrom, genome.object) {
+    # Fitting will be per-chrom, so only read one in at a time. This saves a
+    # good deal of memory in some cases, e.g., crossbred mice with ~10-fold more
+    # SNPs than humans.
+    tf <- Rsamtools::TabixFile(path)
+    open(tf)
+
+    # Just for convenience. Allow "chroms=1:22" to work for autosomes
+    chrom <- as.character(chrom)
+
+    if (!(chrom %in% seqnames(genome.object))) {
+        stop(paste0("invalid chromosome name '", chrom, "'\n"))
+    }
+
+    # GRanges interval that covers the whole chromosome
+    region <- as(GenomeInfoDb::seqinfo(genome.object), 'GRanges')[chrom,]
+
+    # scanTabix doesn't return the header line
+    header <- sub('^#', '', Rsamtools::headerTabix(tf)$header) # strip the leading #
+    # A little more RAM efficiency: only read position, hap1 and depth columns
+    cols.to.read <- c('NULL', 'integer', 'NULL', 'NULL', 'NULL', 'integer', 'NULL', 'integer', 'NULL')
+    hsnps <- data.table::fread(text=c(header, Rsamtools::scanTabix(tf, param=region)[[1]]),
+        colClasses=cols.to.read)
+
+    close(tf)
+
+    hsnps
+}
+
+
+abmodel.downsample.hsnps <- function(hsnps, hsnp.tilesize=100, n.tiles=200, verbose=TRUE) {
+    if (is.null(n.tiles)) {
+        if (verbose) cat('skipping downsampling; n.tiles=NULL\n')
+        return(hsnps)
+    }
+    # Now subset by tiles. This is critical for compute efficiency (>10-fold
+    # reduction in runtime with very similar results).
+    hsnps$tile.id <- head(rep(1:nrow(hsnps), each=hsnp.tilesize), nrow(hsnps))
+    max.tile <- max(hsnps$tile.id)
+    tiles.to.use <- sort(sample(max.tile, min(max.tile, n.tiles)))
+    if (verbose)
+        cat(sprintf("downsampling %d hSNPs (%d tiles) to %d hSNPs (%d tiles)\n",
+            nrow(hsnps), max(hsnps$tile.id),
+            sum(hsnps$tile.id %in% tiles.to.use), length(tiles.to.use)))
+    hsnps[hsnps$tile.id %in% tiles.to.use]
+}
+
+
+# Default values for a/b/c/dlim correspond to the pre-refinment
+# parameter space usually searched.
+abmodel.refine.parameter.space <-
+    function(hsnps, n.chunks=1, n.logp.samples.per.chunk=20000, top.n=50, hsnp.tilesize=100,
+    alim=c(-7, 2), blim=c(2, 4), clim=c(-7, 2), dlim=c(2, 6))
+{
+    cat(sprintf('    param space: a=(%0.3f,%0.3f), b=(%0.3f,%0.3f), c=(%0.3f,%0.3f), d=(%0.3f,%0.3f)\n',
+        alim[1], alim[2], blim[1], blim[2], clim[1], clim[2], dlim[1], dlim[2]))
+
+    progressr::with_progress({
+        p <- progressr::progressor(along=1:n.chunks)
+        p(amount=0, class='sticky')
+        logp.samples <- do.call(rbind, future.apply::future_lapply(1:n.chunks, function(i) {
+            p(amount=0)
+            ctx <- abmodel.approx.ctx(x=hsnps$pos, y=hsnps$hap1, d=hsnps$dp,
+                hsnp.chunksize=hsnp.tilesize)
+            ret <- abmodel.sample(n=n.logp.samples.per.chunk,
+                alim=alim, blim=blim, clim=clim, dlim=dlim,
+                ctx=ctx, seed=NULL)
+            p()
+            ret
+        }, future.seed=0))
+        # Randomness here only influences what (a,b,c,d) points are chosen
+        # in the parameter space window.
+    })
+
+    new.param.space <- abmodel.shrink.parameter.space(logp.samples, top.n=top.n)
+    list(logp.samples=logp.samples, new.param.space=new.param.space)
+}
+
+
+abmodel.shrink.parameter.space <- function(logp.samples, top.n=50) {
+    dn <- dimnames(logp.samples)
+    logp.samples <- as.matrix(logp.samples)
+    # swapping columns (1,2) and (3,4) to force b < d.
+    # ifelse returns a value the same shape as the first argument
+    logi.mat <- matrix(rep(logp.samples[,2] < logp.samples[,4], times=5), ncol=5)
+    logp.samples <- as.data.frame(ifelse(logi.mat, logp.samples, logp.samples[,c(3,4,1,2,5)]))
+    dimnames(logp.samples) <- dn
+    logp.samples <- logp.samples[order(logp.samples[,5], decreasing=TRUE),]
+
+    # Use the top 'top.n' logp values to build a new parameter range
+    logp.samples[,2] <- log10(logp.samples[,2])   # b and d bounds are in log10 space
+    logp.samples[,4] <- log10(logp.samples[,4])
+    bounds <- apply(head(logp.samples[,-5], top.n), 2, range)
+    colnames(bounds) <- colnames(logp.samples)[-5]
+
+    bounds
+}
+
+
 # Allocate all necessary vectors for the C fitting code.
 # Trying to avoid memory copying since these matrices can be large.
 abmodel.approx.ctx <- function(x, y, d, hsnp.chunksize=100) {
@@ -36,10 +165,15 @@ abmodel.approx.logp <- function(a, b, c, d, ctx,
     return(result)
 }
 
+# if seed=NULL, don't set it. this assumes that the caller is properly
+# setting the seed to be both: (1) different between parallelized chunks and
+# (2) reproducible
 abmodel.sample <- function(n=1000, alim=c(-7,2), blim=c(2,4), clim=c(-7,2), dlim=c(2,6),
     ctx, seed=0, max.it=50, verbose=FALSE) {
 
-    set.seed(seed)
+    if (!is.null(seed)) {
+        set.seed(seed)
+    }
     max.it <- as.integer(max.it)
 
     params <- data.frame(a=runif(n, min=alim[1], max=alim[2]),

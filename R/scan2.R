@@ -487,20 +487,66 @@ setMethod("add.ab.fits", "SCAN2", function(object, path) {
 # highest logP values are considered the best fits. The random sampling
 # is iteratively refined in 'n.steps' steps by restricting random parameter
 # sampling to a smaller subset of the space.
-# Parameters are:
 #   - samples.per.chunk, n.chunks: compute 'samples.per.chunk' random
 #         parameter samplings in 'n.chunks' independent (possibly parallel)
 #         threads. samples.per.chunk*n.chunks should be kept at 20,000.
-#   - n.steps: number of iterative 
-setGeneric("compute.ab.fits", function(object, path, chrom,
-    samples.per.chunk=1000, n.chunks=20, n.steps=4, n.tiles=200)
+#   - refine.n.steps: number of iterations in which the (a,b,c,d) parameter space
+#         is refined and sampled.
+#   - refine.top.n: use the top 'top.n' parameter values (by logP) to create the
+#         next refined parameter space
+#   - n.tiles and hsnp.tilesize: the log-likelihood of (a,b,c,d|training hSNPs)
+#         is approximated by breaking the hSNPs into non-overlapping tiles of
+#         size hsnp.tilesize. This is necessary because the approximation requires
+#         inverting the (#hSNPs x #hSNPs) covariance matrix. Furthermore, the
+#         additional information about (a,b,c,d) provided by each tile of hSNPs
+#         becomes less and less as more tiles are added. We have found that ~200
+#         tiles (=20,000 hSNPs) is a good trade-off between compute time and
+#         accuracy.
+#   - alim, blim, clim, dlim - starting bounds for the (a,b,c,d) parameter
+#         space.
+setGeneric("compute.ab.fits", function(object, path, chroms=1:22,
+    n.cores=future::availableCores(),
+    logp.samples.per.step=20000, refine.n.steps=4, refine.top.n=50,
+    n.tiles=200, hsnp.tilesize=100,
+    alim=c(-7, 2), blim=c(2, 4), clim=c(-7, 2), dlim=c(2, 6))
     standardGeneric("compute.ab.fits"))
-setMethod("compute.ab.fits", "SCAN2", function(object, path, chrom,
-    samples.per.chunk=1000, n.chunks=20, n.steps=4, n.tiles=200) {
-    stop('this function is not yet implemented; please see the SCAN2 pipeline for an alternative implementation')
-    fitlist <- get(load(path))
-    object@ab.fits <- do.call(rbind, fitlist)
-    object
+setMethod("compute.ab.fits", "SCAN2", function(object, path, chroms=1:22,
+    n.cores=future::availableCores(),
+    logp.samples.per.step=20000, refine.n.steps=4, refine.top.n=50,
+    n.tiles=200, hsnp.tilesize=100,
+    alim=c(-7, 2), blim=c(2, 4), clim=c(-7, 2), dlim=c(2, 6)) 
+{
+    cat("using", n.cores, "cores\n")
+    n.chunks <- 100  # 4*n.cores  # using a multiple of n.cores gives a smoother progress bar
+    # using n.cores and ceiling can lead to (very small) differences in number
+    # of samples taken, and thus slightly different results. just use a very large
+    # number of chunks (like 100)
+    if (logp.samples.per.step %% n.chunks != 0)
+        stop(sprintf('logp.samples.per.step must be a multiple of n.chunks (%d)', n.chunks))
+    samples.per.chunk <- ceiling(logp.samples.per.step / n.chunks)
+
+    # Just for convenience. Allow "chroms=1:22" to work for autosomes
+    # Check all chroms up front so the loop doesn't die after a significant amount of work
+    chroms <- as.character(chroms)
+    not.in <- chroms[!(chroms %in% seqnames(object@genome.object))]
+    if (length(not.in) > 0) {
+        cat("the following chromosomes are not recognized:\n")
+        print(not.in)
+        cat("valid chromosomes names for genome", object@genome.string, 'are:\n')
+        print(seqnames(object@genome.object))
+        stop('invalid chromosomes, see above for details')
+    }
+
+    chrom.refine.records <- setNames(lapply(chroms, abmodel.fit.one.chrom,
+        path=path, genome.object=object@genome.object,
+        hsnp.tilesize=hsnp.tilesize, n.tiles=n.tiles,
+        refine.n.steps=refine.n.steps, n.chunks=n.chunks,
+        n.logp.samples.per.chunk=samples.per.chunk), chroms)
+
+    chrom.refine.records
+
+    #object@ab.fits <- do.call(rbind, fitlist)
+    #object
 })
 
 
@@ -510,7 +556,7 @@ setMethod("compute.ab.fits", "SCAN2", function(object, path, chrom,
 # This will be useful in the future for mosaics and perhaps for using more
 # germline hSNPs to model what somatic mutations should look like.
 #
-# IMPORTANT: AB estimation benefits greatly from chunking. However, because
+# IMPORTANT: AB estimation benefits greatly from chunking. However,
 # AB estimation uses a window of 100kb up and downstream from every site at
 # which AB is being estimated. For sites at the edge of each chunk, data
 # either upstream or downstream will not be available. To solve this,

@@ -45,7 +45,7 @@ testpipe <- function(test.data=c('legacy_tiny', 'legacy_chr22', 'legacy_custom')
     perfcheck <- function(msg, expr) {
         t <- system.time(eval(expr))
         g <- gc(reset=TRUE)
-        sprintf('%30s |  %10.1f %10.1f %7.1f %7.1f', msg,
+        sprintf('%30s |  %7.1f %10.1f %7.1f %7.1f', msg,
             sum(g[,which(colnames(g)=='used')+1]),
             sum(g[,which(colnames(g)=='max used')+1]),
             # combine user, system, and child cpu time
@@ -65,7 +65,7 @@ testpipe <- function(test.data=c('legacy_tiny', 'legacy_chr22', 'legacy_custom')
     progressr::with_progress({
         p <- progressr::progressor(along=1:length(grs))
         p(amount=0, class='sticky',
-            sprintf('%30s |  %11s %11s %8s %8s', 'Step (chunk)', 'Mem Mb', 'Peak mem Mb', 'Time (s)', 'Elapsed'))
+            sprintf('%30s | %9s %11s %9s %9s', 'Step (chunk)', 'Mem Mb', 'Peak mem Mb', 'Time (s)', 'Elapsed'))
         xs <- future.apply::future_lapply(1:length(grs), function(i) {
             gr <- grs[[i]]
             p(class='sticky', amount=0, perfcheck(paste('make.scan',i),
