@@ -28,7 +28,7 @@ classify.muts <- function(df, genome.string, spectype='SNV',
     # convert this to use scansnv.df.to.vcf at some point
     # Write out the VCF
     ### From scansnv.to.vcf
-    out.file <- paste0(spmgd, sample.name, '.vcf')
+    out.file <- paste0(spmgd, '/', sample.name, '.vcf')
     f <- file(out.file, "w")
     vcf.header <- c("##fileformat=VCFv4.0", "##source=scansnv", 
 "##FORMAT=<ID=GT,Number=1,Type=String,Description=\"Genotype\">", 
