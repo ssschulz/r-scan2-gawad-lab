@@ -2,7 +2,7 @@
 #           hSNP training sites).
 abmodel.fit.one.chrom <- function(path, chrom, genome.object,
     n.chunks=1, n.logp.samples.per.chunk=20000,  # this default implies no parallelization
-    hsnp.tilesize=100, n.tiles=200,
+    hsnp.tilesize=100, n.tiles=250,
     refine.n.steps=4, refine.top.n=50,
     logp.samples.per.step=20000,
     alim=c(-7, 2), blim=c(2, 4), clim=c(-7, 2), dlim=c(2, 6))
@@ -25,7 +25,15 @@ abmodel.fit.one.chrom <- function(path, chrom, genome.object,
         clim <- refine.record$new.param.space[,'c']
         dlim <- refine.record$new.param.space[,'d']
     }   
-    refine.records
+
+    # The best parameter set (i.e., maximum likelihood based on our grid
+    # search) is the first row in the logp.samples table, which is sorted
+    # by logp.
+    list(n.chunks=n.chunks, n.logp.samples.per.chunk=n.logp.samples.per.chunk,
+        n.tiles=n.tiles, hsnp.tilesize=hsnp.tilesize,
+        n.steps=refine.n.steps, top.n=refine.top.n,
+        refine.records=refine.records,
+        fit=refine.records[[refine.n.steps]]$logp.samples[1,,drop=FALSE])
 }
 
 abmodel.read.hsnps <- function(path, chrom, genome.object) {
@@ -58,7 +66,7 @@ abmodel.read.hsnps <- function(path, chrom, genome.object) {
 }
 
 
-abmodel.downsample.hsnps <- function(hsnps, hsnp.tilesize=100, n.tiles=200, verbose=TRUE) {
+abmodel.downsample.hsnps <- function(hsnps, hsnp.tilesize=100, n.tiles=250, verbose=TRUE) {
     if (is.null(n.tiles)) {
         if (verbose) cat('skipping downsampling; n.tiles=NULL\n')
         return(hsnps)
