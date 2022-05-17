@@ -62,9 +62,11 @@ classify.muts <- function(df, genome.string, spectype='SNV',
     # Prevent sigprofilermatrixgenerator's output from being printed
     # XXX: should probably trycatch() here and print the output if an error
     # is generated
-    spmg.output <- capture.output(
+    #spmg.output <- capture.output(
+    sink('/dev/null')
         mat <- SigProfilerMatrixGeneratorR(sample.name, genome.string, spmgd, seqInfo=TRUE, plot=save.plot)
-    )
+    sink()
+    #)
 
     # Read in the types
     annot.files <- paste0(spmgd, '/output/vcf_files/', spectype, '/', c(1:22,'X','Y'), "_seqinfo.txt")
