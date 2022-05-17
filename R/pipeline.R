@@ -7,6 +7,11 @@ run.pipeline <- function(
     genome, grs=tileGenome(seqlengths=seqinfo(genome.string.to.bsgenome.object(genome))[as.character(1:22)], tilewidth=10e6, cut.last.tile.in.chrom=TRUE),
     verbose=TRUE)
 {
+    cat('Starting chunked SCAN2 pipeline on', length(grs), 'chunks\n')
+    cat('Setting OpenBLAS corecount to 1. This prevents multithreaded matrix multiplication in chunks where it is undesired.\n')
+    RhpcBLASctl::blas_set_num_threads(1)
+    cat('Parallelizing with', future::availableCores(), 'cores\n')
+
     printfun <- invisible
     if (verbose)
         printfun <- print
@@ -22,8 +27,6 @@ run.pipeline <- function(
             t['elapsed'])
     }
 
-    cat('Starting chunked SCAN2 pipeline on', length(grs), 'chunks\n')
-    cat('Parallelizing with', future::availableCores(), 'cores\n')
     cat('Detailed chunk schedule:\n')
     cat(sprintf('%7s %5s %10s %10s\n', 'Chunk', 'Chr', 'Start', 'End'))
     for (i in 1:length(grs)) {
@@ -56,7 +59,8 @@ run.pipeline <- function(
                 s1 <- compute.models(r1)))
             p()
             s1
-        })
+        }, set.seed=0)  # CRITICAL! library(future) ensures that each child process
+                        # has a different random seed.
     })
 
     x <- do.call(concat, xs)
