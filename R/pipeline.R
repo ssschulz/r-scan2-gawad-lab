@@ -36,7 +36,7 @@ run.pipeline <- function(
         p(amount=0, class='sticky',
             sprintf('%30s | %9s %11s %9s %9s', 'Step (chunk)', 'Mem Mb', 'Peak mem Mb', 'Time (s)', 'Elapsed'))
         xs <- future.apply::future_lapply(1:length(grs), function(i) {
-            gr <- grs[[i]]
+            gr <- grs[i,]
             p(class='sticky', amount=0, perfcheck(paste('make.scan',i),
                 gt <- make.scan(single.cell=sc.sample, bulk=bulk.sample, genome=genome, region=gr)))
             gt <- add.static.filter.params(gt)
