@@ -27,8 +27,8 @@ run.pipeline <- function(
     cat('Detailed chunk schedule:\n')
     cat(sprintf('%7s %5s %10s %10s\n', 'Chunk', 'Chr', 'Start', 'End'))
     for (i in 1:length(grs)) {
-        cat(sprintf('%7d %5s %10d %10d\n', i, seqnames(grs[[i]])[1],
-            start(grs[[i]]), end(grs[[i]])))
+        cat(sprintf('%7d %5s %10d %10d\n',
+            i, as.character(seqnames(grs)[i]), start(grs)[i], end(grs)[i]))
     }
 
     progressr::with_progress({
