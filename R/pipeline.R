@@ -59,8 +59,8 @@ run.pipeline <- function(
                 s1 <- compute.models(r1)))
             p()
             s1
-        }, set.seed=0)  # CRITICAL! library(future) ensures that each child process
-                        # has a different random seed.
+        }, future.seed=0)  # CRITICAL! library(future) ensures that each child process
+                           # has a different random seed.
     })
 
     x <- do.call(concat, xs)
