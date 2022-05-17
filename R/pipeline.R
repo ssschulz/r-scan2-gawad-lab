@@ -4,7 +4,7 @@ run.pipeline <- function(
     hsnps,
     abfits,
     sccigars, bulkcigars,
-    genome, grs=tileGenome(seqlengths=seqinfo(genome.string.to.bsgenome.object(genome))[1:22], tilewidth=10e6, cut.last.tile.in.chrome=TRUE),
+    genome, grs=tileGenome(seqlengths=seqinfo(genome.string.to.bsgenome.object(genome))[1:22], tilewidth=10e6, cut.last.tile.in.chrom=TRUE),
     verbose=TRUE)
 {
     printfun <- invisible
