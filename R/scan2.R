@@ -445,7 +445,7 @@ setMethod("read.gatk", "SCAN2", function(object, path, quiet=FALSE) {
 
     gatk[muttype == 'snv',
         mutsig := get.3mer(chr=chr, pos=pos, refnt=refnt, altnt=altnt, genome=object@genome.object)]
-    chs <- classify.indels(gatk[muttype == 'indel'], genome.string=object@genome.string)
+    chs <- classify.indels(gatk[muttype == 'indel'], genome.string=object@genome.string, auto.delete=FALSE)
     gatk[muttype == 'indel', mutsig := chs]
 
     object@gatk <- gatk
@@ -473,8 +473,9 @@ setMethod("read.gatk.lowmq", "SCAN2", function(object, path, quiet=FALSE) {
 setGeneric("add.ab.fits", function(object, path)
     standardGeneric("add.ab.fits"))
 setMethod("add.ab.fits", "SCAN2", function(object, path) {
-    fitlist <- get(load(path))
-    object@ab.fits <- do.call(rbind, fitlist)
+    #fitlist <- get(load(path))
+    #object@ab.fits <- do.call(rbind, fitlist)
+    object@ab.fits <- get(load(path))
     object
 })
 
