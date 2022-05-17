@@ -3,7 +3,7 @@
 # (e.g., SBS6144 for SNVs and ID415 for indels)
 # mostly useful for indel classification, but also good for doing TSB on SNVs
 classify.muts <- function(df, genome.string, spectype='SNV',
-    sample.name='dummy', save.plot=F, auto.delete=T, chrs=1:22)
+    sample.name='dummy', save.plot=F, auto.delete=T, chrs=1:22, verbose=FALSE)
 {
     if (nrow(df) == 0)
         return(df)
@@ -14,10 +14,15 @@ classify.muts <- function(df, genome.string, spectype='SNV',
             spectype, paste('"', recognized.spectypes, '"', collapse=', ')))
 
     require(SigProfilerMatrixGeneratorR)
-    td <- paste0(tempdir())
-    spmgd <- paste0(td, "/spmgr/")
-    if (file.exists(spmgd) & auto.delete)
-        unlink(spmgd, recursive=TRUE)
+    #td <- paste0(tempdir())
+    #spmgd <- paste0(td, "/spmgr/")
+    spmgd <- tempfile()  # For multithreaded workflows, it is CRITICAL that library(future)
+                         # supply different random seeds to child processes.
+    #if (file.exists(spmgd) & auto.delete)
+        #unlink(spmgd, recursive=TRUE)
+    if (file.exists(spmgd))
+        stop(paste('temporary directory', spmgd, 'already exists'))
+
     dir.create(spmgd, recursive=TRUE)
 
     # convert this to use scansnv.df.to.vcf at some point
@@ -32,11 +37,6 @@ classify.muts <- function(df, genome.string, spectype='SNV',
             "QUAL", "FILTER", "INFO", "FORMAT", sample.name), collapse = "\t"))
     writeLines(vcf.header, con = f)
     s <- df[!is.na(df$chr) & df$chr %in% chrs,]
-    # ordering is not necessary at all because of the join we do later
-    #s <- do.call(rbind, lapply(chrs, function(chr) {
-        #ss <- s[s$chr == chr, ]
-        #ss[order(ss$pos), ]
-    #}))
 
     # SigProfilerMatrixGenerator doesn't classify duplicated mutations
     # from the same sample, it throws errors instead. It also will not
@@ -46,7 +46,8 @@ classify.muts <- function(df, genome.string, spectype='SNV',
     # To circumvent all these headaches: just remove duplicates up front.
     mutid <- paste(s$chr, s$pos, s$refnt, s$altnt)
     dupmut <- duplicated(mutid)
-    cat("Removing", sum(dupmut), "/", nrow(s), "duplicated mutations before annotating\n")
+    if (verbose)
+        cat("Removing", sum(dupmut), "/", nrow(s), "duplicated mutations before annotating\n")
     s <- s[!dupmut,]
 
     # will write, eg., position=7000000 as 7e6, which will
