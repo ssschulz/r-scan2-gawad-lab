@@ -507,13 +507,13 @@ setMethod("add.ab.fits", "SCAN2", function(object, path) {
 setGeneric("compute.ab.fits", function(object, path, chroms=1:22,
     n.cores=future::availableCores(),
     logp.samples.per.step=20000, refine.n.steps=4, refine.top.n=50,
-    n.tiles=200, hsnp.tilesize=100,
+    n.tiles=250, hsnp.tilesize=100,
     alim=c(-7, 2), blim=c(2, 4), clim=c(-7, 2), dlim=c(2, 6))
     standardGeneric("compute.ab.fits"))
 setMethod("compute.ab.fits", "SCAN2", function(object, path, chroms=1:22,
     n.cores=future::availableCores(),
     logp.samples.per.step=20000, refine.n.steps=4, refine.top.n=50,
-    n.tiles=200, hsnp.tilesize=100,
+    n.tiles=250, hsnp.tilesize=100,
     alim=c(-7, 2), blim=c(2, 4), clim=c(-7, 2), dlim=c(2, 6)) 
 {
     cat("using", n.cores, "cores\n")
