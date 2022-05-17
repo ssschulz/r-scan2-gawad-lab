@@ -7,9 +7,6 @@ run.pipeline <- function(
     genome, grs=tileGenome(seqlengths=seqinfo(genome.string.to.bsgenome.object(genome))[1:22], tilewidth=10e6, cut.last.tile.in.chrome=TRUE),
     verbose=TRUE)
 {
-    if (missing(grs)) {
-        g
-    }
     printfun <- invisible
     if (verbose)
         printfun <- print
