@@ -40,23 +40,39 @@ run.pipeline <- function(
             sprintf('%30s | %9s %11s %9s %9s', 'Step (chunk)', 'Mem Mb', 'Peak mem Mb', 'Time (s)', 'Elapsed'))
         xs <- future.apply::future_lapply(1:length(grs), function(i) {
             gr <- grs[i,]
-            p(class='sticky', amount=0, perfcheck(paste('make.scan',i),
-                gt <- make.scan(single.cell=sc.sample, bulk=bulk.sample, genome=genome, region=gr)))
+            pc <- perfcheck(paste('make.scan',i),
+                gt <- make.scan(single.cell=sc.sample, bulk=bulk.sample, genome=genome, region=gr))
+            p(class='sticky', amount=0, pc)
+
             gt <- add.static.filter.params(gt)
-            p(class='sticky', amount=0, perfcheck(paste('read.gatk',i),
-                x1 <- read.gatk(gt, path=mmq60, quiet=!verbose)))
-            p(class='sticky', amount=0, perfcheck(paste('read.gatk.lowmq',i),
-                y1 <- read.gatk.lowmq(x1, path=mmq1, quiet=!verbose)))
-            p(class='sticky', amount=0, perfcheck(paste('add.training.data',i),
-                z1 <- add.training.data(y1, path=hsnps, quiet=!verbose)))
-            p(class='sticky', amount=0, perfcheck(paste('add.ab.fits',i),
-                w1 <- add.ab.fits(z1, path=abfits)))
-            p(class='sticky', amount=0, perfcheck(paste('compute.ab.estimates',i),
-                v1 <- compute.ab.estimates(w1, quiet=!verbose)))
-            p(class='sticky', amount=0, perfcheck(paste('add.cigar.data',i),
-                r1 <- add.cigar.data(v1, sccigars, bulkcigars, quiet=!verbose)))
-            p(class='sticky', amount=0, perfcheck(paste('compute.models',i),
-                s1 <- compute.models(r1)))
+
+            pc <- perfcheck(paste('read.gatk',i),
+                x1 <- read.gatk(gt, path=mmq60, quiet=!verbose))
+            p(class='sticky', amount=0, pc)
+
+            pc <- perfcheck(paste('read.gatk.lowmq',i),
+                y1 <- read.gatk.lowmq(x1, path=mmq1, quiet=!verbose))
+            p(class='sticky', amount=0, pc)
+
+            pc <- perfcheck(paste('add.training.data',i),
+                z1 <- add.training.data(y1, path=hsnps, quiet=!verbose))
+            p(class='sticky', amount=0, pc)
+
+            pc <- perfcheck(paste('add.ab.fits',i),
+                w1 <- add.ab.fits(z1, path=abfits))
+            p(class='sticky', amount=0, pc)
+
+            pc <- perfcheck(paste('compute.ab.estimates',i),
+                v1 <- compute.ab.estimates(w1, quiet=!verbose))
+            p(class='sticky', amount=0, pc)
+
+            pc <- perfcheck(paste('add.cigar.data',i),
+                r1 <- add.cigar.data(v1, sccigars, bulkcigars, quiet=!verbose))
+            p(class='sticky', amount=0, pc)
+
+            pc <- perfcheck(paste('compute.models',i),
+                s1 <- compute.models(r1))
+            p(class='sticky', amount=0, pc)
             p()
             s1
         }, future.seed=0)  # CRITICAL! library(future) ensures that each child process
