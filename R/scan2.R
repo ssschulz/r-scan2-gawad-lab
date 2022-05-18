@@ -627,10 +627,15 @@ setGeneric("compute.models", function(object)
 setMethod("compute.models", "SCAN2", function(object) {
     check.slots(object, c('gatk', 'ab.estimates'))
 
-    matched.gp.mu <- match.ab(af=object@gatk$af, gp.mu=object@gatk$gp.mu)
-    pvb <- compute.pvs.and.betas(object@gatk$scalt, object@gatk$dp,
-                                 matched.gp.mu, object@gatk$gp.sd)
-    object@gatk[, c('abc.pv', 'lysis.pv', 'lysis.beta', 'mda.pv', 'mda.beta') := pvb]
+    if (nrow(object@gatk) > 0) {
+        matched.gp.mu <- match.ab(af=object@gatk$af, gp.mu=object@gatk$gp.mu)
+        pvb <- compute.pvs.and.betas(object@gatk$scalt, object@gatk$dp,
+                                    matched.gp.mu, object@gatk$gp.sd)
+        object@gatk[, c('abc.pv', 'lysis.pv', 'lysis.beta', 'mda.pv', 'mda.beta') := pvb]
+    } else {
+        pvb <- data.table()
+    }
+
     object@mut.models <- data.frame(sites=nrow(pvb))
     object
 })
