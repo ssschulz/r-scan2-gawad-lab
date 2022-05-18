@@ -613,7 +613,7 @@ setMethod("compute.ab.estimates", "SCAN2", function(object, n.cores=1, quiet=FAL
     }
 
     # Chunks are sometimes empty
-    if (nrow(ab) > 0) {
+    if (is.null(ab) > 0) {
         object@gatk[, c('ab', 'gp.mu', 'gp.sd') := 
             list(1/(1+exp(-ab[,'gp.mu'])), ab[,'gp.mu'], ab[,'gp.sd'])]
     }
