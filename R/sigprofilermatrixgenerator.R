@@ -14,12 +14,8 @@ classify.muts <- function(df, genome.string, spectype='SNV',
             spectype, paste('"', recognized.spectypes, '"', collapse=', ')))
 
     require(SigProfilerMatrixGeneratorR)
-    #td <- paste0(tempdir())
-    #spmgd <- paste0(td, "/spmgr/")
     spmgd <- tempfile()  # For multithreaded workflows, it is CRITICAL that library(future)
                          # supply different random seeds to child processes.
-    #if (file.exists(spmgd) & auto.delete)
-        #unlink(spmgd, recursive=TRUE)
     if (file.exists(spmgd))
         stop(paste('temporary directory', spmgd, 'already exists'))
 
@@ -60,14 +56,9 @@ classify.muts <- function(df, genome.string, spectype='SNV',
     options(scipen=old.opt)
 
     # Prevent sigprofilermatrixgenerator's output from being printed
-    # XXX: should probably trycatch() here and print the output if an error
-    # is generated
-    #spmg.output <- capture.output(
-    #sink('/dev/null')
-        reticulate::py_capture_output(
-            mat <- SigProfilerMatrixGeneratorR::SigProfilerMatrixGeneratorR(sample.name, genome.string, spmgd, seqInfo=TRUE, plot=save.plot))
-    #sink()
-    #)
+    # XXX: should probably do some error handling here
+    reticulate::py_capture_output(
+        mat <- SigProfilerMatrixGeneratorR::SigProfilerMatrixGeneratorR(sample.name, genome.string, spmgd, seqInfo=TRUE, plot=save.plot))
 
     # Read in the types
     annot.files <- paste0(spmgd, '/output/vcf_files/', spectype, '/', c(1:22,'X','Y'), "_seqinfo.txt")
