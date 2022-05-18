@@ -882,7 +882,7 @@ setMethod("resample.training.data", "SCAN2", function(object, M=20, seed=0, mode
 })
 
 
-read.training.data <- function(path, region=NULL) {
+read.training.data <- function(path, region=NULL, quiet=FALSE) {
     col.classes <- c('character', 'integer', 'character', 'character', 'character', 'integer', 'integer', 'integer', 'character')
     hsnps <- read.tabix.data(path=path, region, quiet=quiet, colClasses=col.classes)
     data.table::setkey(hsnps, chr, pos, refnt, altnt)
@@ -894,7 +894,7 @@ setGeneric("add.training.data", function(object, path, quiet=FALSE)
         standardGeneric("add.training.data"))
 setMethod("add.training.data", "SCAN2", function(object, path, quiet=FALSE) {
     if (!quiet) cat('Importing hSNP training data from', path, '\n')
-    hsnps <- read.training.data(path, object@region)
+    hsnps <- read.training.data(path, object@region, quiet=quiet)
     if (!quiet) cat('Read', nrow(hsnps), 'hSNPs\n')
 
     if (!quiet) cat('Joining training data..\n')
