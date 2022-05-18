@@ -47,11 +47,11 @@ run.pipeline <- function(
             gt <- add.static.filter.params(gt)
 
             pc <- perfcheck(paste('read.gatk',i),
-                x1 <- read.gatk(gt, path=mmq60, quiet=!verbose))
+                x1 <- read.gatk(gt, path=mmq60, quiet=TRUE))
             p(class='sticky', amount=0, pc)
 
             pc <- perfcheck(paste('read.gatk.lowmq',i),
-                y1 <- read.gatk.lowmq(x1, path=mmq1, quiet=!verbose))
+                y1 <- read.gatk.lowmq(x1, path=mmq1, quiet=TRUE))
             p(class='sticky', amount=0, pc)
 
             pc <- perfcheck(paste('add.training.data',i),
