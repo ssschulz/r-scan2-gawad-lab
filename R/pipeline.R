@@ -80,11 +80,11 @@ run.pipeline <- function(
     })
 
     x <- do.call(concat, xs)
-    perfcheck('resample.training.data', x2 <- resample.training.data(x))
-    perfcheck('compute.excess.cigar.scores', x4 <- compute.excess.cigar.scores(x2))
-    perfcheck('compute.static.filters', x5 <- compute.static.filters(x4))
-    perfcheck('compute.fdr.priors', x6 <- compute.fdr.priors(x5))
-    perfcheck('compute.fdr', x7 <- compute.fdr(x6))
+    printfun(perfcheck('resample.training.data', x2 <- resample.training.data(x)))
+    printfun(perfcheck('compute.excess.cigar.scores', x4 <- compute.excess.cigar.scores(x2)))
+    printfun(perfcheck('compute.static.filters', x5 <- compute.static.filters(x4)))
+    printfun(perfcheck('compute.fdr.priors', x6 <- compute.fdr.priors(x5)))
+    printfun(perfcheck('compute.fdr', x7 <- compute.fdr(x6)))
 
     list(xs, x7)
 }
