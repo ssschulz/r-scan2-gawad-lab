@@ -78,6 +78,7 @@ run.pipeline <- function(
         }, future.seed=0)  # CRITICAL! library(future) ensures that each child process
                            # has a different random seed.
     })
+    cat("Chunked pipeline complete.\n")
 
     x <- do.call(concat, xs)
     printfun(perfcheck('resample.training.data', x2 <- resample.training.data(x)))

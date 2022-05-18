@@ -63,9 +63,10 @@ classify.muts <- function(df, genome.string, spectype='SNV',
     # XXX: should probably trycatch() here and print the output if an error
     # is generated
     #spmg.output <- capture.output(
-    sink('/dev/null')
-        mat <- SigProfilerMatrixGeneratorR(sample.name, genome.string, spmgd, seqInfo=TRUE, plot=save.plot)
-    sink()
+    #sink('/dev/null')
+        reticulate::py_capture_output(
+            mat <- SigProfilerMatrixGeneratorR::SigProfilerMatrixGeneratorR(sample.name, genome.string, spmgd, seqInfo=TRUE, plot=save.plot))
+    #sink()
     #)
 
     # Read in the types

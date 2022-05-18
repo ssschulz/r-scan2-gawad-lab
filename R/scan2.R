@@ -574,7 +574,7 @@ setMethod("compute.ab.estimates", "SCAN2", function(object, n.cores=1, quiet=FAL
         if (!quiet) cat('Importing extended hSNP training data from', path, 'using extended range\n')
         extended.range <- GRanges(seqnames=seqnames(object@region)[1],
             ranges=IRanges(start=start(object@region)-flank, end=end(object@region)+flank))
-        extended.training.hsnps <- read.training.data(path, extended.range)
+        extended.training.hsnps <- read.training.data(path, extended.range, quiet=quiet)
         if (!quiet)
             cat(sprintf("hSNP training sites: %d, extended training sites: %d\n",
                 nrow(object@gatk[training.site==TRUE]), nrow(extended.training.hsnps)))
@@ -904,7 +904,6 @@ setGeneric("add.training.data", function(object, path, quiet=FALSE)
 setMethod("add.training.data", "SCAN2", function(object, path, quiet=FALSE) {
     if (!quiet) cat('Importing hSNP training data from', path, '\n')
     hsnps <- read.training.data(path, object@region, quiet=quiet)
-    if (!quiet) cat('Read', nrow(hsnps), 'hSNPs\n')
 
     if (!quiet) cat('Joining training data..\n')
     object@gatk[hsnps, on=.(chr,pos,refnt,altnt), c('training.phgt', 'training.hap1', 'training.hap2', 'training.site') := list(i.phgt, i.hap1, i.hap2, TRUE)]
