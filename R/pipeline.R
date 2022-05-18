@@ -80,16 +80,11 @@ run.pipeline <- function(
     })
 
     x <- do.call(concat, xs)
-    printfun(system.time(x2 <- resample.training.data(x)))
-    printfun('After resample.training.data:\n') ; printfun(gc(reset=TRUE))
-    printfun(system.time(x4 <- compute.excess.cigar.scores(x2)))
-    printfun('After compute.excess.cigar.scores:\n') ; printfun(gc(reset=TRUE))
-    printfun(system.time(x5 <- compute.static.filters(x4)))
-    printfun('After compute.static.filters:\n') ; printfun(gc(reset=TRUE))
-    printfun(system.time(x6 <- compute.fdr.priors(x5)))
-    printfun('After compute.fdr.priors:\n') ; printfun(gc(reset=TRUE))
-    printfun(system.time(x7 <- compute.fdr(x6)))
-    printfun('After compute.fdr:\n') ; printfun(gc(reset=TRUE))
+    perfcheck('resample.training.data', x2 <- resample.training.data(x))
+    perfcheck('compute.excess.cigar.scores', x4 <- compute.excess.cigar.scores(x2))
+    perfcheck('compute.static.filters', x5 <- compute.static.filters(x4))
+    perfcheck('compute.fdr.priors', x6 <- compute.fdr.priors(x5))
+    perfcheck('compute.fdr', x7 <- compute.fdr(x6))
 
     list(xs, x7)
 }
