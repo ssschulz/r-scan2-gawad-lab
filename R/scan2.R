@@ -380,7 +380,7 @@ read.gatk.table.2sample <- function(path, sc.sample, bulk.sample, region, quiet=
     # sc.sample and bulk.sample to avoid reading the full matrix.
     tf <- Rsamtools::TabixFile(path)
     open(tf)
-    header <- sub('^#', '', Rsamtools::headerTabix(tf)$header) # strip the leading #
+    header <- read.tabix.header(tf)
     col.strings <- strsplit(header, '\t')[[1]]
     tot.cols <- length(col.strings)
     sc.idx <- which(col.strings == sc.sample)
@@ -406,11 +406,7 @@ read.gatk.table.2sample <- function(path, sc.sample, bulk.sample, region, quiet=
     # Read 3 columns for the single cell, 3 columns for bulk
     cols.to.read[sc.idx + 0:2] <- c('character', 'integer', 'integer')
     cols.to.read[bulk.idx + 0:2] <- c('character', 'integer', 'integer')
-    if (is.null(region))
-        gatk <- data.table::fread(text=c(header, Rsamtools::scanTabix(tf)[[1]]), colClasses=cols.to.read)
-    else
-        gatk <- data.table::fread(text=c(header, Rsamtools::scanTabix(tf, param=region)[[1]]), colClasses=cols.to.read)
-    if (!quiet) cat("Read", nrow(gatk), 'lines\n')
+    gatk <- read.tabix.data(tf=tf, region=region, header=header, quiet=quiet, colClasses=cols.to.read)
     close(tf)
     new.sc.idx <- which(colnames(gatk) == sc.sample)
     new.bulk.idx <- which(colnames(gatk) == bulk.sample)
@@ -754,20 +750,8 @@ compute.excess.cigar <- function(data, cigar.training) {
 
 read.cigar.data <- function(path, region, quiet=FALSE) {
     if (!quiet) cat('Importing CIGAR stats from', path, '\n')
-    tf <- Rsamtools::TabixFile(path)
-    open(tf)
-    header <- sub('^#', '', Rsamtools::headerTabix(tf)$header) # strip the leading #
     col.classes <- c('character', rep('integer', 6))
-    if (!is.null(region)) {
-        tab <- data.table::fread(text=c(header, Rsamtools::scanTabix(tf, param=region)[[1]]),
-            colClasses=col.classes)
-    } else {
-        tab <- data.table::fread(text=c(header, Rsamtools::scanTabix(tf)[[1]]),
-            colClasses=col.classes)
-    }
-    if (!quiet) cat("Read", nrow(tab), 'lines\n')
-    close(tf)
-    tab
+    read.tabix.data(path=path, region=region, quiet=quiet, colClasses=col.classes)
 }
 
         
@@ -899,21 +883,9 @@ setMethod("resample.training.data", "SCAN2", function(object, M=20, seed=0, mode
 
 
 read.training.data <- function(path, region=NULL) {
-    tf <- Rsamtools::TabixFile(path)
-    open(tf)
-    header <- sub('^#', '', Rsamtools::headerTabix(tf)$header) # strip the leading #
-    col.strings <- strsplit(header, '\t')[[1]]
-    # chr, pos, refnt, altnt, gt, hap1, hap2, dp, phgt
-    col.classes <- c('character', 'integer', 'character', 'character', 'character', 'integer', 'integer', 'integer', 'character')
-    if (is.null(region)) {
-        hsnps <- data.table::fread(text=c(header, Rsamtools::scanTabix(tf)[[1]]),
-            colClasses=col.classes)
-    } else {
-        hsnps <- data.table::fread(text=c(header, Rsamtools::scanTabix(tf, param=region)[[1]]),
-            colClasses=col.classes)
-    }
-    close(tf)
+    hsnps <- read.tabix.data(path=path, region, quiet=quiet, colClasses=col.classes)
     data.table::setkey(hsnps, chr, pos, refnt, altnt)
+    hsnps
 }
 
 

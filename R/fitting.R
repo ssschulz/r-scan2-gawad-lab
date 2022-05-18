@@ -37,32 +37,20 @@ abmodel.fit.one.chrom <- function(path, chrom, genome.object,
 }
 
 abmodel.read.hsnps <- function(path, chrom, genome.object) {
-    # Fitting will be per-chrom, so only read one in at a time. This saves a
-    # good deal of memory in some cases, e.g., crossbred mice with ~10-fold more
-    # SNPs than humans.
-    tf <- Rsamtools::TabixFile(path)
-    open(tf)
-
-    # Just for convenience. Allow "chroms=1:22" to work for autosomes
-    chrom <- as.character(chrom)
-
+    chrom <- as.character(chrom) # Convenience. Allow "chroms=1:22" to work for autosomes
     if (!(chrom %in% seqnames(genome.object))) {
         stop(paste0("invalid chromosome name '", chrom, "'\n"))
     }
 
+    # Fitting will be per-chrom, so only read one in at a time. This saves a
+    # good deal of memory in some cases, e.g., crossbred mice with ~10-fold more
+    # SNPs than humans.
     # GRanges interval that covers the whole chromosome
     region <- as(GenomeInfoDb::seqinfo(genome.object), 'GRanges')[chrom,]
 
-    # scanTabix doesn't return the header line
-    header <- sub('^#', '', Rsamtools::headerTabix(tf)$header) # strip the leading #
-    # A little more RAM efficiency: only read position, hap1 and depth columns
+    # More RAM efficiency: only read position, hap1 and depth columns
     cols.to.read <- c('NULL', 'integer', 'NULL', 'NULL', 'NULL', 'integer', 'NULL', 'integer', 'NULL')
-    hsnps <- data.table::fread(text=c(header, Rsamtools::scanTabix(tf, param=region)[[1]]),
-        colClasses=cols.to.read)
-
-    close(tf)
-
-    hsnps
+    read.tabix.data(path=path, region=region, colClasses=cols.to.read)
 }
 
 
