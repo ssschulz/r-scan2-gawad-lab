@@ -34,7 +34,7 @@ read.tabix.data <- function(path, region, tf,
     if (missing(tf))
         close(tf)
 
-    if (!quiet) cat("Read", nrow(gatk), 'lines\n')
+    if (!quiet) cat("Read", nrow(ret), 'lines\n')
 
     ret
 }
