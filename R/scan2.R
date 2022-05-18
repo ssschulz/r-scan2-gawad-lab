@@ -541,9 +541,6 @@ setMethod("compute.ab.fits", "SCAN2", function(object, path, chroms=1:22,
         n.logp.samples.per.chunk=samples.per.chunk), chroms)
 
     chrom.refine.records
-
-    #object@ab.fits <- do.call(rbind, fitlist)
-    #object
 })
 
 
@@ -612,10 +609,14 @@ setMethod("compute.ab.estimates", "SCAN2", function(object, n.cores=1, quiet=FAL
         }))
     }
 
-    # Chunks are sometimes empty
-    if (!is.null(ab)) {
+    if (is.null(ab)) {
         object@gatk[, c('ab', 'gp.mu', 'gp.sd') := 
             list(1/(1+exp(-ab[,'gp.mu'])), ab[,'gp.mu'], ab[,'gp.sd'])]
+    } else {
+        # Chunks are sometimes empty
+        # Add dummy columns so rbind() works with other non-empty chunks
+        object@gatk[, c('ab', 'gp.mu', 'gp.sd') := 
+            list(numeric(0), numeric(0), numeric(0))]
     }
     object@ab.estimates <- data.frame(sites=nrow(ab))
     object
@@ -631,11 +632,11 @@ setMethod("compute.models", "SCAN2", function(object) {
         matched.gp.mu <- match.ab(af=object@gatk$af, gp.mu=object@gatk$gp.mu)
         pvb <- compute.pvs.and.betas(object@gatk$scalt, object@gatk$dp,
                                     matched.gp.mu, object@gatk$gp.sd)
-        object@gatk[, c('abc.pv', 'lysis.pv', 'lysis.beta', 'mda.pv', 'mda.beta') := pvb]
     } else {
-        pvb <- data.table()
+        pvb <- data.table(abc.pv=numeric(0), lysis.pv=numeric(0), lysis.beta=numeric(0), mda.pv=numeric(0), mda.beta=numeric(0))
     }
 
+    object@gatk[, c('abc.pv', 'lysis.pv', 'lysis.beta', 'mda.pv', 'mda.beta') := pvb]
     object@mut.models <- data.frame(sites=nrow(pvb))
     object
 })
