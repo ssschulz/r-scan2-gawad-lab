@@ -883,6 +883,7 @@ setMethod("resample.training.data", "SCAN2", function(object, M=20, seed=0, mode
 
 
 read.training.data <- function(path, region=NULL) {
+    col.classes <- c('character', 'integer', 'character', 'character', 'character', 'integer', 'integer', 'integer', 'character')
     hsnps <- read.tabix.data(path=path, region, quiet=quiet, colClasses=col.classes)
     data.table::setkey(hsnps, chr, pos, refnt, altnt)
     hsnps
