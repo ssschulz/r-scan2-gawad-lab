@@ -612,13 +612,14 @@ setMethod("compute.ab.estimates", "SCAN2", function(object, n.cores=1, quiet=FAL
     if (!is.null(ab)) {
         object@gatk[, c('ab', 'gp.mu', 'gp.sd') := 
             list(1/(1+exp(-ab[,'gp.mu'])), ab[,'gp.mu'], ab[,'gp.sd'])]
+        object@ab.estimates <- data.frame(sites=nrow(ab))
     } else {
         # Chunks are sometimes empty
         # Add dummy columns so rbind() works with other non-empty chunks
         object@gatk[, c('ab', 'gp.mu', 'gp.sd') := 
             list(numeric(0), numeric(0), numeric(0))]
+        object@ab.estimates <- data.frame(sites=0)
     }
-    object@ab.estimates <- data.frame(sites=nrow(ab))
     object
 })
 
