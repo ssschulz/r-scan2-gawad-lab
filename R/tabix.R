@@ -6,7 +6,7 @@ read.tabix.header <- function(tf) {
 # Returns a data.table
 # region can only be a GRanges object with a single interval for the moment
 # (we just don't have any other use cases currently).
-read.tabix.data <- function(path, region, tf,
+read.tabix.data <- function(path, tf, region=NULL,
     header=read.tabix.header(tf), quiet=TRUE, ...)
 {
     if ((missing(tf) & missing(path)) |(!missing(tf) & !missing(path)))
@@ -15,6 +15,7 @@ read.tabix.data <- function(path, region, tf,
     if (missing(tf)) {
         tf <- Rsamtools::TabixFile(path)
         open(tf)
+        header <- read.tabix.header(tf)  # because tf didn't exist
     }
 
     if (is.null(region))
