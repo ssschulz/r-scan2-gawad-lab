@@ -23,7 +23,7 @@ testpipe <- function(test.data=c('legacy_tiny', 'legacy_chr22', 'legacy_custom')
 
     if (test.data == 'legacy_tiny') {
         grs <- GRanges(seqnames=22, ranges=IRanges(start=c(30e6, 31e6),
-            end=c(30999999, 30999999)))
+            end=c(30999999, 31999999)))
     } else if (test.data == 'legacy_chr22') {
         grs <- GRanges(seqnames=22, ranges=IRanges(start=1e6*(16:49),
                 end=1e6*(16:49 + 1) - 1))
@@ -60,7 +60,7 @@ test.output <- function(pipeline.output, custom, test.data=c('legacy_tiny', 'leg
     check.length <- function(a, b, msg) {
         ret <- length(a) != length(b)
         if (ret)
-            cat(paste('FAILED lengths (a=%d, b=%d): %s', length(a), length(b), msg))
+            cat(sprintf('FAILED lengths (a=%d, b=%d): %s', length(a), length(b), msg))
         return(ret)
     }
 
