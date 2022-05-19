@@ -752,7 +752,7 @@ cigar.emp.score <- function (training, test, which = c("id", "hs")) {
         p(amount=0)
         dp <- test$dp.cigars
         bulkdp <- test$dp.cigars.bulk
-        ret <- future.apply::future_sapply(function(i) {
+        ret <- future.apply::future_sapply(1:length(x), function(i) {
             if (i %% 100 == 0) p()
             ifelse(dp[i] == 0 | bulkdp[i] == 0, 0,
                 mean(xt >= x[i] & yt >= y[i], na.rm = T))
