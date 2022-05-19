@@ -75,22 +75,26 @@ mut.model.tables <- function(dp, gp.mu, gp.sd) {
 # Since these distributions are not unimodal, we define "more
 # significant" as any event with lower probability.
 compute.pvs.and.betas <- function(altreads, dp, gp.mu, gp.sd) {
-    pab <- pbapply::pbmapply(function(altreads, dp, gp.mu, gp.sd) {
-        # Step1: compute dreads for all relevant models:
-        # These dreads() calls are the most expensive part of genotyping
-        tb <- mut.model.tables(dp, gp.mu, gp.sd)
+    progressr::with_progress({
+        p <- progressr::progressor(along=1:(length(dp)/100))
+        pab <- mapply(function(altreads, dp, gp.mu, gp.sd, idx) {
+            # Step1: compute dreads for all relevant models:
+            # These dreads() calls are the most expensive part of genotyping
+            tb <- mut.model.tables(dp, gp.mu, gp.sd)
 
-        # Step 2: compute model p-values (=alpha) and power to
-        # differentiate artifacts from true mutations (=beta) for the
-        # two artifact models.
-        abc.pv <- sum(tb$mut[tb$mut <= tb$mut[altreads + 1]])
-        lysis.pv <- sum(tb$pre[tb$pre <= tb$pre[altreads + 1]])
-        lysis.beta <- sum(tb$mut[tb$pre <= tb$pre[altreads + 1]])
-        mda.pv <- sum(tb$mda[tb$mda <= tb$mda[altreads + 1]])
-        mda.beta <- sum(tb$mut[tb$mda <= tb$mda[altreads + 1]])
+            # Step 2: compute model p-values (=alpha) and power to
+            # differentiate artifacts from true mutations (=beta) for the
+            # two artifact models.
+            abc.pv <- sum(tb$mut[tb$mut <= tb$mut[altreads + 1]])
+            lysis.pv <- sum(tb$pre[tb$pre <= tb$pre[altreads + 1]])
+            lysis.beta <- sum(tb$mut[tb$pre <= tb$pre[altreads + 1]])
+            mda.pv <- sum(tb$mda[tb$mda <= tb$mda[altreads + 1]])
+            mda.beta <- sum(tb$mut[tb$mda <= tb$mda[altreads + 1]])
 
-        c(abc.pv, lysis.pv, lysis.beta, mda.pv, mda.beta)
-    }, altreads, dp, gp.mu, gp.sd)
+            if (idx %% 100 == 1) p()
+            c(abc.pv, lysis.pv, lysis.beta, mda.pv, mda.beta)
+        }, altreads, dp, gp.mu, gp.sd, 1:length(dp))
+    })
 
     rownames(pab) <- c('abc.pv', 'lysis.pv', 'lysis.beta', 'mda.pv', 'mda.beta')
 
@@ -198,7 +202,6 @@ estimate.fdr.priors <- function(candidates, hsnps, bins=20, random.seed=0)
     max.dp <- as.integer(quantile(hsnps$dp, prob=0.8))
     progressr::with_progress({
         p <- progressr::progressor(along=0:(max.dp+1))
-        #fcs <- lapply(0:max.dp, function(thisdp)
         fcs <- future.apply::future_lapply(0:max.dp, function(thisdp) {
             ret <- fcontrol(germ.df=hsnps[dp == thisdp],
                     som.df=candidates[dp == thisdp],
@@ -232,7 +235,6 @@ estimate.fdr.priors <- function(candidates, hsnps, bins=20, random.seed=0)
     progressr::with_progress({
         dp <- candidates$dp
         p <- progressr::progressor(along=1:(length(dp)/100))
-        #nt.na <- pbapply::pbmapply(function(dp, popbin) {
         nt.na <- future.apply::future_sapply(1:length(dp), function(i) {
             if (i %% 100 == 0) p()
             idx = min(dp[i], max.dp+1) + 1
@@ -240,7 +242,6 @@ estimate.fdr.priors <- function(candidates, hsnps, bins=20, random.seed=0)
                 c(0.1, 0.1)
             else
                 fcs[[idx]]$pops$max[popbin[i],]
-        #}, candidates$dp, popbin)
         })
     })
 
@@ -267,25 +268,29 @@ min.fdr <- function(pv, alphas, betas, nt, na) {
 # Unlike the real legacy code, the alphas and betas corresponding to
 # the minimum FDR are not reported.
 compute.fdr.legacy <- function(altreads, dp, gp.mu, gp.sd, nt, na, verbose=TRUE) {
-    fdrs <- pbapply::pbmapply(function(altreads, dp, gp.mu, gp.sd, nt, na) {
-        # Step1: compute dreads for all relevant models:
-        # These dreads() calls are the most expensive part of genotyping
-        tb <- mut.model.tables(dp, gp.mu, gp.sd)
+    progressr::with_progress({
+        p <- progressr::progress(along=1:(length(dp)/100))
+        fdrs <- future::future_mapply(function(altreads, dp, gp.mu, gp.sd, nt, na, idx) {
+            # Step1: compute dreads for all relevant models:
+            # These dreads() calls are the most expensive part of genotyping
+            tb <- mut.model.tables(dp, gp.mu, gp.sd)
     
-        # compute BEFORE sorting, so that altreads+1 is the corret row
-        lysis.pv <- sum(tb$pre[tb$pre <= tb$pre[altreads + 1]])
-        mda.pv <- sum(tb$mda[tb$mda <= tb$mda[altreads + 1]])
+            # compute BEFORE sorting, so that altreads+1 is the corret row
+            lysis.pv <- sum(tb$pre[tb$pre <= tb$pre[altreads + 1]])
+            mda.pv <- sum(tb$mda[tb$mda <= tb$mda[altreads + 1]])
 
-        tb <- tb[order(tb$pre),]
-        lysis.fdr <- min.fdr(pv=lysis.pv,
-            alphas=cumsum(tb$pre), betas=cumsum(tb$mut), nt=nt, na=na)
+            tb <- tb[order(tb$pre),]
+            lysis.fdr <- min.fdr(pv=lysis.pv,
+                alphas=cumsum(tb$pre), betas=cumsum(tb$mut), nt=nt, na=na)
         
-        tb <- tb[order(tb$mda),]
-        mda.fdr <- min.fdr(pv=mda.pv,
-            alphas=cumsum(tb$mda), betas=cumsum(tb$mut), nt=nt, na=na)
+            tb <- tb[order(tb$mda),]
+            mda.fdr <- min.fdr(pv=mda.pv,
+                alphas=cumsum(tb$mda), betas=cumsum(tb$mut), nt=nt, na=na)
 
-        c(lysis.fdr=lysis.fdr, mda.fdr=mda.fdr)
-    }, altreads, dp, gp.mu, gp.sd, nt, na)
+            if (idx %% 100 == 1) p(amount=1)
+            c(lysis.fdr=lysis.fdr, mda.fdr=mda.fdr)
+        }, altreads, dp, gp.mu, gp.sd, nt, na, 1:length(dp))
+    })
 
     data.frame(lysis.fdr=fdrs[1,], mda.fdr=fdrs[2,])
 }

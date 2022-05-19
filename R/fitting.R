@@ -354,20 +354,21 @@ infer.gp1 <- function(ssnvs, fit, hsnps, flank=1e5, max.hsnps=150,
     })
 
 
-    if (verbose)
-        applyfun <- pbapply::pbsapply
-    else
-        applyfun <- sapply
-    ctx <- abmodel.approx.ctx(c(), c(), c(), hsnp.chunksize=2*max.hsnps + 10)
-    ret <- applyfun(1:nrow(ssnvs), function(i) {
-        h <- hsnps
-        if (ssnv.is.hsnp[i])
-            # ssnv i is hsnp hsnp.map[i], so remove it from the training set
-            h <- hsnps[-hsnp.map[i],]
-        # returns (gp.mu, gp.sd) when chunk=1
-        ret <- infer.gp.block(ssnvs[i,,drop=FALSE], fit, h,
-            ctx=ctx, flank=flank, max.hsnps=max.hsnps, verbose=FALSE)
-        c(gp.mu=ret$gp.mu, gp.sd=ret$gp.sd)
+    progressr::with_progress({
+        if (verbose)
+            p <- progressr::progressor(along=1:nrow(ssnvs))
+        ctx <- abmodel.approx.ctx(c(), c(), c(), hsnp.chunksize=2*max.hsnps + 10)
+        ret <- sapply(1:nrow(ssnvs), function(i) {
+            h <- hsnps
+            if (ssnv.is.hsnp[i])
+                # ssnv i is hsnp hsnp.map[i], so remove it from the training set
+                h <- hsnps[-hsnp.map[i],]
+            # returns (gp.mu, gp.sd) when chunk=1
+            ret <- infer.gp.block(ssnvs[i,,drop=FALSE], fit, h,
+                    ctx=ctx, flank=flank, max.hsnps=max.hsnps, verbose=FALSE)
+            if (verbose) p()
+            c(gp.mu=ret$gp.mu, gp.sd=ret$gp.sd)
+        })
     })
     t(ret)
 }
