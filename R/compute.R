@@ -231,9 +231,9 @@ estimate.fdr.priors <- function(candidates, hsnps, bins=20, random.seed=0)
 
     progressr::with_progress({
         dp <- candidates$dp
-        p <- progressr::progressor(along=1:(dp/100))
+        p <- progressr::progressor(along=1:(length(dp)/100))
         #nt.na <- pbapply::pbmapply(function(dp, popbin) {
-        nt.na <- future.apply::future_sapply(function(i) {
+        nt.na <- future.apply::future_sapply(1:length(dp), function(i) {
             if (i %% 100 == 0) p()
             idx = min(dp[i], max.dp+1) + 1
             if (is.null(fcs[[idx]]$pops))
