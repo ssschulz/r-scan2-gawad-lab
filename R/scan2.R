@@ -96,9 +96,14 @@ setValidity("SCAN2", function(object) {
     if (!is.null(object@region)) {
         if (!is(object@region, 'GRanges')) 
             stop('"region" must be a GRanges object')
-        if (length(object@region) != 1) {
-            stop('"region" must contain exactly 1 range')
-        }
+        # This isn't possible if we're to combine chunks for the final
+        # pipeline steps. Need a check that allows either single region
+        # GRanges or the expected full autosome set.
+        #
+        # Disabling for now, but this isn't safe in general.
+        #if (length(object@region) != 1) {
+           #stop('"region" must contain exactly 1 range')
+        #}
     }
 
     if (!is.null(object@gatk)) {
@@ -187,8 +192,13 @@ check.slots <- function(object, slots, abort=TRUE) {
 setMethod("show", "SCAN2", function(object) {
     cat("#", is(object)[[1]], "\n")
     if (!is.null(object@region)) {
-        cat("#   Region:\n")
-        print(object@region)
+        cat("#   Region:")
+        if (length(object@region) > 1) {
+            cat("\n")
+            print(object@region)
+        } else {
+            cat('',length(object@region),'intervals\n')
+        }
     }
     cat("#   Genome:", object@genome.string, "\n")
     cat("#   Single cell ID:", object@single.cell, "\n")
