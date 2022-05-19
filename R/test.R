@@ -22,11 +22,11 @@ testpipe <- function(test.data=c('legacy_tiny', 'legacy_chr22', 'legacy_custom')
     bulkcigars <- fpath('bulk_somatic_and_hsnp_spikein_cigars.tab.bgz')
 
     if (test.data == 'legacy_tiny') {
-        grs <- list(GRanges(seqnames=22, ranges=IRanges(start=30e6, end=30999999)),
-                    GRanges(seqnames=22, ranges=IRanges(start=31e6, end=31999999)))
+        grs <- GRanges(seqnames=22, ranges=IRanges(start=c(30e6, 31e6),
+            end=c(30999999, 30999999)))
     } else if (test.data == 'legacy_chr22') {
-        grs <- lapply(16:49, function(start)
-            GRanges(seqnames=22, ranges=IRanges(start=start*1e6, (start+1)*1e6-1)))
+        grs <- GRanges(seqnames=22, ranges=IRanges(start=1e6*(16:49),
+                end=1e6*(16:49 + 1) - 1))
     } else if (test.data == 'legacy_custom') {
         grs <- custom$grs
     }
