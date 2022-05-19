@@ -769,10 +769,15 @@ compute.cigar.scores <- function(cigar.data) {
 
 # modifies 'data' by reference
 compute.excess.cigar <- function(data, cigar.training) {
-    cat("excess indel (I/D) ops..\n")
-    data[, c('id.score', 'hs.score') := list(
-        cigar.emp.score(training=cigar.training, test=data, which='id'),
-        cigar.emp.score(training=cigar.training, test=data, which='hs'))]
+    perfcheck("excess indel (I/D) ops",
+        idopscores <- cigar.emp.score(training=cigar.training, test=data, which='id'))
+    perfcheck("excess clipping (H/S) ops",
+        hsopscores <- cigar.emp.score(training=cigar.training, test=data, which='hs'))
+
+    cat('storing in data..\n')
+    data[, c('id.score', 'hs.score') := list(idopscores, hsopscores)]
+        #cigar.emp.score(training=cigar.training, test=data, which='id'),
+        #cigar.emp.score(training=cigar.training, test=data, which='hs'))]
 }
 
 
