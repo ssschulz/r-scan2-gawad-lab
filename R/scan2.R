@@ -748,7 +748,7 @@ cigar.emp.score <- function (training, test, which = c("id", "hs")) {
             #mean(xt >= xi & yt >= yi, na.rm = T)),
         #x, y, test$dp.cigars.bulk, test$dp.cigars)
     progressr::with_progress({
-        p <- progressr::progressor(along=(1:length(x))/100)
+        p <- progressr::progressor(along=(1:length(x)/100))
         p(amount=0)
         dp <- test$dp.cigars
         bulkdp <- test$dp.cigars.bulk
