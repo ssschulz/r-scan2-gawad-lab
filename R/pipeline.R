@@ -75,7 +75,7 @@ run.pipeline <- function(
             p(class='sticky', amount=0, pc)
 
             pc <- perfcheck(paste('compute.models',i),
-                s1 <- compute.models(r1))
+                s1 <- compute.models(r1, verbose=verbose))
             p(class='sticky', amount=0, pc)
             p()
             s1
