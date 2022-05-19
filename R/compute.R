@@ -74,7 +74,7 @@ mut.model.tables <- function(dp, gp.mu, gp.sd) {
 # N.B.:
 # Since these distributions are not unimodal, we define "more
 # significant" as any event with lower probability.
-compute.pvs.and.betas <- function(altreads, dp, gp.mu, gp.sd) {
+compute.pvs.and.betas <- function(altreads, dp, gp.mu, gp.sd, verbose=TRUE) {
     progressr::with_progress({
         p <- progressr::progressor(along=1:(length(dp)/100))
         pab <- mapply(function(altreads, dp, gp.mu, gp.sd, idx) {
@@ -94,7 +94,7 @@ compute.pvs.and.betas <- function(altreads, dp, gp.mu, gp.sd) {
             if (idx %% 100 == 1) p()
             c(abc.pv, lysis.pv, lysis.beta, mda.pv, mda.beta)
         }, altreads, dp, gp.mu, gp.sd, 1:length(dp))
-    })
+    }, enable=verbose)
 
     rownames(pab) <- c('abc.pv', 'lysis.pv', 'lysis.beta', 'mda.pv', 'mda.beta')
 
