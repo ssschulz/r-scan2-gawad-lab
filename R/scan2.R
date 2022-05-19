@@ -634,15 +634,15 @@ setMethod("compute.ab.estimates", "SCAN2", function(object, n.cores=1, quiet=FAL
 })
 
 
-setGeneric("compute.models", function(object)
+setGeneric("compute.models", function(object, verbose=TRUE)
     standardGeneric("compute.models"))
-setMethod("compute.models", "SCAN2", function(object) {
+setMethod("compute.models", "SCAN2", function(object, verbose=TRUE) {
     check.slots(object, c('gatk', 'ab.estimates'))
 
     if (nrow(object@gatk) > 0) {
         matched.gp.mu <- match.ab(af=object@gatk$af, gp.mu=object@gatk$gp.mu)
         pvb <- compute.pvs.and.betas(object@gatk$scalt, object@gatk$dp,
-                                    matched.gp.mu, object@gatk$gp.sd)
+                                    matched.gp.mu, object@gatk$gp.sd, verbose=verbose)
     } else {
         pvb <- data.table(abc.pv=numeric(0), lysis.pv=numeric(0), lysis.beta=numeric(0), mda.pv=numeric(0), mda.beta=numeric(0))
     }
@@ -743,11 +743,11 @@ cigar.emp.score <- function (training, test, which = c("id", "hs")) {
     x <- test[[paste0(which, ".score.x")]]
     y <- test[[paste0(which, ".score.y")]]
 
+    dp <- test$dp.cigars
+    bulkdp <- test$dp.cigars.bulk
+
     progressr::with_progress({
         p <- progressr::progressor(along=1:(length(x)/100))
-        p(amount=0)
-        dp <- test$dp.cigars
-        bulkdp <- test$dp.cigars.bulk
         ret <- future.apply::future_sapply(1:length(x), function(i) {
             if (i %% 100 == 1) p()
             ifelse(dp[i] == 0 | bulkdp[i] == 0, 0,
