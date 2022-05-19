@@ -355,8 +355,7 @@ infer.gp1 <- function(ssnvs, fit, hsnps, flank=1e5, max.hsnps=150,
 
 
     progressr::with_progress({
-        if (verbose)
-            p <- progressr::progressor(along=1:(nrow(ssnvs)/100))
+        p <- progressr::progressor(along=1:(nrow(ssnvs)/100))
         ctx <- abmodel.approx.ctx(c(), c(), c(), hsnp.chunksize=2*max.hsnps + 10)
         ret <- sapply(1:nrow(ssnvs), function(i) {
             h <- hsnps
@@ -366,9 +365,9 @@ infer.gp1 <- function(ssnvs, fit, hsnps, flank=1e5, max.hsnps=150,
             # returns (gp.mu, gp.sd) when chunk=1
             ret <- infer.gp.block(ssnvs[i,,drop=FALSE], fit, h,
                     ctx=ctx, flank=flank, max.hsnps=max.hsnps, verbose=FALSE)
-            if (verbose & i %% 100 == 1) p()
+            if (i %% 100 == 1) p()
             c(gp.mu=ret$gp.mu, gp.sd=ret$gp.sd)
         })
-    })
+    }, enable=verbose)
     t(ret)
 }
