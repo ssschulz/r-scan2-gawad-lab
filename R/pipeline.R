@@ -85,7 +85,7 @@ run.pipeline <- function(
     cat(perfcheck('compute.excess.cigar.scores', x4 <- compute.excess.cigar.scores(x2)))
     cat(perfcheck('compute.static.filters', x5 <- compute.static.filters(x4)))
     cat(perfcheck('compute.fdr.priors', x6 <- compute.fdr.priors(x5)))
-    cat(perfcheck('compute.fdr', x7 <- compute.fdr(x6)))
+    cat(perfcheck('compute.fdr', x7 <- compute.fdr(x6, mode='notlegacy')))
 
     list(xs, x7)
 }

@@ -196,14 +196,20 @@ estimate.fdr.priors <- function(candidates, hsnps, bins=20, random.seed=0)
     # split candidates by depth; collapse all depths beyond the 80th
     # percentile into one bin
     max.dp <- as.integer(quantile(hsnps$dp, prob=0.8))
-    fcs <- lapply(0:max.dp, function(thisdp)
-        fcontrol(germ.df=hsnps[dp == thisdp],
-                som.df=candidates[dp == thisdp],
-                bins=bins)
-    )
-    fc.max <- fcontrol(germ.df=hsnps[dp > max.dp],
-                som.df=candidates[dp > max.dp],
-                bins=bins)
+    progressr::with_progress({
+        p <- progressr::progressor(along=0:(max.dp+1))
+        #fcs <- lapply(0:max.dp, function(thisdp)
+        fcs <- future.apply::future_lapply(0:max.dp, function(thisdp) {
+            fcontrol(germ.df=hsnps[dp == thisdp],
+                    som.df=candidates[dp == thisdp],
+                    bins=bins)
+            p()
+        }, future.seed=0)
+        fc.max <- fcontrol(germ.df=hsnps[dp > max.dp],
+                    som.df=candidates[dp > max.dp],
+                    bins=bins)
+        p()
+    })
     fcs <- c(fcs, list(fc.max))
 
     cat(sprintf("        profiled hSNP and candidate VAFs at depths %d .. %d\n",
@@ -222,13 +228,20 @@ estimate.fdr.priors <- function(candidates, hsnps, bins=20, random.seed=0)
     popbin <- ceiling(candidates$af * bins)
     popbin[candidates$dp == 0 | popbin == 0] <- 1
 
-    nt.na <- pbapply::pbmapply(function(dp, popbin) {
-        idx = min(dp, max.dp+1) + 1
-        if (is.null(fcs[[idx]]$pops))
-            c(0.1, 0.1)
-        else
-            fcs[[idx]]$pops$max[popbin,]
-    }, candidates$dp, popbin)
+    progressr::with_progress({
+        dp <- candidates$dp
+        p <- progressr::progressor(along=1:(dp/100))
+        #nt.na <- pbapply::pbmapply(function(dp, popbin) {
+        nt.na <- future.apply::future_sapply(function(i) {
+            if (i %% 100 == 0) p()
+            idx = min(dp[i], max.dp+1) + 1
+            if (is.null(fcs[[idx]]$pops))
+                c(0.1, 0.1)
+            else
+                fcs[[idx]]$pops$max[popbin[i],]
+        #}, candidates$dp, popbin)
+        })
+    })
 
     list(fcs=fcs, burden=burden, nt=nt.na[1,], na=nt.na[2,])
 }
