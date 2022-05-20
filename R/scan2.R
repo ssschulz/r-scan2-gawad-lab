@@ -785,8 +785,6 @@ compute.excess.cigar <- function(data, cigar.training) {
 
     cat('storing in data..\n')
     data[, c('id.score', 'hs.score') := list(idopscores, hsopscores)]
-        #cigar.emp.score(training=cigar.training, test=data, which='id'),
-        #cigar.emp.score(training=cigar.training, test=data, which='hs'))]
 }
 
 
@@ -821,25 +819,37 @@ setMethod("add.cigar.data", "SCAN2", function(object, sc.cigars.path, bulk.cigar
 })
 
 
-setGeneric("compute.excess.cigar.scores", function(object, legacy=TRUE)
-    standardGeneric("compute.excess.cigar.scores"))
-setMethod("compute.excess.cigar.scores", "SCAN2", function(object, legacy=TRUE) {
-    check.chunked(object,
-        'excess cigar scores should be computed on full chr1-chr22 data, not chunked data')
+cigar.get.null.sites <- function(object, path, legacy=TRUE, quiet=FALSE) {
+    if (missing(path)) {
+        check.chunked(object,
+            'excess cigar scores should be computed on full chr1-chr22 data, not chunked data')
 
-    if (legacy) {
-        check.slots(object, c('gatk', 'training.data', 'cigar.data', 'resampled.training.data'))
-        null.sites <- object@gatk[resampled.training.site==TRUE]
-        cat(sprintf('LEGACY: computing CIGAR op rates only at resampled training sites (n=%d)..\n',
-            nrow(null.sites)))
+        if (legacy) {
+            check.slots(object, c('gatk', 'training.data', 'cigar.data', 'resampled.training.data'))
+            null.sites <- object@gatk[resampled.training.site==TRUE]
+            if (!quiet) cat(sprintf('LEGACY: computing CIGAR op rates only at resampled training sites (n=%d)..\n',
+                nrow(null.sites)))
+        } else {
+            check.slots(object, c('gatk', 'training.data', 'cigar.data'))
+            null.sites <- object@gatk[training.site==TRUE]
+            if (!quiet) {
+                cat(sprintf('computing CIGAR op rates for all training sites (n=%d)..\n',
+                    nrow(null.sites)))
+                cat('WARNING: using the full set of hSNPs may be prohibitively slow\n')
+            }
+        }
     } else {
-        check.slots(object, c('gatk', 'training.data', 'cigar.data'))
-        null.sites <- object@gatk[training.site==TRUE]
-        cat(sprintf('computing CIGAR op rates for all training sites (n=%d)..\n',
-            nrow(null.sites)))
-        cat('WARNING: using the full set of hSNPs may be prohibitively slow\n')
+        null.sites <- data.table::fread(path)
     }
 
+    null.sites
+}
+
+
+setGeneric("compute.excess.cigar.scores", function(object, path, legacy=TRUE, quiet=FALSE)
+    standardGeneric("compute.excess.cigar.scores"))
+setMethod("compute.excess.cigar.scores", "SCAN2", function(object, path, legacy=TRUE, quiet=FALSE) {
+    null.sites <- cigar.get.null.sites(object, path, legacy, quiet)
     compute.excess.cigar(data=object@gatk, cigar.training=null.sites)
     object@excess.cigar.scores <- data.frame(training.sites=nrow(null.sites), legacy=legacy)
     object
@@ -956,7 +966,8 @@ setMethod("add.training.data", "SCAN2", function(object, path, quiet=FALSE) {
 
     if (!quiet) cat('Joining training data..\n')
     if (resampled) {
-        object@gatk[hsnps, on=.(chr,pos,refnt,altnt), c('training.phgt', 'training.hap1', 'training.hap2', 'training.site', 'training.resampled.site') := list(i.phgt, i.hap1, i.hap2, TRUE, i.resampled)]
+        object@gatk[hsnps, on=.(chr,pos,refnt,altnt), c('training.phgt', 'training.hap1', 'training.hap2', 'training.site', 'resampled.training.site') := list(i.phgt, i.hap1, i.hap2, TRUE, i.resampled)]
+        object@resampled.training.data <- list(sites=nrow(object@gatk[resampled.training.site == TRUE]))
     } else {
         object@gatk[hsnps, on=.(chr,pos,refnt,altnt), c('training.phgt', 'training.hap1', 'training.hap2', 'training.site') := list(i.phgt, i.hap1, i.hap2, TRUE)]
     }
