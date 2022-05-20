@@ -859,7 +859,7 @@ function(object, config.path,
         yaml <- yaml::read_yaml(config.path)
         min.sc.alt <- yaml$min_sc_alt
         min.sc.dp <- yaml$min_sc_dp
-        min.bulk.alt <- yaml$min_bulk_alt
+        max.bulk.alt <- yaml$max_bulk_alt
         min.bulk.dp <- yaml$min_bulk_dp
         # exclude.dbsnp, cg.id.q and cg.hs.q are not user configurable at the moment
     }
@@ -951,7 +951,7 @@ setMethod("add.training.data", "SCAN2", function(object, path, quiet=FALSE) {
     resampled <- FALSE
     if (!('resampled.training.site' %in% colnames(hsnps))) {
         resampled <- TRUE
-        warn('column "resampled.training.site" not in training data. Be sure to use scripts/process_hsnps.R to prepare training data for SCAN2 calling')
+        warning('column "resampled.training.site" not in training data. Be sure to use scripts/process_hsnps.R to prepare training data for SCAN2 calling')
     }
 
     if (!quiet) cat('Joining training data..\n')
