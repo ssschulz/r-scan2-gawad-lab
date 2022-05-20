@@ -23,9 +23,14 @@ run.pipeline <- function(
     hsnps,
     abfits,
     sccigars, bulkcigars,
-    genome, grs=tileGenome(seqlengths=seqinfo(genome.string.to.bsgenome.object(genome))[as.character(1:22)], tilewidth=10e6, cut.last.tile.in.chrom=TRUE),
+    genome,
+    tmpsave.rda,
+    grs=tileGenome(seqlengths=seqinfo(genome.string.to.bsgenome.object(genome))[as.character(1:22)], tilewidth=10e6, cut.last.tile.in.chrom=TRUE),
     verbose=TRUE)
 {
+    if (file.exists(tmpsave.rda))
+        stop('temporary save file tmpsave.rda already exists, please delete it first')
+
     cat('Starting chunked SCAN2 pipeline on', length(grs), 'chunks\n')
     cat('Setting OpenBLAS corecount to 1. This prevents multithreaded matrix multiplication in chunks where it is undesired.\n')
     RhpcBLASctl::blas_set_num_threads(1)
@@ -87,6 +92,7 @@ run.pipeline <- function(
     x <- do.call(concat, xs)
     cat("Merged SCAN2 object after chunked pipeline:\n")
     print(x)
+    save(x, file=tmpsave.rda)
 
     cat(perfcheck('resample.training.data', x2 <- resample.training.data(x)), '\n')
     cat(perfcheck('compute.excess.cigar.scores', x4 <- compute.excess.cigar.scores(x2)), '\n')
