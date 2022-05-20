@@ -750,6 +750,11 @@ cigar.emp.score <- function (training, test, which = c("id", "hs")) {
 
     progressr::with_progress({
         p <- progressr::progressor(along=1:(length(x)/100))
+        ret <- future.apply::future_mapply(function(dp, bulkdp, x, y, i) {
+            if (i %% 100 == 1) p()
+            ifelse(dp == 0 | bulkdp == 0, 0,
+                mean(xt >= x & yt >= y, na.rm = T))
+        }, test$dp.cigars, test$dp.cigars.bulk, x, y, 1:length(x))
         ret <- future.apply::future_sapply(1:length(x), function(i) {
             if (i %% 100 == 1) p()
             ifelse(dp[i] == 0 | bulkdp[i] == 0, 0,
