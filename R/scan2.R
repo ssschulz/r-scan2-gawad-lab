@@ -431,9 +431,9 @@ read.gatk.table.2sample <- function(path, sc.sample, bulk.sample, region, quiet=
 }
 
 
-setGeneric("read.gatk", function(object, path, quiet=FALSE)
+setGeneric("read.gatk", function(object, path, quiet=FALSE, add.mutsig=TRUE)
     standardGeneric("read.gatk"))
-setMethod("read.gatk", "SCAN2", function(object, path, quiet=FALSE) {
+setMethod("read.gatk", "SCAN2", function(object, path, quiet=FALSE, add.mutsig=TRUE) {
     gatk <- read.gatk.table.2sample(
         path, object@single.cell, object@bulk, object@region, quiet=quiet)
 
@@ -449,10 +449,12 @@ setMethod("read.gatk", "SCAN2", function(object, path, quiet=FALSE) {
     # allow for fast selection of SNVs or indels
     setindex(gatk, muttype)
 
-    gatk[muttype == 'snv',
-        mutsig := get.3mer(chr=chr, pos=pos, refnt=refnt, altnt=altnt, genome=object@genome.object)]
-    chs <- classify.indels(gatk[muttype == 'indel'], genome.string=object@genome.string, auto.delete=FALSE)
-    gatk[muttype == 'indel', mutsig := chs]
+    if (add.mutsig) {
+        gatk[muttype == 'snv',
+            mutsig := get.3mer(chr=chr, pos=pos, refnt=refnt, altnt=altnt, genome=object@genome.object)]
+        chs <- classify.indels(gatk[muttype == 'indel'], genome.string=object@genome.string, auto.delete=FALSE)
+        gatk[muttype == 'indel', mutsig := chs]
+    }
 
     object@gatk <- gatk
     object
@@ -674,8 +676,8 @@ setMethod("compute.fdr.priors", "SCAN2", function(object, mode='legacy') {
             scalt >= min.sc.alt &
             dp >= min.sc.dp &
             bulk.dp >= min.bulk.dp &
-            (is.na(balt.lowmq) | balt.lowmq <= max.bulk.alt)]
-        hsnps=object@gatk[training.site == TRUE & scalt >= min.sc.alt]
+            (is.na(balt.lowmq) | balt.lowmq <= max.bulk.alt)] #, .(af, dp)]
+        hsnps=object@gatk[training.site == TRUE & scalt >= min.sc.alt] #, .(af, dp)]
     } else {
         stop("only the legacy mode is currently implemented. check back soon.")
         # non-legacy mode will apply static filter params, which is almost what is
@@ -839,13 +841,23 @@ setMethod("compute.excess.cigar.scores", "SCAN2", function(object, legacy=TRUE) 
 })
 
 
-setGeneric("add.static.filter.params", function(object, min.sc.alt=2, min.sc.dp=6,
+setGeneric("add.static.filter.params", function(object, config.path,
+    min.sc.alt=2, min.sc.dp=6,
     max.bulk.alt=0, min.bulk.dp=11, exclude.dbsnp=TRUE, cg.id.q=0.05, cg.hs.q=0.05)
         standardGeneric("add.static.filter.params"))
 setMethod("add.static.filter.params", "SCAN2",
-function(object, min.sc.alt=2, min.sc.dp=6, max.bulk.alt=0, min.bulk.dp=11,
+function(object, config.path,
+    min.sc.alt=2, min.sc.dp=6, max.bulk.alt=0, min.bulk.dp=11,
     exclude.dbsnp=TRUE, cg.id.q=0.05, cg.hs.q=0.05)
 {
+    if (!missing(config.path)) {
+        yaml <- yaml::read_yaml(config.path)
+        min.sc.alt <- yaml$min_sc_alt
+        min.sc.dp <- yaml$min_sc_dp
+        min.bulk.alt <- yaml$min_bulk_alt
+        min.bulk.dp <- yaml$min_bulk_dp
+        # exclude.dbsnp, cg.id.q and cg.hs.q are not user configurable at the moment
+    }
     object@static.filter.params <- list(
         min.sc.alt=min.sc.alt, min.sc.dp=min.sc.dp,
         max.bulk.alt=max.bulk.alt, min.bulk.dp=min.bulk.dp,
@@ -931,8 +943,18 @@ setMethod("add.training.data", "SCAN2", function(object, path, quiet=FALSE) {
     if (!quiet) cat('Importing hSNP training data from', path, '\n')
     hsnps <- read.training.data(path, object@region, quiet=quiet)
 
+    resampled <- FALSE
+    if (!('resampled.training.site' %in% colnames(hsnps))) {
+        resampled <- TRUE
+        warn('column "resampled.training.site" not in training data. Be sure to use scripts/process_hsnps.R to prepare training data for SCAN2 calling')
+    }
+
     if (!quiet) cat('Joining training data..\n')
-    object@gatk[hsnps, on=.(chr,pos,refnt,altnt), c('training.phgt', 'training.hap1', 'training.hap2', 'training.site') := list(i.phgt, i.hap1, i.hap2, TRUE)]
+    if (resampled) {
+        object@gatk[hsnps, on=.(chr,pos,refnt,altnt), c('training.phgt', 'training.hap1', 'training.hap2', 'training.site', 'training.resampled.site') := list(i.phgt, i.hap1, i.hap2, TRUE, i.resampled)]
+    } else {
+        object@gatk[hsnps, on=.(chr,pos,refnt,altnt), c('training.phgt', 'training.hap1', 'training.hap2', 'training.site') := list(i.phgt, i.hap1, i.hap2, TRUE)]
+    }
     object@gatk[is.na(training.site), training.site := FALSE]
     # index (not key) the data.table so that selecting training sites is fast
     setindex(object@gatk, training.site)
