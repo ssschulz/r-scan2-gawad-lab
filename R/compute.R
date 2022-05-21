@@ -203,13 +203,15 @@ compute.fdr.prior.data <- function(candidates, hsnps, bins=20, random.seed=0)
     progressr::with_progress({
         p <- progressr::progressor(along=0:(max.dp+1))
         # These simulations really aren't slow enough to necessitate parallelizing
-        fcs <- future.apply::future_lapply(0:max.dp, function(thisdp) {
+        #fcs <- future.apply::future_lapply(0:max.dp, function(thisdp) {
+        fcs <- lapply(0:max.dp, function(thisdp) {
             ret <- fcontrol(germ.df=hsnps[dp == thisdp],
                     som.df=candidates[dp == thisdp],
                     bins=bins)
             p()
             ret
-        }, future.seed=0)
+        })
+        #}, future.seed=0)
         fc.max <- fcontrol(germ.df=hsnps[dp > max.dp],
                     som.df=candidates[dp > max.dp],
                     bins=bins)
