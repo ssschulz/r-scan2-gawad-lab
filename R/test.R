@@ -54,8 +54,15 @@ test.output <- function(pipeline.output, custom, test.data=c('legacy_tiny', 'leg
     # are filtered out by both pipelines in the final calling due to static
     # filters so ignoring them will not affect validity. the sites can't be
     # compared due to missing FDR scores in the new pipeline.
-    l <- l[l$bulk.dp >= 11 & (is.na(l$alt.1.lowmq) | l$alt.1.lowmq == 0) & l$dp >= 6,]
-    p <- pipeline.output@gatk[!is.na(lysis.fdr)]
+    #l <- l[l$bulk.dp >= 11 & (is.na(l$alt.1.lowmq) | l$alt.1.lowmq == 0) & l$dp >= 6,]
+    # above is no longer true
+
+    # XXX: somatic candidate status should really be stored in the data table
+    #p <- pipeline.output@gatk[!is.na(lysis.fdr)]
+    p <- pipeline.output@gatk[ balt == 0 & bulk.gt == '0/0' &
+            (dbsnp == '.' | !object@static.filter.params$exclude.dbsnp) &
+            scalt >= object@static.filter.params$min.sc.alt &
+            dp >= object@static.filter.params$min.sc.dp]
 
     check.length <- function(a, b, msg) {
         ret <- length(a) != length(b)
@@ -78,8 +85,10 @@ test.output <- function(pipeline.output, custom, test.data=c('legacy_tiny', 'leg
         nfail <- sum(xor(is.na(a), is.na(b)) | abs(a-b) > tolerance, na.rm=TRUE)
         if (nfail > 0) {
             cat(sprintf('FAILED (%d) tolerance (%f):', nfail, tolerance), msg, '\n')
-            print(which(
-                xor(is.na(a), is.na(b)) | abs(a-b) > tolerance))
+            w <- which(xor(is.na(a), is.na(b)) | abs(a - b) > 
+                tolerance)
+            cat('indexes: '); print(w)
+            cat('abs(diffs): '); print(abs(a-b)[w])
         } else cat('.')
     }
 
