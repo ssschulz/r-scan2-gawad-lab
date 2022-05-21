@@ -719,11 +719,9 @@ setMethod("compute.fdr", "SCAN2", function(object, path, mode='legacy') {
 
     # First use NT/NA tables to assign NT and NA to every site
     check.slots(object, 'fdr.prior.data')
-str(object@fdr.prior.data)
     nt.na <- estimate.fdr.priors(object@gatk, object@fdr.prior.data)
     nt <- nt.na$nt
     na <- nt.na$na
-str(nt.na)
     object@gatk[, c('nt', 'na') := list(nt, na)]
 
     # Next compute lysis.fdr and mda.fdr, which represent the false discovery rate
