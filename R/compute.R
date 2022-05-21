@@ -235,20 +235,20 @@ compute.fdr.prior.data <- function(candidates, hsnps, bins=20, random.seed=0)
 
     nt.tab <- sapply(1:length(fcs), function(dpi) {
             # Either a column of 0.1
-            if (is.null(fcs[[idx]]))
+            if (is.null(fcs[[dpi]]))
                 rep(0.1, bins)
             # Or a column of the actual max number of true mutations at this
             # (depth,VAF).
             else
-                fcs[[idx]]$pops$max[1:bins,1]
+                fcs[[dpi]]$pops$max[1:bins,1]
     })
 
     # All the same as above, except use pops$max[, COLUMN 2]
     na.tab <- sapply(1:length(fcs), function(dpi) {
-            if (is.null(fcs[[idx]]))
+            if (is.null(fcs[[dpi]]))
                 rep(0.1, bins)
             else
-                fcs[[idx]]$pops$max[1:bins,2]
+                fcs[[dpi]]$pops$max[1:bins,2]
     })
 
     list(bins=bins, max.dp=max.dp, fcs=fcs, candidates.used=nrow(candidates),
