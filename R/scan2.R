@@ -375,12 +375,7 @@ setMethod("concat", signature="SCAN2", function(...) {
 
     ret@training.data <- data.frame(sites=sum(sapply(args, function(a) ifelse(is.null(a@training.data), 0, a@training.data$sites))))
 
-    if (any(sapply(args, function(a) !is.null(a@resampled.training.data)))) {
-        warning('concat discards information used to resample training data; resampled sites are, however, retained')
-        ret@resampled.training.data <- list(sites=sum(sapply(args, function(a) ifelse(is.null(a@resampled.training.data), 0, a@resampled.training.data$selection$keep))))
-    } else {
-        ret@resampled.training.data <- NULL
-    }
+    ret@resampled.training.data <- data.frame(sites=sum(sapply(args, function(a) ifelse(is.null(a@resampled.training.data), 0, a@resampled.training.data$sites))))
 
     # policy: ab.fits has to be the same for all chunks being concat()ed
     # if that's true, just use the first one
