@@ -29,8 +29,10 @@ run.pipeline <- function(
     grs=tileGenome(seqlengths=seqinfo(genome.string.to.bsgenome.object(genome))[as.character(1:22)], tilewidth=10e6, cut.last.tile.in.chrom=TRUE),
     verbose=TRUE)
 {
-    if (!missing(tmpsave.rda) & file.exists(tmpsave.rda))
-        stop('temporary save file tmpsave.rda already exists, please delete it first')
+    if (!missing(tmpsave.rda)) {
+        if (file.exists(tmpsave.rda))
+            stop('temporary save file tmpsave.rda already exists, please delete it first')
+    }
 
     cat('Starting chunked SCAN2 pipeline on', length(grs), 'chunks\n')
     cat('Setting OpenBLAS corecount to 1. This prevents multithreaded matrix multiplication in chunks where it is undesired.\n')
