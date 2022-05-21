@@ -27,15 +27,16 @@ testpipe <- function(test.data=c('legacy_tiny', 'legacy_chr22', 'legacy_custom')
         grs <- GRanges(seqnames=22, ranges=IRanges(start=c(30e6, 31e6),
             end=c(30999999, 31999999)))
     } else if (test.data == 'legacy_chr22') {
-        grs <- GRanges(seqnames=22, ranges=IRanges(start=1e6*(16:49),
-                end=1e6*(16:49 + 1) - 1))
+        # Cover chr22 with 1mb tiles
+        grs <- tileGenome(seqlengths=seqinfo(genome.string.to.bsgenome.object('hs37d5'))[as.character(22)], tilewidth=1e6, cut.last.tile.in.chrom=TRUE)
     } else if (test.data == 'legacy_custom') {
         grs <- custom$grs
     }
 
     run.pipeline(sc.sample=sc.sample, bulk.sample=bulk.sample,
         mmq60=mmq60, mmq1=mmq1, hsnps=hsnps, abfits=abfits,
-        sccigars=sccigars, bulkcigars=bulkcigars, trainingcigars=trainingcigars,
+        sccigars=sccigars, bulkcigars=bulkcigars,
+        trainingcigars=trainingcigars,
         fdr.prior.data=fdrpriordata,
         genome='hs37d5', grs=grs, verbose=TRUE)
 }
