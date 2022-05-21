@@ -95,7 +95,7 @@ run.pipeline <- function(
             p(class='sticky', amount=0, pc)
 
             pc <- perfcheck(paste('compute.fdr',i),
-                v1 <- compute.fdr(u1, fdr.prior.data, mode='new'))
+                v1 <- compute.fdr(u1, fdr.prior.data, mode='new', quiet=!verbose))
             p(class='sticky', amount=0, pc)
 
             p()

@@ -664,7 +664,11 @@ setMethod("compute.models", "SCAN2", function(object, verbose=TRUE) {
 })
 
 
-preprocess.fdr.priors <- function(object, mode='legacy') {
+setGeneric("compute.fdr.prior.data", function(object, mode='legacy', quiet=FALSE)
+    standardGeneric("compute.fdr.prior.data"))
+setMethod("compute.fdr.prior.data", "SCAN2", function(object, mode='legacy', quiet=FALSE) {
+    check.slots(object, c('gatk', 'gatk.lowmq', 'training.data', 'static.filter.params'))
+
     if (mode == 'legacy') {
         # in legacy mode, only candidate sites passing a small set of pre-genotyping
         # crtieria were used.
@@ -681,8 +685,8 @@ preprocess.fdr.priors <- function(object, mode='legacy') {
             scalt >= min.sc.alt &
             dp >= min.sc.dp &
             bulk.dp >= min.bulk.dp &
-            (is.na(balt.lowmq) | balt.lowmq <= max.bulk.alt)] #, .(af, dp)]
-        hsnps=object@gatk[training.site == TRUE & scalt >= min.sc.alt] #, .(af, dp)]
+            (is.na(balt.lowmq) | balt.lowmq <= max.bulk.alt)]
+        hsnps=object@gatk[training.site == TRUE & scalt >= min.sc.alt]
     } else {
         stop("only the legacy mode is currently implemented. check back soon.")
         # non-legacy mode will apply static filter params, which is almost what is
@@ -692,18 +696,10 @@ preprocess.fdr.priors <- function(object, mode='legacy') {
     }
 
     # Returns a list of FDR prior data. Also record the mode used.
-    c(compute.fdr.prior.data(candidates=cand, hsnps=hsnps, random.seed=0), mode=mode)
-}
-
-
-setGeneric("compute.fdr.priors", function(object, mode='legacy')
-    standardGeneric("compute.fdr.priors"))
-setMethod("compute.fdr.priors", "SCAN2", function(object, mode='legacy') {
-    check.slots(object, c('gatk', 'gatk.lowmq', 'training.data', 'static.filter.params'))
-
-    object@fdr.prior.data <- preprocess.fdr.priors(object, mode=mode)
+    object@fdr.prior.data <-
+        c(compute.fdr.prior.data.for.candidates(candidates=cand, hsnps=hsnps, random.seed=0, quiet=quiet), mode=mode)
     object
-})
+}
 
 
 setGeneric("compute.fdr", function(object, path, mode='legacy')
@@ -719,7 +715,7 @@ setMethod("compute.fdr", "SCAN2", function(object, path, mode='legacy') {
 
     # First use NT/NA tables to assign NT and NA to every site
     check.slots(object, 'fdr.prior.data')
-    nt.na <- estimate.fdr.priors(object@gatk, object@fdr.priors$fdr.prior.data)
+    nt.na <- estimate.fdr.priors(object@gatk, object@fdr.prior.data)
     object@gatk[, c('nt', 'na') := list(fdr.priors$nt, fdr.priors$na)]
 
     # Next compute lysis.fdr and mda.fdr, which represent the false discovery rate
@@ -748,6 +744,13 @@ setMethod("compute.fdr", "SCAN2", function(object, path, mode='legacy') {
             c('lysis.fdr', 'mda.fdr') := list(i.lysis.fdr, i.mda.fdr)]
         object@fdr <- list(mode=mode, sites=nrow(cand))
     } else if (mode == 'new') {
+        # XXX: TODO: calculate adjusted NA/NT values for hSNPs. Equivalent to
+        # previous leave-one-out approaches, because AB estimation always leaves
+        # out the site being estimated (whether hSNP or somatic candidate).
+        #
+        # HOWEVER, this FDR heuristic on hSNPs IS NOT a good way to actually call
+        # germline hSNPs if that is your goal. These FDR heuristics are tuned to
+        # the specific set of CANDIDATE SOMATIC MUTATIONS detected for this cell.
         object@gatk[, c('lysis.fdr', 'mda.fdr') :=
             list(lysis.pv*na / (lysis.pv*na + lysis.beta*nt),
                  mda.pv*na / (mda.pv*na + mda.beta*nt))]

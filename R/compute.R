@@ -189,12 +189,14 @@ fcontrol <- function(germ.df, som.df, bins=20, rough.interval=0.99) {
 }
 
 
-compute.fdr.prior.data <- function(candidates, hsnps, bins=20, random.seed=0)
+compute.fdr.prior.data.for.candidates <- function(candidates, hsnps, bins=20, random.seed=0, quiet=FALSE)
 {
     # fcontrol -> estimate.somatic.burden relies on simulations to
     # estimate the artifact:mutation ratio.
-    cat(sprintf("estimating bounds on number of true mutations in candidate set (seed=%d)..\n",
-        random.seed))
+    if (!quiet) {
+        cat(sprintf("estimating bounds on number of true mutations in candidate set (seed=%d)..\n",
+            random.seed))
+    }
     set.seed(random.seed)
 
     # split candidates by depth; collapse all depths beyond the 80th
@@ -219,19 +221,22 @@ compute.fdr.prior.data <- function(candidates, hsnps, bins=20, random.seed=0)
     })
     fcs <- c(fcs, list(fc.max))
 
-    cat(sprintf("        profiled hSNP and candidate VAFs at depths %d .. %d\n",
-        0, max.dp))
+    if (!quiet) {
+        cat(sprintf("        profiled hSNP and candidate VAFs at depths %d .. %d\n",
+            0, max.dp))
+    }
 
     burden <- as.integer(
         c(sum(sapply(fcs, function(fc) fc$est.somatic.burden[1])),  # min est
           sum(sapply(fcs, function(fc) fc$est.somatic.burden[2])))  # max est
     )
 
-    cat(sprintf("        estimated callable mutation burden range (%d, %d)\n",
-        burden[1], burden[2]))
-    cat("          -> using MAXIMUM burden\n")
-
-    cat("        estimating true (N_T) and artifact (N_A) counts in candidate set..\n")
+    if (!quiet) {
+        cat(sprintf("        estimated callable mutation burden range (%d, %d)\n",
+            burden[1], burden[2]))
+        cat("          -> using MAXIMUM burden\n")
+        cat("        creating true (N_T) and artifact (N_A) count tables based on mutations expected to exist in candidate set..\n")
+    }
 
     nt.tab <- sapply(1:length(fcs), function(dpi) {
             # Either a column of 0.1
