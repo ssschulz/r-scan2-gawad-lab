@@ -233,7 +233,7 @@ compute.fdr.prior.data <- function(candidates, hsnps, bins=20, random.seed=0)
 
     cat("        estimating true (N_T) and artifact (N_A) counts in candidate set..\n")
 
-    nt.tab <- sapply(min(dp.idx):max(dp.idx), function(dpi) {
+    nt.tab <- sapply(1:length(fcs), function(dpi) {
             # Either a column of 0.1
             if (is.null(fcs[[idx]]))
                 rep(0.1, bins)
@@ -244,7 +244,7 @@ compute.fdr.prior.data <- function(candidates, hsnps, bins=20, random.seed=0)
     })
 
     # All the same as above, except use pops$max[, COLUMN 2]
-    na.tab <- sapply(min(dp.idx):max(dp.idx), function(dpi) {
+    na.tab <- sapply(1:length(fcs), function(dpi) {
             if (is.null(fcs[[idx]]))
                 rep(0.1, bins)
             else
