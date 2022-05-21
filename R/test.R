@@ -59,15 +59,17 @@ test.output <- function(pipeline.output, custom, test.data=c('legacy_tiny', 'leg
     # are filtered out by both pipelines in the final calling due to static
     # filters so ignoring them will not affect validity. the sites can't be
     # compared due to missing FDR scores in the new pipeline.
-    #l <- l[l$bulk.dp >= 11 & (is.na(l$alt.1.lowmq) | l$alt.1.lowmq == 0) & l$dp >= 6,]
-    # above is no longer true
+    l <- l[l$bulk.dp >= 11 & (is.na(l$alt.1.lowmq) | l$alt.1.lowmq == 0) & l$dp >= 6,]
 
     # XXX: somatic candidate status should really be stored in the data table
     #p <- pipeline.output@gatk[!is.na(lysis.fdr)]
     object <- pipeline.output
     bulk.sample <- object@bulk
     bulk.gt <- object@gatk[[bulk.sample]]
-    p <- pipeline.output@gatk[ balt == 0 & bulk.gt == '0/0' &
+    p <- pipeline.output@gatk[
+            bulk.dp >= object@static.filter.params$min.bulk.dp &
+            (is.na(balt.lowmq) | balt.lowmq == 0) &
+            balt == 0 & bulk.gt == '0/0' &
             (dbsnp == '.' | !object@static.filter.params$exclude.dbsnp) &
             scalt >= object@static.filter.params$min.sc.alt &
             dp >= object@static.filter.params$min.sc.dp]
