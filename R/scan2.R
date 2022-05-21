@@ -986,9 +986,9 @@ setMethod("add.training.data", "SCAN2", function(object, path, quiet=FALSE, requ
     hsnps <- read.training.data(path, object@region, quiet=quiet)
 
     resampled <- TRUE
-    if (!('resampled.training.site' %in% colnames(hsnps))) {
+    if (!('resampled' %in% colnames(hsnps))) {
         resampled <- FALSE
-        warning('column "resampled.training.site" not in training data. Be sure to use scripts/process_hsnps.R to prepare training data for SCAN2 calling')
+        warning('column "resampled" not in training data. Be sure to use scripts/process_hsnps.R to prepare training data for SCAN2 calling')
     }
 
     if (resampled == FALSE & require.resampled)
