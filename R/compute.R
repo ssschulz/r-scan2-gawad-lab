@@ -189,7 +189,7 @@ fcontrol <- function(germ.df, som.df, bins=20, rough.interval=0.99) {
 }
 
 
-estimate.fdr.priors <- function(candidates, hsnps, bins=20, random.seed=0)
+compute.fdr.prior.data <- function(candidates, hsnps, bins=20, random.seed=0)
 {
     # fcontrol -> estimate.somatic.burden relies on simulations to
     # estimate the artifact:mutation ratio.
@@ -202,6 +202,7 @@ estimate.fdr.priors <- function(candidates, hsnps, bins=20, random.seed=0)
     max.dp <- as.integer(quantile(hsnps$dp, prob=0.8))
     progressr::with_progress({
         p <- progressr::progressor(along=0:(max.dp+1))
+        # These simulations really aren't slow enough to necessitate parallelizing
         fcs <- future.apply::future_lapply(0:max.dp, function(thisdp) {
             ret <- fcontrol(germ.df=hsnps[dp == thisdp],
                     som.df=candidates[dp == thisdp],
@@ -229,7 +230,34 @@ estimate.fdr.priors <- function(candidates, hsnps, bins=20, random.seed=0)
     cat("          -> using MAXIMUM burden\n")
 
     cat("        estimating true (N_T) and artifact (N_A) counts in candidate set..\n")
-    popbin <- ceiling(candidates$af * bins)
+
+    nt.tab <- sapply(min(dp.idx):max(dp.idx), function(dpi) {
+            # Either a column of 0.1
+            if (is.null(fcs[[idx]]))
+                rep(0.1, bins)
+            # Or a column of the actual max number of true mutations at this
+            # (depth,VAF).
+            else
+                fcs[[idx]]$pops$max[1:bins,1]
+    })
+
+    # All the same as above, except use pops$max[, COLUMN 2]
+    na.tab <- sapply(min(dp.idx):max(dp.idx), function(dpi) {
+            if (is.null(fcs[[idx]]))
+                rep(0.1, bins)
+            else
+                fcs[[idx]]$pops$max[1:bins,2]
+    })
+
+    list(bins=bins, max.dp=max.dp, fcs=fcs, candidates.used=nrow(candidates),
+        hsnps.used=nrow(hsnps), burden=burden, nt.tab=nt.tab, na.tab=na.tab)
+}
+
+
+estimate.fdr.priors.old <- function(candidates, prior.data)
+{
+    fcs <- prior.data$fcs
+    popbin <- ceiling(candidates$af * prior.data$bins)
     popbin[candidates$dp == 0 | popbin == 0] <- 1
 
     progressr::with_progress({
@@ -245,9 +273,20 @@ estimate.fdr.priors <- function(candidates, hsnps, bins=20, random.seed=0)
         })
     })
 
-    list(fcs=fcs, burden=burden, nt=nt.na[1,], na=nt.na[2,])
+    list(nt=nt.na[1,], na=nt.na[2,])
 }
 
+
+# New implementation of above using a two tables rather than loops
+estimate.fdr.priors <- function(candidates, prior.data)
+{
+    dp <- candidates$dp
+    vafbin <- ceiling(candidates$af * bins)
+    vafbin[dp == 0 | vafbin == 0] <- 1
+    dp.idx <- pmin(dp, max.dp+1) + 1
+
+    list(nt=nt.tab[cbind(vafbin, dp.idx)], na=na.tab[cbind(vafbin, dp.idx)])
+}
 
 
 

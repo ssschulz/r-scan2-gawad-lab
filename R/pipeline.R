@@ -22,7 +22,8 @@ run.pipeline <- function(
     mmq60, mmq1,
     hsnps,
     abfits,
-    sccigars, bulkcigars,
+    sccigars, bulkcigars, trainingcigars,
+    fdr.data,
     genome,
     tmpsave.rda,
     grs=tileGenome(seqlengths=seqinfo(genome.string.to.bsgenome.object(genome))[as.character(1:22)], tilewidth=10e6, cut.last.tile.in.chrom=TRUE),
@@ -64,7 +65,7 @@ run.pipeline <- function(
             p(class='sticky', amount=0, pc)
 
             pc <- perfcheck(paste('add.training.data',i),
-                z1 <- add.training.data(y1, path=hsnps, quiet=!verbose))
+                z1 <- add.training.data(y1, path=hsnps, quiet=!verbose, require.resampled=TRUE))
             p(class='sticky', amount=0, pc)
 
             pc <- perfcheck(paste('add.ab.fits',i),
@@ -82,23 +83,30 @@ run.pipeline <- function(
             pc <- perfcheck(paste('compute.models',i),
                 s1 <- compute.models(r1, verbose=verbose))
             p(class='sticky', amount=0, pc)
+
+            pc <- perfcheck(paste('compute.excess.cigar.scores',i),
+                t1 <- compute.excess.cigar.scores(s1, trainingcigars, quiet=!verbose))
+            p(class='sticky', amount=0, pc)
+
+            pc <- perfcheck(paste('compute.static.filters',i),
+                u1 <- compute.static.filters(t1))
+            p(class='sticky', amount=0, pc)
+
+            pc <- perfcheck(paste('compute.fdr',i),
+                v1 <- compute.fdr(u1, fdr.data, mode='new'))
+            p(class='sticky', amount=0, pc)
+
             p()
-            s1
+            v1
         }, future.seed=0)  # CRITICAL! library(future) ensures that each child process
                            # has a different random seed.
     })
     cat("Chunked pipeline complete.\n")
+    save(xs, file=tmpsave.rda)
 
     x <- do.call(concat, xs)
     cat("Merged SCAN2 object after chunked pipeline:\n")
     print(x)
-    save(x, file=tmpsave.rda)
 
-    cat(perfcheck('resample.training.data', x2 <- resample.training.data(x)), '\n')
-    cat(perfcheck('compute.excess.cigar.scores', x4 <- compute.excess.cigar.scores(x2)), '\n')
-    cat(perfcheck('compute.static.filters', x5 <- compute.static.filters(x4)), '\n')
-    cat(perfcheck('compute.fdr.priors', x6 <- compute.fdr.priors(x5)), '\n')
-    cat(perfcheck('compute.fdr', x7 <- compute.fdr(x6, mode='new')), '\n')
-
-    list(xs, x7)
+    x
 }

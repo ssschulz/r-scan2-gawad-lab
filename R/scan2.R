@@ -22,7 +22,7 @@ setClass("SCAN2", slots=c(
     mut.models='null.or.df',
     cigar.data='null.or.df',
     excess.cigar.scores='null.or.df',
-    fdr.priors='null.or.list',
+    fdr.prior.data='null.or.list',
     fdr='null.or.list'))
 
 
@@ -655,11 +655,7 @@ setMethod("compute.models", "SCAN2", function(object, verbose=TRUE) {
 })
 
 
-setGeneric("compute.fdr.priors", function(object, mode='legacy')
-    standardGeneric("compute.fdr.priors"))
-setMethod("compute.fdr.priors", "SCAN2", function(object, mode='legacy') {
-    check.slots(object, c('gatk', 'training.data', 'static.filter.params'))
-
+preprocess.fdr.priors <- function(object, mode='legacy') {
     if (mode == 'legacy') {
         # in legacy mode, only candidate sites passing a small set of pre-genotyping
         # crtieria were used.
@@ -686,27 +682,42 @@ setMethod("compute.fdr.priors", "SCAN2", function(object, mode='legacy') {
             stop('must compute static filters before running compute.fdr.priors')
     }
 
-    cat(nrow(cand), 'somatic candidates\n')
-    cat(nrow(hsnps), 'hsnps\n')
-    fdr.prior.data <-
-        estimate.fdr.priors(candidates=cand, hsnps=hsnps, random.seed=0)
+    # Returns a list of FDR prior data. Also record the mode used.
+    c(compute.fdr.prior.data(candidates=cand, hsnps=hsnps, random.seed=0), mode=mode)
+}
 
-    # cand is not object@gatk, it's a copy of a subset
-    cand[, c('nt', 'na') := list(fdr.prior.data$nt, fdr.prior.data$na)]
-    # join back to object@gatk
-    object@gatk[cand, on=.(chr,pos,refnt,altnt), c('nt', 'na') := list(i.nt, i.na)]
-    object@fdr.priors <- c(sites=nrow(cand), fdr.prior.data[c('fcs', 'burden')])
+
+setGeneric("compute.fdr.priors", function(object, mode='legacy')
+    standardGeneric("compute.fdr.priors"))
+setMethod("compute.fdr.priors", "SCAN2", function(object, mode='legacy') {
+    check.slots(object, 'gatk', 'training.data', 'static.filter.params')
+
+    object@fdr.prior.data <- preprocess.fdr.priors(object, mode=mode)
     object
 })
 
 
-setGeneric("compute.fdr", function(object, mode='legacy')
+setGeneric("compute.fdr", function(object, path, mode='legacy')
     standardGeneric("compute.fdr"))
-setMethod("compute.fdr", "SCAN2", function(object, mode='legacy') {
-    check.slots(object, c('gatk', 'ab.estimates', 'mut.models', 'fdr.priors'))
+setMethod("compute.fdr", "SCAN2", function(object, path, mode='legacy') {
+    check.slots(object, c('gatk', 'ab.estimates', 'mut.models'))
 
+    if (!missing(path) & !is.null(slot(object, 'fdr.prior.data')))
+        stop('fdr.prior.data is already loaded; path to new fdr.prior.data would overwrite')
+
+    if (!missing(path))
+        object@fdr.prior.data <- get(load(path))
+
+    # First use NT/NA tables to assign NT and NA to every site
+    check.slots(object, 'fdr.prior.data')
+    nt.na <- estimate.fdr.priors(object@gatk, object@fdr.priors$fdr.prior.data)
+    object@gatk[, c('nt', 'na') := list(fdr.priors$nt, fdr.priors$na)]
+
+    # Next compute lysis.fdr and mda.fdr, which represent the false discovery rate
+    # of a population of candidate mutation sites with the same DP and VAF as the
+    # site in question.
     # Legacy computation (finding min FDR over all alphas) and legacy candidate set.
-    # This extra code is necessary since the legacy method is too slow for all sites.
+    # Legacy computation is too slow for applying to all sites.
     if (mode == 'legacy') {
         bulk.sample <- object@bulk
         bulk.gt <- object@gatk[[bulk.sample]]
@@ -819,8 +830,8 @@ setMethod("add.cigar.data", "SCAN2", function(object, sc.cigars.path, bulk.cigar
 })
 
 
-cigar.get.null.sites <- function(object, path, legacy=TRUE, quiet=FALSE) {
-    if (missing(path)) {
+cigar.get.null.sites <- function(object, path=NULL, legacy=TRUE, quiet=FALSE) {
+    if (is.null(path)) {
         check.chunked(object,
             'excess cigar scores should be computed on full chr1-chr22 data, not chunked data')
 
@@ -846,9 +857,9 @@ cigar.get.null.sites <- function(object, path, legacy=TRUE, quiet=FALSE) {
 }
 
 
-setGeneric("compute.excess.cigar.scores", function(object, path, legacy=TRUE, quiet=FALSE)
+setGeneric("compute.excess.cigar.scores", function(object, path=NULL, legacy=TRUE, quiet=FALSE)
     standardGeneric("compute.excess.cigar.scores"))
-setMethod("compute.excess.cigar.scores", "SCAN2", function(object, path, legacy=TRUE, quiet=FALSE) {
+setMethod("compute.excess.cigar.scores", "SCAN2", function(object, path=NULL, legacy=TRUE, quiet=FALSE) {
     null.sites <- cigar.get.null.sites(object, path, legacy, quiet)
     compute.excess.cigar(data=object@gatk, cigar.training=null.sites)
     object@excess.cigar.scores <- data.frame(training.sites=nrow(null.sites), legacy=legacy)
@@ -952,9 +963,16 @@ read.training.data <- function(path, region=NULL, quiet=FALSE) {
 }
 
 
-setGeneric("add.training.data", function(object, path, quiet=FALSE)
+# require.resampled - part of the preprocessing scripts involves downsampling
+#     hSNPs to match the intra-hSNP distance of the somatic candidates. This is
+#     to improve sensitivity estimation via hSNPs because hSNPs are often closer
+#     to other hSNPs than somatic candidates are to hSNPs (i.e., hSNPs are somewhat
+#     clustered in the genome).
+#     Setting require.resampled to TRUE will cause this method to fail if the
+#     resampling process is not detected in the hSNP file specified on 'path'.
+setGeneric("add.training.data", function(object, path, quiet=FALSE, require.resampled=FALSE)
         standardGeneric("add.training.data"))
-setMethod("add.training.data", "SCAN2", function(object, path, quiet=FALSE) {
+setMethod("add.training.data", "SCAN2", function(object, path, quiet=FALSE, require.resampled=FALSE) {
     if (!quiet) cat('Importing hSNP training data from', path, '\n')
     hsnps <- read.training.data(path, object@region, quiet=quiet)
 
@@ -963,6 +981,9 @@ setMethod("add.training.data", "SCAN2", function(object, path, quiet=FALSE) {
         resampled <- FALSE
         warning('column "resampled.training.site" not in training data. Be sure to use scripts/process_hsnps.R to prepare training data for SCAN2 calling')
     }
+
+    if (resampled == FALSE & require.resampled)
+        stop(paste('hSNP table', path, 'appears not to contain resampling information. Please run the appropriate preprocessing scripts before running this pipeline'))
 
     if (!quiet) cat('Joining training data..\n')
     if (resampled) {
