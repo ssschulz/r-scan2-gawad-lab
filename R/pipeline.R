@@ -29,7 +29,7 @@ run.pipeline <- function(
     grs=tileGenome(seqlengths=seqinfo(genome.string.to.bsgenome.object(genome))[as.character(1:22)], tilewidth=10e6, cut.last.tile.in.chrom=TRUE),
     verbose=TRUE)
 {
-    if (file.exists(tmpsave.rda))
+    if (!missing(tmpsave.rda) & file.exists(tmpsave.rda))
         stop('temporary save file tmpsave.rda already exists, please delete it first')
 
     cat('Starting chunked SCAN2 pipeline on', length(grs), 'chunks\n')
@@ -102,7 +102,10 @@ run.pipeline <- function(
                            # has a different random seed.
     })
     cat("Chunked pipeline complete.\n")
-    save(xs, file=tmpsave.rda)
+    if (!missing(tmpsave.rda)) {
+        cat('Saving pre-merged chunks to', tmpsave.rda, '\n')
+        save(xs, file=tmpsave.rda)
+    }
 
     x <- do.call(concat, xs)
     cat("Merged SCAN2 object after chunked pipeline:\n")
