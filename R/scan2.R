@@ -73,7 +73,7 @@ make.scan <- function(single.cell, bulk, genome=c('hs37d5', 'hg38', 'mm10'), reg
         cigar.data=NULL,
         excess.cigar.scores=NULL,
         static.filter.params=NULL,
-        fdr.priors=NULL,
+        fdr.prior.data=NULL,
         fdr=NULL)
 }
 
@@ -179,8 +179,8 @@ check.slots <- function(object, slots, abort=TRUE) {
 
             if (s == 'static.filter' | s == 'static.filters' | s == 'static.filter.params')
                 cat("must apply static site filters first (see: add.static.filters())\n")
-            if (s == 'fdr.priors')
-                cat("must compute FDR priors first (see: compute.fdr.priors())\n")
+            if (s == 'fdr.prior.data')
+                cat("must compute or import FDR priors first (see: compute.fdr.priors())\n")
         }
     }
     if (error.occurred & abort)
@@ -369,8 +369,17 @@ setMethod("concat", signature="SCAN2", function(...) {
 
     ret@excess.cigar.scores <- data.frame(training.sites=sum(sapply(args, function(a) ifelse(is.null(a@excess.cigar.scores), 0, a@excess.cigar.scores$training.sites))))
 
-    ret@fdr.priors <- NULL
-    ret@fdr <- NULL
+    # policy: same as above: all FDR prior data must be identical
+    # params are lists; best way to check for exactness is to compare the
+    # nt.tab and na.tab tables.
+    if (any(sapply(args, function(a) any(init@fdr.prior.data$nt.tab != a@fdr.prior.data$nt.tab))) | any(sapply(args, function(a) any(init@fdr.prior.data$na.tab != a@fdr.prior.data$na.tab))))
+        stop('@fdr.prior.data must be identical for all concat() elements')
+    ret@fdr.prior.data <- init@fdr.prior.data
+
+    # FDR must be computing using the same mode
+    if (any(sapply(args, function(a) any(init@fdr$mode != a@fdr$mode))))
+        stop('@fdr mode must be identical for all concat() elements')
+    ret@fdr <- data.frame(sites=sum(sapply(args, function(a) ifelse(is.null(a@fdr, 0, a@fdr$sites)))))
 
     ret
 })
