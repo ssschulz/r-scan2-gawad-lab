@@ -322,19 +322,56 @@ setMethod("concat", signature="SCAN2", function(...) {
         if (all(sapply(l, function(element) is.null(slot(element, slot.name))))) {
             return()
         }
-        if (!all(sapply(l, function(element)
-            slot(l[[1]], slot.name)[[var.name]] == slot(element, slot.name)[[var.name]])))
-            stop(paste('list of SCAN2 chunks cannot be concatenated; slot', slot.name,
-                'does not have consistent values for', var.name))
+        # if var.name isn't supplied, assume that `slot.name` is just a vector
+        if (!missing(var.name)) {
+            if (!all(sapply(l, function(element)
+                all(slot(l[[1]], slot.name)[[var.name]] == slot(element, slot.name)[[var.name]]))))
+                stop(paste('list of SCAN2 chunks cannot be concatenated; slot', slot.name,
+                    'does not have consistent values for', var.name))
+        } else {
+            if (!all(sapply(l, function(element)
+                all(slot(l[[1]], slot.name) == slot(element, slot.name)))))
+                stop(paste('list of SCAN2 chunks cannot be concatenated; slot', slot.name,
+                    'does not have consistent values'))
+        }
     }
 
-    # XXX: TODO: would be nice to ensure same genome. just not sure how to
+    # XXX: TODO: would be nice to ensure same genome object. just not sure how to
     # check equality at the moment.
+    ensure.same(args, 'genome.string')
+    ensure.same(args, 'single.cell')
+    ensure.same(args, 'bulk')
     ensure.same(args, 'training.data', 'path')
     ensure.same(args, 'gatk.lowmq', 'path')
+    ret@gatk.lowmq <- data.frame(sites=sum(sapply(args, function(a) ifelse(is.null(a@gatk.lowmq), 0, a@gatk.lowmq$sites))))
+    ensure.same(args, 'static.filter.params', 'min.sc.alt')
+    ensure.same(args, 'static.filter.params', 'min.sc.dp')
+    ensure.same(args, 'static.filter.params', 'min.bulk.dp')
+    ensure.same(args, 'static.filter.params', 'max.bulk.alt')
+    ensure.same(args, 'static.filter.params', 'exclude.dbsnp')
+    ensure.same(args, 'static.filter.params', 'cg.id.q')
+    ensure.same(args, 'static.filter.params', 'cg.hs.q')
+    ret@static.filter.params <- init@static.filter.params
     ensure.same(args, 'cigar.data', 'sc.path')
     ensure.same(args, 'cigar.data', 'bulk.path')
+    ret@cigar.data <- data.frame(sc.sites=sum(sapply(args, function(a) ifelse(is.null(a@cigar.data), 0, a@cigar.data$sc.sites))),
+                               bulk.sites=sum(sapply(args, function(a) ifelse(is.null(a@cigar.data), 0, a@cigar.data$bulk.sites)))
+    )
     ensure.same(args, 'excess.cigar.scores', 'legacy')
+    ensure.same(args, 'excess.cigar.scores', 'training.sites')
+    ensure.same(args, 'fdr.prior.data', 'bins')
+    ensure.same(args, 'fdr.prior.data', 'max.dp')
+    ensure.same(args, 'fdr.prior.data', 'candidates.used')
+    ensure.same(args, 'fdr.prior.data', 'hsnps.used')
+    ensure.same(args, 'fdr.prior.data', 'nt.tab')
+    ensure.same(args, 'fdr.prior.data', 'na.tab')
+    ensure.same(args, 'fdr.prior.data', 'mode')
+    # fdr.prior.data: 'fcs' should also be identical, but the list is a little
+    # inconvenient to check. the above should detect misuse 99% of the time.
+    ret@fdr.prior.data <- init@fdr.prior.data
+    ensure.same(args, 'fdr', 'mode')
+    ret@fdr <- data.frame(mode=init@fdr$mode,
+        sites=sum(sapply(args, function(a) ifelse(is.null(a@fdr, 0, a@fdr$sites)))))
 
     ret@training.data <- data.frame(sites=sum(sapply(args, function(a) ifelse(is.null(a@training.data), 0, a@training.data$sites))))
 
@@ -351,35 +388,9 @@ setMethod("concat", signature="SCAN2", function(...) {
         stop('@ab.fits must be identical for all concat() elements')
     ret@ab.fits <- init@ab.fits
 
-    # policy: same as above: all static filter params must be identical
-    # params are all numeric
-    if (any(sapply(args, function(a) any(unlist(init@static.filter.params) != unlist(a@static.filter.params)))))
-        stop('@static.filter.params must be identical for all concat() elements')
-    ret@static.filter.params <- init@static.filter.params
-
-    ret@gatk.lowmq <- data.frame(sites=sum(sapply(args, function(a) ifelse(is.null(a@gatk.lowmq), 0, a@gatk.lowmq$sites))))
-
     ret@ab.estimates <- data.frame(sites=sum(sapply(args, function(a) ifelse(is.null(a@ab.estimates), 0, a@ab.estimates$sites))))
 
     ret@mut.models <- data.frame(sites=sum(sapply(args, function(a) ifelse(is.null(a@mut.models), 0, a@mut.models$sites))))
-
-    ret@cigar.data <- data.frame(sc.sites=sum(sapply(args, function(a) ifelse(is.null(a@cigar.data), 0, a@cigar.data$sc.sites))),
-                               bulk.sites=sum(sapply(args, function(a) ifelse(is.null(a@cigar.data), 0, a@cigar.data$bulk.sites)))
-    )
-
-    ret@excess.cigar.scores <- data.frame(training.sites=sum(sapply(args, function(a) ifelse(is.null(a@excess.cigar.scores), 0, a@excess.cigar.scores$training.sites))))
-
-    # policy: same as above: all FDR prior data must be identical
-    # params are lists; best way to check for exactness is to compare the
-    # nt.tab and na.tab tables.
-    if (any(sapply(args, function(a) any(init@fdr.prior.data$nt.tab != a@fdr.prior.data$nt.tab))) | any(sapply(args, function(a) any(init@fdr.prior.data$na.tab != a@fdr.prior.data$na.tab))))
-        stop('@fdr.prior.data must be identical for all concat() elements')
-    ret@fdr.prior.data <- init@fdr.prior.data
-
-    # FDR must be computing using the same mode
-    if (any(sapply(args, function(a) any(init@fdr$mode != a@fdr$mode))))
-        stop('@fdr mode must be identical for all concat() elements')
-    ret@fdr <- data.frame(sites=sum(sapply(args, function(a) ifelse(is.null(a@fdr, 0, a@fdr$sites)))))
 
     ret
 })
@@ -490,8 +501,6 @@ setMethod("read.gatk.lowmq", "SCAN2", function(object, path, quiet=FALSE) {
 setGeneric("add.ab.fits", function(object, path)
     standardGeneric("add.ab.fits"))
 setMethod("add.ab.fits", "SCAN2", function(object, path) {
-    #fitlist <- get(load(path))
-    #object@ab.fits <- do.call(rbind, fitlist)
     object@ab.fits <- get(load(path))
     object
 })
@@ -715,8 +724,12 @@ setMethod("compute.fdr", "SCAN2", function(object, path, mode='legacy') {
 
     # First use NT/NA tables to assign NT and NA to every site
     check.slots(object, 'fdr.prior.data')
+str(object@fdr.prior.data)
     nt.na <- estimate.fdr.priors(object@gatk, object@fdr.prior.data)
-    object@gatk[, c('nt', 'na') := list(nt.na$nt, nt.na$na)]
+    nt <- nt.na$nt
+    na <- nt.na$na
+str(nt.na)
+    object@gatk[, c('nt', 'na') := list(nt, na)]
 
     # Next compute lysis.fdr and mda.fdr, which represent the false discovery rate
     # of a population of candidate mutation sites with the same DP and VAF as the
