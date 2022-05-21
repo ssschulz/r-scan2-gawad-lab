@@ -699,7 +699,7 @@ preprocess.fdr.priors <- function(object, mode='legacy') {
 setGeneric("compute.fdr.priors", function(object, mode='legacy')
     standardGeneric("compute.fdr.priors"))
 setMethod("compute.fdr.priors", "SCAN2", function(object, mode='legacy') {
-    check.slots(object, c('gatk', 'training.data', 'static.filter.params'))
+    check.slots(object, c('gatk', 'gatk.lowmq', 'training.data', 'static.filter.params'))
 
     object@fdr.prior.data <- preprocess.fdr.priors(object, mode=mode)
     object
