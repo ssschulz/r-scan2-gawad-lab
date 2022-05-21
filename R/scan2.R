@@ -768,7 +768,7 @@ setMethod("compute.fdr", "SCAN2", function(object, path, mode='legacy') {
 })
 
 
-cigar.emp.score <- function (training, test, which = c("id", "hs")) {
+cigar.emp.score <- function (training, test, which = c("id", "hs"), quiet=FALSE) {
     xt <- training[[paste0(which, ".score.x")]]
     yt <- training[[paste0(which, ".score.y")]]
     x <- test[[paste0(which, ".score.x")]]
@@ -778,19 +778,20 @@ cigar.emp.score <- function (training, test, which = c("id", "hs")) {
     bulkdp <- test$dp.cigars.bulk
 
     progressr::with_progress({
-        p <- progressr::progressor(along=1:(length(x)/100))
+        if (!quiet) p <- progressr::progressor(along=1:(length(x)/100))
         ret <- future.apply::future_mapply(function(dp, bulkdp, x, y, i) {
-            if (i %% 100 == 1) p()
+            if (!quiet & i %% 100 == 1) p()
             ifelse(dp == 0 | bulkdp == 0, 0,
                 mean(xt >= x & yt >= y, na.rm = T))
         }, test$dp.cigars, test$dp.cigars.bulk, x, y, 1:length(x))
-        ret <- future.apply::future_sapply(1:length(x), function(i) {
-            if (i %% 100 == 1) p()
-            ifelse(dp[i] == 0 | bulkdp[i] == 0, 0,
-                mean(xt >= x[i] & yt >= y[i], na.rm = T))
-        })
     })
-    ret
+
+str(ret)
+    # future_sapply returns list() when x is length 0
+    if (length(ret) == 0)
+        return(numeric(0))
+    else
+        return(ret)
 }
 
 
@@ -804,12 +805,12 @@ compute.cigar.scores <- function(cigar.data) {
 
 
 # modifies 'data' by reference
-compute.excess.cigar <- function(data, cigar.training) {
+compute.excess.cigar <- function(data, cigar.training, quiet=FALSE) {
     cat(perfcheck("excess indel (I/D) ops",
-        idopscores <- cigar.emp.score(training=cigar.training, test=data, which='id')),
+        idopscores <- cigar.emp.score(training=cigar.training, test=data, which='id', quiet=quiet)),
     '\n')
     cat(perfcheck("excess clipping (H/S) ops",
-        hsopscores <- cigar.emp.score(training=cigar.training, test=data, which='hs')),
+        hsopscores <- cigar.emp.score(training=cigar.training, test=data, which='hs', quiet=quiet)),
     '\n')
 
     cat('storing in data..\n')
@@ -879,7 +880,7 @@ setGeneric("compute.excess.cigar.scores", function(object, path=NULL, legacy=TRU
     standardGeneric("compute.excess.cigar.scores"))
 setMethod("compute.excess.cigar.scores", "SCAN2", function(object, path=NULL, legacy=TRUE, quiet=FALSE) {
     null.sites <- cigar.get.null.sites(object, path, legacy, quiet)
-    compute.excess.cigar(data=object@gatk, cigar.training=null.sites)
+    compute.excess.cigar(data=object@gatk, cigar.training=null.sites, quiet=quiet)
     object@excess.cigar.scores <- data.frame(training.sites=nrow(null.sites), legacy=legacy)
     object
 })
