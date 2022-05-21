@@ -59,6 +59,9 @@ test.output <- function(pipeline.output, custom, test.data=c('legacy_tiny', 'leg
 
     # XXX: somatic candidate status should really be stored in the data table
     #p <- pipeline.output@gatk[!is.na(lysis.fdr)]
+    object <- pipeline.output
+    bulk.sample <- object@bulk
+    bulk.gt <- object@gatk[[bulk.sample]]
     p <- pipeline.output@gatk[ balt == 0 & bulk.gt == '0/0' &
             (dbsnp == '.' | !object@static.filter.params$exclude.dbsnp) &
             scalt >= object@static.filter.params$min.sc.alt &
