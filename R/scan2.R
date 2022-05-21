@@ -699,7 +699,7 @@ setMethod("compute.fdr.prior.data", "SCAN2", function(object, mode='legacy', qui
     object@fdr.prior.data <-
         c(compute.fdr.prior.data.for.candidates(candidates=cand, hsnps=hsnps, random.seed=0, quiet=quiet), mode=mode)
     object
-}
+})
 
 
 setGeneric("compute.fdr", function(object, path, mode='legacy')
