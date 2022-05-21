@@ -238,22 +238,22 @@ compute.fdr.prior.data.for.candidates <- function(candidates, hsnps, bins=20, ra
         cat("        creating true (N_T) and artifact (N_A) count tables based on mutations expected to exist in candidate set..\n")
     }
 
-    nt.tab <- sapply(1:length(fcs), function(dpi) {
+    nt.tab <- sapply(fcs, function(fc) {
             # Either a column of 0.1
-            if (is.null(fcs[[dpi]]))
+            if (is.null(fc$pops))
                 rep(0.1, bins)
             # Or a column of the actual max number of true mutations at this
             # (depth,VAF).
             else
-                fcs[[dpi]]$pops$max[1:bins,1]
+                fc$pops$max[1:bins,1]
     })
 
     # All the same as above, except use pops$max[, COLUMN 2]
-    na.tab <- sapply(1:length(fcs), function(dpi) {
-            if (is.null(fcs[[dpi]]))
+    na.tab <- sapply(fcs, function(fc) {
+            if (is.null(fc$pops))
                 rep(0.1, bins)
             else
-                fcs[[dpi]]$pops$max[1:bins,2]
+                fc$pops$max[1:bins,2]
     })
 
     list(bins=bins, max.dp=max.dp, fcs=fcs, candidates.used=nrow(candidates),
