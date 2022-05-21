@@ -23,7 +23,7 @@ run.pipeline <- function(
     hsnps,
     abfits,
     sccigars, bulkcigars, trainingcigars,
-    fdr.data,
+    fdr.prior.data,
     genome,
     tmpsave.rda,
     grs=tileGenome(seqlengths=seqinfo(genome.string.to.bsgenome.object(genome))[as.character(1:22)], tilewidth=10e6, cut.last.tile.in.chrom=TRUE),
@@ -93,7 +93,7 @@ run.pipeline <- function(
             p(class='sticky', amount=0, pc)
 
             pc <- perfcheck(paste('compute.fdr',i),
-                v1 <- compute.fdr(u1, fdr.data, mode='new'))
+                v1 <- compute.fdr(u1, fdr.prior.data, mode='new'))
             p(class='sticky', amount=0, pc)
 
             p()
