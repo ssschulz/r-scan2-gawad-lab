@@ -786,8 +786,8 @@ cigar.emp.score <- function (training, test, which = c("id", "hs"), quiet=FALSE)
         }, test$dp.cigars, test$dp.cigars.bulk, x, y, 1:length(x))
     })
 
-str(ret)
-    # future_sapply returns list() when x is length 0
+    # future_mapply returns list() when x is length 0. make this a 0-length
+    # numeric so quantile() doesn't fail on it later.
     if (length(ret) == 0)
         return(numeric(0))
     else
