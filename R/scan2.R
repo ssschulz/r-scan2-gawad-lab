@@ -371,7 +371,7 @@ setMethod("concat", signature="SCAN2", function(...) {
     ret@fdr.prior.data <- init@fdr.prior.data
     ensure.same(args, 'fdr', 'mode')
     ret@fdr <- data.frame(mode=init@fdr$mode,
-        sites=sum(sapply(args, function(a) ifelse(is.null(a@fdr, 0, a@fdr$sites)))))
+        sites=sum(sapply(args, function(a) ifelse(is.null(a@fdr), 0, a@fdr$sites))))
 
     ret@training.data <- data.frame(sites=sum(sapply(args, function(a) ifelse(is.null(a@training.data), 0, a@training.data$sites))))
 
