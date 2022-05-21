@@ -716,7 +716,7 @@ setMethod("compute.fdr", "SCAN2", function(object, path, mode='legacy') {
     # First use NT/NA tables to assign NT and NA to every site
     check.slots(object, 'fdr.prior.data')
     nt.na <- estimate.fdr.priors(object@gatk, object@fdr.prior.data)
-    object@gatk[, c('nt', 'na') := list(fdr.priors$nt, fdr.priors$na)]
+    object@gatk[, c('nt', 'na') := list(nt.na$nt, nt.na$na)]
 
     # Next compute lysis.fdr and mda.fdr, which represent the false discovery rate
     # of a population of candidate mutation sites with the same DP and VAF as the
