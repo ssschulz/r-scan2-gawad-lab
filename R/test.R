@@ -14,12 +14,14 @@ testpipe <- function(test.data=c('legacy_tiny', 'legacy_chr22', 'legacy_custom')
         fpath <- function(...) paste0(custom$path, '/', ...)
     }
 
-    mmq60 <- fpath('mmq60.tab.bgz')
-    mmq1 <- fpath('mmq1.tab.bgz')
-    hsnps <- fpath('hsnps.tab.bgz')
+    mmq60 <- fpath('mmq60.tab.gz')
+    mmq1 <- fpath('mmq1.tab.gz')
+    hsnps <- fpath('hsnps_resampled.tab.gz')
     abfits <- fpath('fits.rda')
-    sccigars <- fpath('sc_somatic_and_hsnp_spikein_cigars.tab.bgz')
-    bulkcigars <- fpath('bulk_somatic_and_hsnp_spikein_cigars.tab.bgz')
+    sccigars <- fpath('sc_somatic_and_hsnp_spikein_cigars.tab.gz')
+    bulkcigars <- fpath('bulk_somatic_and_hsnp_spikein_cigars.tab.gz')
+    trainingcigars <- fpath('cigardata.tab.gz')
+    fdrpriordata <- fpath('fdr_prior_data.rda')
 
     if (test.data == 'legacy_tiny') {
         grs <- GRanges(seqnames=22, ranges=IRanges(start=c(30e6, 31e6),
@@ -33,7 +35,9 @@ testpipe <- function(test.data=c('legacy_tiny', 'legacy_chr22', 'legacy_custom')
 
     run.pipeline(sc.sample=sc.sample, bulk.sample=bulk.sample,
         mmq60=mmq60, mmq1=mmq1, hsnps=hsnps, abfits=abfits,
-        sccigars=sccigars, bulkcigars=bulkcigars, genome='hs37d5', grs=grs, verbose=TRUE)
+        sccigars=sccigars, bulkcigars=bulkcigars, trainingcigars=trainingcigars,
+        fdr.prior.data=fdrpriordata,
+        genome='hs37d5', grs=grs, verbose=TRUE)
 }
 
 test.output <- function(pipeline.output, custom, test.data=c('legacy_tiny', 'legacy_chr22', 'legacy_custom')) {
