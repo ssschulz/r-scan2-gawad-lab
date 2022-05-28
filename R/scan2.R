@@ -600,7 +600,7 @@ setMethod("compute.ab.estimates", "SCAN2", function(object, n.cores=1, quiet=FAL
         if (!quiet) cat('Importing extended hSNP training data from', path, 'using extended range\n')
         extended.range <- GRanges(seqnames=seqnames(object@region)[1],
             ranges=IRanges(start=start(object@region)-flank, end=end(object@region)+flank))
-        extended.training.hsnps <- read.training.data(path, extended.range, quiet=quiet)
+        extended.training.hsnps <- read.training.data(path, region=extended.range, quiet=quiet)
         if (!quiet)
             cat(sprintf("hSNP training sites: %d, extended training sites: %d\n",
                 nrow(object@gatk[training.site==TRUE]), nrow(extended.training.hsnps)))
@@ -1011,16 +1011,12 @@ setGeneric("add.training.data", function(object, path, quiet=FALSE, require.resa
         standardGeneric("add.training.data"))
 setMethod("add.training.data", "SCAN2", function(object, path, quiet=FALSE, require.resampled=FALSE) {
     if (!quiet) cat('Importing hSNP training data from', path, '\n')
-    hsnps <- read.training.data(path, object@region, quiet=quiet)
+    hsnps <- read.training.data(path, region=object@region, quiet=quiet)
 
-    resampled <- TRUE
-    if (!('resampled' %in% colnames(hsnps))) {
-        resampled <- FALSE
-        warning('column "resampled" not in training data. The SCAN2 pipeline provides scripts/pregenotype.R to prepare training data for SCAN2 calling')
-    }
+    resampled <- 'resampled' %in% colnames(hsnps)
 
     if (resampled == FALSE & require.resampled)
-        stop(paste('hSNP table', path, 'appears not to contain resampling information. Please run the appropriate preprocessing scripts before running this pipeline'))
+        stop(paste('hSNP table', path, 'appears not to contain resampling information (column="resampled"). The SCAN2 pipeline provides scripts/pregenotype.R to prepare training data for SCAN2 calling'))
 
     if (!quiet) cat('Joining training data..\n')
     if (resampled) {
