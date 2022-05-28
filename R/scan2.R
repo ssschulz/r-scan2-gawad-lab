@@ -974,8 +974,12 @@ setMethod("resample.training.data", "SCAN2", function(object, M=20, seed=0, mode
 })
 
 
-read.training.data <- function(path, region=NULL, quiet=FALSE) {
-    col.classes <- c('character', 'integer', 'character', 'character', 'integer', 'integer', 'character', 'character')
+# col.classes - equivalent to read.table's colClasses. The default forces the first
+#   column (chromosome) to be read as a character even if only human autosomes (i.e.,
+#   chromosomes 1-22) are in the file.
+#   * Some functions override col.classes to improve memory efficiency. Setting a
+#     col.classes entry to 'NULL' (the string, not R's NULL) discards the column.
+read.training.data <- function(path, region=NULL, quiet=FALSE, col.classes=c('character')) {
     hsnps <- read.tabix.data(path=path, region=region, quiet=quiet, colClasses=col.classes)
     data.table::setkey(hsnps, chr, pos, refnt, altnt)
     hsnps
