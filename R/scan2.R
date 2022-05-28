@@ -58,6 +58,7 @@ genome.string.to.bsgenome.object <- function(genome=c('hs37d5', 'hg38', 'mm10'))
 
 
 make.scan <- function(single.cell, bulk, genome=c('hs37d5', 'hg38', 'mm10'), region=NULL) {
+    genome <- match.arg(genome)
     new("SCAN2", single.cell=single.cell, bulk=bulk,
         genome.string=genome,
         genome.object=genome.string.to.bsgenome.object(genome),
