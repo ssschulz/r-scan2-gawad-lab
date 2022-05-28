@@ -979,9 +979,12 @@ setMethod("resample.training.data", "SCAN2", function(object, M=20, seed=0, mode
 #   chromosomes 1-22) are in the file.
 #   * Some functions override col.classes to improve memory efficiency. Setting a
 #     col.classes entry to 'NULL' (the string, not R's NULL) discards the column.
-read.training.data <- function(path, region=NULL, quiet=FALSE, col.classes=c('character')) {
+# index - automatically index table by (chr,pos,refnt,altnt) identifiers.
+#   Useful for joining to larger tables.
+read.training.data <- function(path, region=NULL, quiet=FALSE, col.classes=c('character'), index=TRUE) {
     hsnps <- read.tabix.data(path=path, region=region, quiet=quiet, colClasses=col.classes)
-    data.table::setkey(hsnps, chr, pos, refnt, altnt)
+    if (index.muts)
+        data.table::setkey(hsnps, chr, pos, refnt, altnt)
     hsnps
 }
 

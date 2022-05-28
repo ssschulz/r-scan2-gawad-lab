@@ -19,7 +19,7 @@ abmodel.fit.one.chrom <- function(path, chrom, genome.object,
     region <- as(GenomeInfoDb::seqinfo(genome.object), 'GRanges')[chrom,]
     # More RAM efficiency: only read position, hap1 and depth columns
     cols.to.read <- c('NULL', 'integer', 'NULL', 'NULL', 'integer', 'NULL', 'integer', 'NULL')
-    hsnps <- read.training.data(path=path, region=region, col.classes=cols.to.read)
+    hsnps <- read.training.data(path=path, region=region, col.classes=cols.to.read, index=FALSE)
 
     hsnps <- abmodel.downsample.hsnps(hsnps, hsnp.tilesize=hsnp.tilesize, n.tiles=n.tiles, verbose=TRUE)
 
