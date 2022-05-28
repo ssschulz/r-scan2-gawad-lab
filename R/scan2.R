@@ -984,6 +984,7 @@ read.training.data <- function(path, col.classes, region=NULL, quiet=FALSE, inde
     tf <- Rsamtools::TabixFile(path)
     open(tf)
     header <- strsplit(read.tabix.header(path), split="\t")[[1]]
+    close(tf) # just close it and reopen in read.tabix.data to get the header automatically read in
 
     # Detect whether training data has been resampled (9 columns) or not (8 columns)
     if (missing(col.classes)) {
@@ -991,8 +992,8 @@ read.training.data <- function(path, col.classes, region=NULL, quiet=FALSE, inde
         if (length(header) == 9 & 'resampled' %in% header)
             col.classes <- c(col.classes, 'logical')
     }
-    hsnps <- read.tabix.data(tf=tf, region=region, quiet=quiet, colClasses=col.classes)
-    close(tf)
+
+    hsnps <- read.tabix.data(path=path, region=region, quiet=quiet, colClasses=col.classes)
     if (index)
         data.table::setkey(hsnps, chr, pos, refnt, altnt)
     hsnps
