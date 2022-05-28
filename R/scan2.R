@@ -975,15 +975,24 @@ setMethod("resample.training.data", "SCAN2", function(object, M=20, seed=0, mode
 })
 
 
-# col.classes - equivalent to read.table's colClasses. The default forces the first
-#   column (chromosome) to be read as a character even if only human autosomes (i.e.,
-#   chromosomes 1-22) are in the file.
+# col.classes - equivalent to read.table's colClasses.
 #   * Some functions override col.classes to improve memory efficiency. Setting a
 #     col.classes entry to 'NULL' (the string, not R's NULL) discards the column.
 # index - automatically index table by (chr,pos,refnt,altnt) identifiers.
 #   Useful for joining to larger tables.
-read.training.data <- function(path, region=NULL, quiet=FALSE, col.classes=c('character'), index=TRUE) {
-    hsnps <- read.tabix.data(path=path, region=region, quiet=quiet, colClasses=col.classes)
+read.training.data <- function(path, col.classes, region=NULL, quiet=FALSE, index=TRUE) {
+    tf <- Rsamtools::TabixFile(path)
+    open(tf)
+    header <- strsplit(read.tabix.header(path), split="\t")[[1]]
+
+    # Detect whether training data has been resampled (9 columns) or not (8 columns)
+    if (missing(col.classes)) {
+        col.classes <- c('character', 'integer', 'character', 'character', 'integer', 'integer', 'integer', 'character')
+        if (length(header) == 9 & 'resampled' %in% header)
+            col.classes <- c(col.classes, 'logical')
+    }
+    hsnps <- read.tabix.data(tf=tf, region=region, quiet=quiet, colClasses=col.classes)
+    close(tf)
     if (index)
         data.table::setkey(hsnps, chr, pos, refnt, altnt)
     hsnps
@@ -1006,7 +1015,7 @@ setMethod("add.training.data", "SCAN2", function(object, path, quiet=FALSE, requ
     resampled <- TRUE
     if (!('resampled' %in% colnames(hsnps))) {
         resampled <- FALSE
-        warning('column "resampled" not in training data. Be sure to use scripts/process_hsnps.R to prepare training data for SCAN2 calling')
+        warning('column "resampled" not in training data. The SCAN2 pipeline provides scripts/pregenotype.R to prepare training data for SCAN2 calling')
     }
 
     if (resampled == FALSE & require.resampled)
