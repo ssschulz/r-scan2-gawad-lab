@@ -983,7 +983,7 @@ setMethod("resample.training.data", "SCAN2", function(object, M=20, seed=0, mode
 #   Useful for joining to larger tables.
 read.training.data <- function(path, region=NULL, quiet=FALSE, col.classes=c('character'), index=TRUE) {
     hsnps <- read.tabix.data(path=path, region=region, quiet=quiet, colClasses=col.classes)
-    if (index.muts)
+    if (index)
         data.table::setkey(hsnps, chr, pos, refnt, altnt)
     hsnps
 }
