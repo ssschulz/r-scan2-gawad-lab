@@ -1020,10 +1020,10 @@ setMethod("add.training.data", "SCAN2", function(object, path, quiet=FALSE, requ
 
     if (!quiet) cat('Joining training data..\n')
     if (resampled) {
-        object@gatk[hsnps, on=.(chr,pos,refnt,altnt), c('training.phgt', 'training.hap1', 'training.hap2', 'training.site', 'resampled.training.site') := list(i.phgt, i.hap1, i.hap2, TRUE, i.resampled)]
+        object@gatk[hsnps, on=.(chr,pos,refnt,altnt), c('training.phgt', 'training.hap1', 'training.hap2', 'training.dp', 'training.site', 'resampled.training.site') := list(i.phgt, i.hap1, i.hap2, i.dp, TRUE, i.resampled)]
         object@resampled.training.data <- list(sites=nrow(object@gatk[resampled.training.site == TRUE]))
     } else {
-        object@gatk[hsnps, on=.(chr,pos,refnt,altnt), c('training.phgt', 'training.hap1', 'training.hap2', 'training.site') := list(i.phgt, i.hap1, i.hap2, TRUE)]
+        object@gatk[hsnps, on=.(chr,pos,refnt,altnt), c('training.phgt', 'training.hap1', 'training.hap2', 'training.dp', 'training.site') := list(i.phgt, i.hap1, i.hap2, i.dp, TRUE)]
     }
     object@gatk[is.na(training.site), training.site := FALSE]
     # index (not key) the data.table so that selecting training sites is fast
