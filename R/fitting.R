@@ -92,6 +92,9 @@ abmodel.refine.parameter.space <-
         # in the parameter space window.
     })
 
+    # Order the samples so that the best fit is always the first row
+    logp.samples <- logp.samples[order(logp.samples$logp, decreasing=TRUE),]
+
     new.param.space <- abmodel.shrink.parameter.space(logp.samples, top.n=top.n)
     list(logp.samples=logp.samples, new.param.space=new.param.space)
 }
