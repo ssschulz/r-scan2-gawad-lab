@@ -109,7 +109,7 @@ annotate.gatk.phasing <- function(gatk, phasing.path) {
     # guaranteed but is the case for our data.
     phase.data$phasedgt <- sapply(strsplit(phase.data$phasedgt, ':'), head, 1)
 
-    unrecoginzed <- setdiff(unique(phase.data$phasedgt), c('1|0', '0|1', './.'))
+    unrecognized <- setdiff(unique(phase.data$phasedgt), c('1|0', '0|1', './.'))
     if (length(unrecognized) > 0)
         stop(paste('phasing genotypes expected to be either 0|1, 1|0 or ./., but found', unrecognized, collapse='\n'))
 
