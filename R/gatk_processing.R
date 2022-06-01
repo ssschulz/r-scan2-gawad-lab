@@ -157,7 +157,7 @@ make.gatk.table <- function(mmq60, mmq1, phasing, single.cell, bulk, quiet=FALSE
     gatk <- read.gatk.table.2sample(mmq60, single.cell, bulk, quiet=quiet)
     annotate.gatk(gatk, add.mutsig=FALSE)
     annotate.gatk.phasing(gatk, phasing)
-    annotate.gatk.training(gatk single.cell, bulk)
+    annotate.gatk.training(gatk, single.cell, bulk)
     check.gatk(gatk)
     gatk
 }
