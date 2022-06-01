@@ -104,7 +104,7 @@ annotate.gatk.lowmq <- function(gatk, path, single.cell, bulk, region, quiet=FAL
 # counts. Based on phase, (alt,ref) maps to either (hap1,hap2) or (hap2,hap1).
 annotate.gatk.phasing <- function(gatk, phasing.path, parsimony.phasing=FALSE, parsimony.dist.cutoff=1e4) {
     # 'skip=str' in fread actually means skip to the first line containing str
-    phase.data <- fread(phasing.path, skip='#CHROM', header=TRUE,
+    phase.data <- data.table::fread(phasing.path, skip='#CHROM', header=TRUE,
         colClasses=c(`#CHROM`='character'))
     colnames(phase.data)[1:5] <- c('chr', 'pos', 'dbsnp', 'refnt', 'altnt')
 
