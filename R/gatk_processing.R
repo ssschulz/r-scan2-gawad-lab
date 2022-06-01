@@ -102,7 +102,7 @@ annotate.gatk.lowmq <- function(gatk, path, single.cell, bulk, region, quiet=FAL
 # To annotate phasing status (phased.hap1, phased.hap2) the estimated
 # phase needs to be joined to a single cell table with alt and ref read
 # counts. Based on phase, (alt,ref) maps to either (hap1,hap2) or (hap2,hap1).
-annotate.gatk.phasing <- function(gatk, phasing.path) {
+annotate.gatk.phasing <- function(gatk, phasing.path, parsimony.phasing=FALSE, parsimony.dist.cutoff=1e4) {
     # 'skip=str' in fread actually means skip to the first line containing str
     phase.data <- fread(phasing.path, skip='#CHROM', header=TRUE,
         colClasses=c(`#CHROM`='character'))
@@ -122,6 +122,9 @@ annotate.gatk.phasing <- function(gatk, phasing.path) {
     gatk[, c('phased.hap1', 'phased.hap2') :=
         list(ifelse(phased.gt == '0|1', scref, scalt),
              ifelse(phased.gt == '0|1', scalt, scref))]
+
+    if (parsimony.phasing)
+        adjust.phase(gatk, dist.cutoff=parsimony.dist.cutoff, quiet=quiet)
 }
 
 

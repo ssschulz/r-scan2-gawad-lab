@@ -216,15 +216,24 @@ get.3mer <- function(df, chr, pos, refnt, altnt, genome=BSgenome.Hsapiens.1000ge
 # N.B. with enough single cells, a method that harmonizes VAFs
 # for multiple cells simultaneously would perform accurate long
 # range phasing.
-adjust.phase <- function(pht, dist.cutoff=1e4) {
+#
+# 'pht' is a data.table that is modified by reference.
+adjust.phase <- function(pht, dist.cutoff=1e4, quiet=FALSE) {
+    if (!quiet)
     cat("WARNING: adjust.phase is EXPERIMENTAL!\n")
-    cat(sprintf("adjust.phase: neighboring hSNP correlation before adjustment: %0.3f\n",
-        cor(pht$af[-1], pht$af[-nrow(pht)], use='complete.obs')))
+
+    pos <- pht$pos
+    dp <- pht$phased.hap1 + pht$phased.hap2
     # copy will be overwritten as the sapply below runs
-    af <- pht$hap1/pht$dp
+    af <- pht$phased.hap1 / dp
+    cat(sprintf("adjust.phase: neighboring hSNP correlation before adjustment: %0.3f\n",
+        cor(af[-1], af[-nrow(pht)], use='complete.obs')))
+
+    # this can't be by independently evaluating each site. after evaluation of one
+    # site, the next site's results may change.
     swapped <- rep(F, length(af))
     sapply(2:length(af), function(i) {
-        swap.i <- pht$pos[i] - pht$pos[i-1] < dist.cutoff &
+        swap.i <- pos[i] - pos[i-1] < dist.cutoff &
                 !is.na(af[i-1]) & !is.na(af[i]) &
                 abs(af[i-1]-af[i]) > abs(af[i-1]-(1-af[i]))
         swapped[i] <<- swap.i
@@ -232,13 +241,13 @@ adjust.phase <- function(pht, dist.cutoff=1e4) {
             af[i] <<- 1-af[i]
     })
 
-    tmp.hap1 <- pht$hap1
-    tmp.hap2 <- pht$hap2
-    pht$hap1 <- ifelse(swapped, tmp.hap2, tmp.hap1)
-    pht$hap2 <- ifelse(swapped, tmp.hap1, tmp.hap2)
-    pht$af <- pht$hap1 / pht$dp
+    pht[, c('phased.hap1', 'phased.hap2', 'phase.adjusted') :=
+        list(ifelse(swapped, phased.hap2, phased.hap1),
+             ifelse(swapped, phased.hap1, phased.hap2),
+             swapped)]
 
-    cat(sprintf("adjust.phase: neighboring hSNP correlation after adjustment: %0.3f\n",
-        cor(pht$af[-1], pht$af[-nrow(pht)], use='complete.obs')))
-    pht
+    if (!quiet) {
+        cat(sprintf("adjust.phase: neighboring hSNP correlation after adjustment: %0.3f\n",
+            cor(af[-1], af[-nrow(pht)], use='complete.obs')))
+    }
 }
