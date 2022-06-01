@@ -120,8 +120,8 @@ annotate.gatk.phasing <- function(gatk, phasing.path) {
     gatk[phase.data, on=.(chr,pos,refnt,altnt), phased.gt := i.phasedgt]
 
     gatk[, c('phased.hap1', 'phased.hap2') :=
-        list(ifelse(phased.gt == '1|0', scalt, scref),
-             ifelse(phased.gt == '0|1', scref, scalt))]
+        list(ifelse(phased.gt == '0|1', scref, scalt),
+             ifelse(phased.gt == '0|1', scalt, scref))]
 }
 
 
