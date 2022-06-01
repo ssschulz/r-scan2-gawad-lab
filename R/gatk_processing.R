@@ -159,11 +159,11 @@ check.gatk <- function(gatk) {
 #
 # IMPORTANT: mutsig annotations are NOT added here because they can
 # be quite slow. These are better handled in parallel in chunks.
-make.gatk.table <- function(mmq60, mmq1, phasing, single.cell, bulk, quiet=FALSE) {
+make.gatk.table <- function(mmq60, mmq1, phasing, single.cell, bulk, parsimony.phasing=FALSE, quiet=FALSE) {
     gatk <- read.gatk.table.2sample(mmq60, single.cell, bulk, region=NULL, quiet=quiet)
     annotate.gatk(gatk, add.mutsig=FALSE)
     annotate.gatk.lowmq(gatk, mmq1, single.cell, bulk, region=NULL, quiet=quiet)
-    annotate.gatk.phasing(gatk, phasing)
+    annotate.gatk.phasing(gatk, phasing, parsimony.phasing=parsimony.phasing)
     annotate.gatk.training(gatk, single.cell, bulk)
     check.gatk(gatk)
     gatk
