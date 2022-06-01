@@ -103,7 +103,9 @@ annotate.gatk.lowmq <- function(gatk, path, single.cell, bulk, region, quiet=FAL
 # phase needs to be joined to a single cell table with alt and ref read
 # counts. Based on phase, (alt,ref) maps to either (hap1,hap2) or (hap2,hap1).
 annotate.gatk.phasing <- function(gatk, phasing.path) {
-    phase.data <- fread(phasing.path, skip='#CHROM', header=TRUE)
+    # 'skip=str' in fread actually means skip to the first line containing str
+    phase.data <- fread(phasing.path, skip='#CHROM', header=TRUE,
+        colClasses=c(`#CHROM`='character'))
     colnames(phase.data)[1:5] <- c('chr', 'pos', 'dbsnp', 'refnt', 'altnt')
 
     # This assumes "GT" is the first element of the GT string format, which isn't
