@@ -80,8 +80,8 @@ annotate.gatk <- function(gatk, add.mutsig=TRUE) {
 
 
 # 'gatk' is a data.table to be modified by reference
-annotate.gatk.lowmq <- function(gatk, single.cell, bulk, region, quiet=FALSE) {
-    lowmq <- read.gatk.table.2sample(path, single.cell, object@bulk, object@region, quiet=quiet)
+annotate.gatk.lowmq <- function(gatk, path, single.cell, bulk, region, quiet=FALSE) {
+    lowmq <- read.gatk.table.2sample(path, single.cell, bulk, region=NULL, quiet=quiet)
     data.table::setkey(lowmq, chr, pos, refnt, altnt)
 
     gatk[lowmq, on=.(chr,pos,refnt,altnt), balt.lowmq := i.balt]
@@ -154,8 +154,9 @@ check.gatk <- function(gatk) {
 # IMPORTANT: mutsig annotations are NOT added here because they can
 # be quite slow. These are better handled in parallel in chunks.
 make.gatk.table <- function(mmq60, mmq1, phasing, single.cell, bulk, quiet=FALSE) {
-    gatk <- read.gatk.table.2sample(mmq60, single.cell, bulk, quiet=quiet)
+    gatk <- read.gatk.table.2sample(mmq60, single.cell, bulk, region=NULL, quiet=quiet)
     annotate.gatk(gatk, add.mutsig=FALSE)
+    annotate.gatk.lowmq(gatk, mmq1, single.cell, bulk, region=NULL, quiet=quiet)
     annotate.gatk.phasing(gatk, phasing)
     annotate.gatk.training(gatk, single.cell, bulk)
     check.gatk(gatk)
