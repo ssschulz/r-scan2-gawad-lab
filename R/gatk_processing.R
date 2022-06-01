@@ -132,7 +132,7 @@ annotate.gatk.phasing <- function(gatk, phasing.path) {
 annotate.gatk.training <- function(gatk, single.cell, bulk) {
     bulk.gt <- gatk[[bulk]]
     sc.gt <- gatk[[single.cell]]
-    gatk[, training.site := phased.gt != './.' & sc.gt != './.' & bulk.gt == './.']
+    gatk[, training.site := phased.gt != './.' & sc.gt != './.' & bulk.gt != './.']
 }
 
 
