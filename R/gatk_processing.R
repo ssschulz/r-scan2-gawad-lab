@@ -117,7 +117,7 @@ annotate.gatk.phasing <- function(gatk, phasing.path) {
         stop(paste('phasing genotypes expected to be either 0|1, 1|0 or ./., but found', unrecognized, collapse='\n'))
 
     # First join the phase genotype (string is either 0|1, 1|0 or ./. if no call)
-    gatk[phase.data, on=.(chr,pos,refnt,altnt), phased.gt := i.phgt]
+    gatk[phase.data, on=.(chr,pos,refnt,altnt), phased.gt := i.phasedgt]
 
     gatk[, c('phased.hap1', 'phased.hap2') :=
         list(ifelse(phased.gt == '1|0', scalt, scref),
