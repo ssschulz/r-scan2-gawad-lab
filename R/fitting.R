@@ -80,7 +80,8 @@ abmodel.refine.parameter.space <-
         p(amount=0, class='sticky')
         logp.samples <- do.call(rbind, future.apply::future_lapply(1:n.chunks, function(i) {
             p(amount=0)
-            ctx <- abmodel.approx.ctx(x=hsnps$pos, y=hsnps$hap1, d=hsnps$dp,
+            ctx <- abmodel.approx.ctx(x=hsnps$pos, y=hsnps$phased.hap1,
+                d=hsnps$phased.hap1 + hsnps$phased.hap2,
                 hsnp.chunksize=hsnp.tilesize)
             ret <- abmodel.sample(n=n.logp.samples.per.chunk,
                 alim=alim, blim=blim, clim=clim, dlim=dlim,
