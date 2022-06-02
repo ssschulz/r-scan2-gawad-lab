@@ -115,3 +115,43 @@ run.pipeline <- function(
 
     x
 }
+
+
+
+# Full GATK annotation pipeline. Creates an annotated master table, which
+# contains many site-specific annotations and the full matrix of alt and ref
+# read counts for all single cells and bulks.
+make.gatk.table <- function(mmq60.tab, mmq1.tab, phased.vcf,
+    bulk.sample, genome,
+    grs=tileGenome(seqlengths=seqinfo(genome.string.to.bsgenome.object(genome))[as.character(1:22)], tilewidth=10e6, cut.last.tile.in.chrom=TRUE),
+    quiet=FALSE)
+{
+    cat('Starting master table pipeline on', length(grs), 'chunks.\n')
+    cat('Parallelizing with', future::availableCores(), 'cores.\n')
+
+    progressr::with_progress({
+        p <- progressr::progressor(along=1:length(grs))
+        p(amount=0, class='sticky', perfcheck(print.header=TRUE))
+        xs <- future.apply::future_lapply(1:length(grs), function(i) {
+            gr <- grs[i,]
+
+            gatk <- read.tabix.data(path=mmq60.tab, region=gr, quiet=quiet)
+
+            # Columns in GATK are split as site data | sample-specific count data/genotypes
+            # There are 7 site data columns (chr, pos, dbsnp ID, ref allele, alt allele, mq, mqrs).
+            # Try to keep the columns split by site-wide data | sample-specific data
+            sitewide <- gatk[,1:7]
+            samplespecific <- gatk[,-(1:7)]
+
+            annotate.gatk.bulk(sitewide, samplespecific, bulk.sample, quiet=quiet)
+            annotate.gatk(sitewide, add.mutsig=TRUE)
+            annotate.gatk.lowmq(sitewide, path=mmq1.tab, bulk=bulk.sample, region=gr, quiet=quiet)
+            annotate.gatk.phasing(sitewide, phasing.path=phased.vcf, region=gr)
+            cbind(sitewide, samplespecific)
+        })
+    })
+
+    gatk <- rbindlist(xs)
+    resampling.details <- gatk.resample.phased.sites(gatk)
+    list(gatk=gatk, resampling.details=resampling.details)
+}
