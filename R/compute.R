@@ -359,7 +359,7 @@ compute.fdr.new <- function(lysis.pv, lysis.beta, mda.pv, mda.beta, nt, na) {
 }
 
 
-resample.hsnps <- function(sites, hsnps, M=50, seed=0) {
+resample.germline <- function(sites, hsnps, M=50, seed=0) {
     # XXX: Random position sampling: maybe add an option to use random
     # instead of somatic candidates?
     # Random positioning is not as realistic as all non-ref sites because
