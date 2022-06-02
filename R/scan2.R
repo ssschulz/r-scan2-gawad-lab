@@ -13,11 +13,9 @@ setClass("SCAN2", slots=c(
     single.cell='character',
     bulk='character',
     gatk="null.or.df",
-    training.data="null.or.df",
     resampled.training.data="null.or.list",
     ab.fits='null.or.df',
     static.filter.params='null.or.list',
-    gatk.lowmq="null.or.df",
     ab.estimates='null.or.df',
     mut.models='null.or.df',
     cigar.data='null.or.df',
@@ -64,11 +62,9 @@ make.scan <- function(single.cell, bulk, genome=c('hs37d5', 'hg38', 'mm10'), reg
         genome.object=genome.string.to.bsgenome.object(genome),
         region=region,
         gatk=NULL,
-        training.data=NULL,
         ab.fits=NULL,
         # these slots used to hold tables; now their data is incorporated into @gatk and
         # they only record analysis parameters, if any apply.
-        gatk.lowmq=NULL,
         ab.estimates=NULL,
         mut.models=NULL,
         cigar.data=NULL,
@@ -117,18 +113,6 @@ setValidity("SCAN2", function(object) {
         }
     }
 
-    if (!is.null(object@gatk.lowmq)) {
-        if (!all(c('lowmq.scref', 'lowmq.scalt', 'lowmq.bref', 'lowmq.balt') %in%
-            colnames(object@gatk)))
-            return("low mapping quality GATK output is missing from @gatk")
-    }
-
-    if (!is.null(object@training.data)) {
-        if (!all(c('hap1', 'hap2', 'phgt', 'training.site.full') %in%
-            colnames(object@gatk)))
-            return("training.data was not properly imported")
-    }
-
     if (!is.null(object@ab.fits)) {
         # XXX: should also check that relevant chromosomes are present
         if (!all(colnames(object@ab.fits == c('a', 'b', 'c', 'd', 'logp'))))
@@ -161,10 +145,6 @@ check.slots <- function(object, slots, abort=TRUE) {
             error.occurred = TRUE
             if (s == 'gatk')
                 cat("must import GATK read counts first (see: read.gatk())\n")
-            if (s == 'gatk.lowmq')
-                cat("must import low mapping quality GATK read counts first (see: read.gatk.lowmq())\n")
-            if (s == 'training.data')
-                cat("must import hSNP training data first (see: add.training.data())\n")
             if (s == 'resampled.training.data')
                 cat("must resample hSNP training data first (see: resample.training.data())\n")
             if (s == 'ab.fits')
@@ -211,21 +191,20 @@ setMethod("show", "SCAN2", function(object) {
         cat('', nrow(object@gatk), "raw sites\n")
     }
 
-    cat("#   GATK low mapping quality:",
-        ifelse(is.null(object@gatk.lowmq), " (no data)", paste(object@gatk.lowmq$sites, 'sites')), '\n')
-
     cat("#   AB model training hSNPs:")
     if (is.null(object@training.data)) {
         cat(" (no data)\n")
     } else {
-        cat('', object@training.data$sites,
+        # germline indels are not used for AB model training
+        tdata <- lbject@gatk[training.site==TRUE & muttype=='snv']
+        cat('', nrow(tdata),
             sprintf("phased sites (hap1=%d, hap2=%d)",
-                sum(object@gatk$training.phgt=='1|0', na.rm=TRUE),
-                sum(object@gatk$training.phgt=='0|1', na.rm=TRUE)),"\n")
-        zzz <- do.call(rbind, lapply(split(object@gatk, object@gatk$chr),
+                sum(tdata$phased.gt=='1|0', na.rm=TRUE),
+                sum(tdata$phased.gt=='0|1', na.rm=TRUE)),"\n")
+        zzz <- do.call(rbind, lapply(split(tdata, tdata$chr),
             function(td) {
-                td$af <- td$training.hap1/(td$training.hap1+td$training.hap2)
-                cbind(dist=diff(td$pos), af1=td$af[-nrow(td)], af2=td$af[-1])
+                af <- td$phased.hap1/(td$phased.hap1+td$phased.hap2)
+                cbind(dist=diff(td$pos), af1=af[-nrow(td)], af2=td$af[-1])
         }))
         cors <- sapply(10^(2:5), function(threshold) {
             z <- zzz[zzz[,1] <= threshold,]; cor(z[,2], z[,3], use='complete.obs') }) 
@@ -342,8 +321,6 @@ setMethod("concat", signature="SCAN2", function(...) {
     ensure.same(args, 'genome.string')
     ensure.same(args, 'single.cell')
     ensure.same(args, 'bulk')
-    ensure.same(args, 'training.data', 'path')
-    ensure.same(args, 'gatk.lowmq', 'path')
     ret@gatk.lowmq <- data.frame(sites=sum(sapply(args, function(a) ifelse(is.null(a@gatk.lowmq), 0, a@gatk.lowmq$sites))))
     ensure.same(args, 'static.filter.params', 'min.sc.alt')
     ensure.same(args, 'static.filter.params', 'min.sc.dp')
