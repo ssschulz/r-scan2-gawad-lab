@@ -14,8 +14,13 @@ read.gatk.table.2sample <- function(path, sc.sample, bulk.sample, region, quiet=
     header <- read.tabix.header(tf)
     col.strings <- strsplit(header, '\t')[[1]]
     tot.cols <- length(col.strings)
-    sc.idx <- which(col.strings == sc.sample)
-    bulk.idx <- which(col.strings == bulk.sample)
+    sc.idx <- Inf
+    if (!missing(sc.sample))
+        sc.idx <- which(col.strings == sc.sample)
+    bulk.idx <- Inf
+    if (!missing(bulk.sample))
+        bulk.idx <- which(col.strings == bulk.sample)
+
     if (!quiet) {
         cat("Selecting columns:\n")
         for (i in 1:length(col.strings)) {
@@ -35,20 +40,62 @@ read.gatk.table.2sample <- function(path, sc.sample, bulk.sample, region, quiet=
     # First 5 are chr, pos, dbsnp, refnt, altnt
     cols.to.read[1:5] <- c('character', 'integer', rep('character', 3))
     # Read 3 columns for the single cell, 3 columns for bulk
-    cols.to.read[sc.idx + 0:2] <- c('character', 'integer', 'integer')
-    cols.to.read[bulk.idx + 0:2] <- c('character', 'integer', 'integer')
+    if (!missing(sc.sample))
+        cols.to.read[sc.idx + 0:2] <- c('character', 'integer', 'integer')
+    if (!missing(bulk.sample))
+        cols.to.read[bulk.idx + 0:2] <- c('character', 'integer', 'integer')
+
     gatk <- read.tabix.data(tf=tf, region=region, header=header, quiet=quiet, colClasses=cols.to.read)
     close(tf)
-    new.sc.idx <- which(colnames(gatk) == sc.sample)
-    new.bulk.idx <- which(colnames(gatk) == bulk.sample)
-    colnames(gatk)[new.sc.idx+1:2] <- c('scref', 'scalt')
-    colnames(gatk)[new.bulk.idx+1:2] <- c('bref', 'balt')
+
+    if (!missing(sc.sample)) {
+        new.sc.idx <- which(colnames(gatk) == sc.sample)
+        colnames(gatk)[new.sc.idx+1:2] <- c('scref', 'scalt')
+    }
+
+    if (!missing(bulk.sample)) {
+        new.bulk.idx <- which(colnames(gatk) == bulk.sample)
+        colnames(gatk)[new.bulk.idx+1:2] <- c('bref', 'balt')
+    }
 
     # Rearrange columns so that the single cell triplet is first, then bulk triplet
-    cols.to.keep <- c(col.strings[1:5], sc.sample, c('scref', 'scalt'), bulk.sample, c('bref', 'balt'))
+    cols.to.keep <- col.strings[1:5]
+    if (!missing(sc.sample))
+        cols.to.keep <- c(cols.to.keep, sc.sample, c('scref', 'scalt'))
+    if (!missing(bulk.sample))
+        cols.to.keep <- c(cols.to.keep, bulk.sample, c('bref', 'balt'))
+
     gatk <- gatk[,..cols.to.keep]
 
     gatk
+}
+
+
+# annotate `gatk.meta` with 'bulk.gt', 'bulk.dp', 'bulk.af', 'bref' and 'balt' taken from `gatk`,
+# which are the bulk genotype string assigned by HaplotypeCaller, bulk depth, bulk VAF, the number
+# of ref supporting bulk reads and mutation supporting bulk reads.
+#
+# only `gatk.meta` is modified (by reference).
+gatk.annotate.bulk <- function(gatk.meta, gatk, bulk.sample, quiet=FALSE) {
+    header <- colnames(gatk)
+    col.strings <- strsplit(header, '\t')[[1]]
+    tot.cols <- length(col.strings)
+    bulk.idx <- Inf
+    if (!missing(bulk.sample))
+        bulk.idx <- which(col.strings == bulk.sample)
+
+    if (!quiet) {
+        cat("Selecting columns:\n")
+        for (i in 1:length(col.strings)) {
+            if (any(i == bulk.idx + 0:2)) {
+                cat(sprintf("    (%d)", i), col.strings[i], '[bulk]\n')
+            }
+        }
+    }
+
+    gatk.meta[, c('bulk.gt', 'bref', 'balt') :=
+        list(gatk[[bulk.idx]]], gatk[[bulk.idx+1]], gatk[[bulk.idx+2]])]
+    gatk.meta[, c('bulk.dp', 'bulk.af') := bref+balt, balt/(bref+balt)]
 }
 
 
@@ -56,13 +103,7 @@ read.gatk.table.2sample <- function(path, sc.sample, bulk.sample, region, quiet=
 # no need to return the result.
 #
 # This can be slow with add.mutsig, particularly for indels.
-annotate.gatk <- function(gatk, add.mutsig=TRUE) {
-    # Add some convenient calculations
-    # Not sure if it's necessary to split these calculations up.
-    gatk[, c('dp', 'bulk.dp') :=
-        list(scalt+scref, bref+balt)]
-    gatk[, c('af', 'bulk.af') :=
-        list(scalt/dp, balt/bulk.dp)]
+annotate.gatk <- function(gatk, bulk.sample, genome.string, add.mutsig=TRUE) {
     data.table::setkey(gatk, chr, pos, refnt, altnt)
 
     # Determine SNV/indel status and then annotate mutation signature channels
@@ -76,12 +117,28 @@ annotate.gatk <- function(gatk, add.mutsig=TRUE) {
         chs <- classify.indels(gatk[muttype == 'indel'], genome.string=object@genome.string)
         gatk[muttype == 'indel', mutsig := chs]
     }
+
+    # FIXME: legacy SCANSNV behavior did indeed use every alt read count
+    # other than the named bulk sample to determine somatic candidate sites.
+    # This does not account for jointly analyzing other bulk samples (that
+    # perhaps were not the primary bulk to be compared against) or other
+    # single cells that were not included in analysis for whatever reason
+    # (like low-depth cells).
+    # We are continuing legacy behavior, but I'd prefer to fix it at some
+    # point.
+    alts <- which(colnames(gatk) == 'alt')
+    sum.alts <- rowSums(as.matrix(gatk[,..alts])) - gatk$balt
+
+    # N.B. rowSums requred >= min.sc.alt, but in legacy uses this was always 2.
+    # FIXME: it'd be good to expose this to the end user. Especially for mosaic
+    # mutation calling.
+    gatk[, somatic.candidate := balt == 0 & bulk.gt == '0/0' & dbsnp == '.' & sum.alts >= 2]
 }
 
 
 # 'gatk' is a data.table to be modified by reference
-annotate.gatk.lowmq <- function(gatk, path, single.cell, bulk, region, quiet=FALSE) {
-    lowmq <- read.gatk.table.2sample(path, single.cell, bulk, region=NULL, quiet=quiet)
+annotate.gatk.lowmq <- function(gatk, path, bulk, region, quiet=FALSE) {
+    lowmq <- read.gatk.table.2sample(path, bulk.sample=bulk, region=region, quiet=quiet)
     data.table::setkey(lowmq, chr, pos, refnt, altnt)
 
     gatk[lowmq, on=.(chr,pos,refnt,altnt), balt.lowmq := i.balt]
@@ -102,15 +159,18 @@ annotate.gatk.lowmq <- function(gatk, path, single.cell, bulk, region, quiet=FAL
 # To annotate phasing status (phased.hap1, phased.hap2) the estimated
 # phase needs to be joined to a single cell table with alt and ref read
 # counts. Based on phase, (alt,ref) maps to either (hap1,hap2) or (hap2,hap1).
-annotate.gatk.phasing <- function(gatk, phasing.path, parsimony.phasing=FALSE, parsimony.dist.cutoff=1e4) {
-    # 'skip=str' in fread actually means skip to the first line containing str
-    phase.data <- data.table::fread(phasing.path, skip='#CHROM', header=TRUE,
-        colClasses=c(`#CHROM`='character'))
-    colnames(phase.data)[1:5] <- c('chr', 'pos', 'dbsnp', 'refnt', 'altnt')
+annotate.gatk.phasing <- function(gatk, phasing.path, region, quiet=FALSE) {
+    phase.data <- read.tabix.data(path=phasing.path, region=region, quiet=quiet)
+
+    if (ncol(phase.data) != 10)
+        stop('expected single-sample VCF format with 10 columns')
+
+    # phasing.path is a single sample standard VCF, so we specify the column
+    # format explicitly.
+    colnames(phase.data) <- c('chr', 'pos', 'dbsnp', 'refnt', 'altnt', 'qual', 'filter', 'info', 'format', 'phasedgt'),
 
     # This assumes "GT" is the first element of the GT string format, which isn't
     # guaranteed but is the case for our data.
-    phase.data$phasedgt <- sapply(strsplit(phase.data$phasedgt, ':'), head, 1)
 
     unrecognized <- setdiff(unique(phase.data$phasedgt), c('1|0', '0|1', './.'))
     if (length(unrecognized) > 0)
@@ -118,7 +178,11 @@ annotate.gatk.phasing <- function(gatk, phasing.path, parsimony.phasing=FALSE, p
 
     # First join the phase genotype (string is either 0|1, 1|0 or ./. if no call)
     gatk[phase.data, on=.(chr,pos,refnt,altnt), phased.gt := i.phasedgt]
+}
 
+
+rename.and.use.later <- function()
+{
     gatk[, c('phased.hap1', 'phased.hap2') :=
         list(ifelse(phased.gt == '0|1', scref, scalt),
              ifelse(phased.gt == '0|1', scalt, scref))]
@@ -139,32 +203,37 @@ annotate.gatk.training <- function(gatk, single.cell, bulk) {
 }
 
 
-# Make sure the supplied GATK table has been fully annotated.
-# Intended to be used by the SCAN2 object.
-check.gatk <- function(gatk) {
-    check.one <- function(cn, action)
-        if (!(cn %in% colnames(gatk)))
-            stop(paste(cn, 'not detected in gatk, please', action))
+# Again, modifying 'gatk' by reference.
+# Returns list of resampling auxiliary data with one entry for SNVs and one for indels
+# and modifies `gatk` by reference.
+# FIXME: germline indels, not germline SNVs, were used by legacy SCAN2 calling when
+# downsampling. This is right and wrong in various scenarios:
+#    - For sensitivity estimation, this is WRONG because only hSNPs are used to
+#      in AB model inference. Thus, to best reflect sensitivity due to proximity
+#      to AB model training sites (somatic sites closer to training sites have more
+#      accurate AB estimates and therefore probably higher sensitivity), only hSNPs
+#      should be used.
+#    - For CIGAR op filtering, this is CORRECT because somatic indel CIGAR profiles
+#      should be compared to germline indel CIGAR profiles. Of course, applying certain
+#      CIGAR op filters (indel ops) is actually incorrect either way.
+# In any case, this likely has a relatively insignificant effect so we are leaving it as
+# it was in legacy calling for now.
+gatk.resample.phased.sites <- function(gatk, M=20, seed=0))
+{
+    ret <- list()
+    for (mt in c('snv', 'indel')) {
+        aux.data <- resample.germline(
+            sites=gatk[somatic.candidate == TRUE & muttype == mt],
+            hsnps=gatk[training.site == TRUE & muttype == mt],
+            M=M, seed=seed)
 
-    check.one('balt.lowmq', 'join mmq1 data')
-    check.one('phased.gt', 'join phasing data')
-    check.one('phased.hap1', 'join phasing data')
-    check.one('phased.hap2', 'join phasing data')
-    check.one('training.site', 'run annotate.gatk.training')
-}
+        # aux.data$selection is aligned to the input 'hsnps' table
+        gatk[training.site == TRUE & muttype == mt, resampled.training.site := aux.data$selection$keep]
+        ret[[mt]] <- aux.data
+    }
 
+    gatk[is.na(resampled.training.site), resampled.training.site := FALSE]
+    setindex(gatk, resampled.training.site)
 
-# Full GATK annotation pipeline. Writes out the table expected as
-# input for SCAN2 call_mutations.
-#
-# IMPORTANT: mutsig annotations are NOT added here because they can
-# be quite slow. These are better handled in parallel in chunks.
-make.gatk.table <- function(mmq60, mmq1, phasing, single.cell, bulk, parsimony.phasing=FALSE, quiet=FALSE) {
-    gatk <- read.gatk.table.2sample(mmq60, single.cell, bulk, region=NULL, quiet=quiet)
-    annotate.gatk(gatk, add.mutsig=FALSE)
-    annotate.gatk.lowmq(gatk, mmq1, single.cell, bulk, region=NULL, quiet=quiet)
-    annotate.gatk.phasing(gatk, phasing, parsimony.phasing=parsimony.phasing)
-    annotate.gatk.training(gatk, single.cell, bulk)
-    check.gatk(gatk)
-    gatk
+    return(ret)
 }
