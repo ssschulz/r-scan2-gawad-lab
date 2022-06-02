@@ -97,47 +97,6 @@ get.distance.distn <- function(d, min=1, max=5) {
     h
 }
 
-# som is the 'somatic' dataframe input to scansnv
-# hsnp is the 'data' dataframe from training.rda containing training hSNP sites
-# XXX: M=50 is unlikely to be a good value in general
-resample.hsnps.old <- function(som, hsnps, chrom, M=50) {
-    # XXX: Random position sampling: maybe add an option to use random
-    # instead of somatic candidates?
-    # Random positioning is not as realistic as all non-ref sites because
-    # it doesn't account for alignability/mappability in the same way as
-    # non-ref sites.
-    #random.pos <- find.nearest.germline(som=data.frame(chr='X',
-    #       pos=sort(as.integer(runif(n=1e5, min=min(spos$pos), max=max(spos$pos))))), 
-    #   germ=data, chrs='X')
-    #random.pos <- random.pos[abs(random.pos$pos-random.pos$nearest.het)>0,]
-
-    # Distribution of candidates
-    # 1. only consider candidates for this sample
-    #tmpsom <- som[!is.na(som$af) & som$af>0,]
-    tmpsom <- find.nearest.germline(som=som[order(som$pos),], germ=hsnps,
-        chrs=chrom)
-    spos <- log10(abs(tmpsom$pos-tmpsom$nearest.het))
-
-    # Distribution of hSNP distances
-    # Since the training data are already sorted, diff() gives the distance
-    # between this SNP and the next. Nearest SNP is the min of the distance
-    # to the left and right.
-    hsnps$nearest.hsnp <- pmin(diff(c(0,hsnps$pos)),
-                               diff(c(hsnps$pos, max(hsnps$pos)+1)))
-    hpos <- log10(hsnps$nearest.hsnp)
-
-    # Approximate the distributions
-    dist.s <- get.distance.distn(spos)
-    dist.h <- get.distance.distn(hpos)
-    ds <- dist.s$density[findInterval(hpos, dist.s$breaks, all.inside=T)]
-    dh <- dist.h$density[findInterval(hpos, dist.h$breaks, all.inside=T)]
-    
-    u <- runif(n=length(ds))
-    list(selection=data.frame(dist=hsnps$nearest.hsnp, ds=ds, dh=dh, u=u, keep=u < ds / (M*dh)),
-        dist.s=dist.s, dist.h=dist.h)
-}
-
-
 
 muttype.map <- c(
     'A>C'='T>G',
