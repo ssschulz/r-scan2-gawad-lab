@@ -244,28 +244,6 @@ annotate.gatk.phasing <- function(gatk, phasing.path, region, quiet=FALSE) {
 }
 
 
-rename.and.use.later <- function()
-{
-    gatk[, c('phased.hap1', 'phased.hap2') :=
-        list(ifelse(phased.gt == '0|1', scref, scalt),
-             ifelse(phased.gt == '0|1', scalt, scref))]
-
-    if (parsimony.phasing)
-        adjust.phase(gatk, dist.cutoff=parsimony.dist.cutoff, quiet=quiet)
-}
-
-
-# Mark the germline hSNPs and hIndels that should be used as training sites.
-# Note that hIndels aren't used for AB model fitting; currently they are used
-# to build CIGAR op filters, determine the FDR prior distns and for sensitivity
-# estimation used in total burden calculations.
-annotate.gatk.training <- function(gatk, single.cell, bulk) {
-    bulk.gt <- gatk[[bulk]]
-    sc.gt <- gatk[[single.cell]]
-    gatk[, training.site := phased.gt != './.' & sc.gt != './.' & bulk.gt != './.']
-}
-
-
 # Again, modifying 'gatk' by reference.
 # Returns list of resampling auxiliary data with one entry for SNVs and one for indels
 # and modifies `gatk` by reference.
