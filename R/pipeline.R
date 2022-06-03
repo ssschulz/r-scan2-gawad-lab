@@ -37,7 +37,7 @@ run.pipeline <- function(
     cat('Starting chunked SCAN2 pipeline on', length(grs), 'chunks\n')
     cat('Setting OpenBLAS corecount to 1. This prevents multithreaded matrix multiplication in chunks where it is undesired.\n')
     RhpcBLASctl::blas_set_num_threads(1)
-    cat('Parallelizing with', future::availableCores(), 'cores\n')
+    cat('Parallelizing with', future::nbfOfWorkers(), 'cores\n')
     cat('Detailed chunk schedule:\n')
     cat(sprintf('%7s %5s %10s %10s\n', 'Chunk', 'Chr', 'Start', 'End'))
     for (i in 1:length(grs)) {
@@ -128,7 +128,7 @@ make.integrated.table <- function(mmq60.tab, mmq1.tab, phased.vcf,
     quiet=TRUE)
 {
     cat('Starting integrated table pipeline on', length(grs), 'chunks.\n')
-    cat('Parallelizing with', future::availableCores(), 'cores.\n')
+    cat('Parallelizing with', future::nbrOfWorkers(), 'cores.\n')
 
     progressr::with_progress({
         p <- progressr::progressor(along=1:length(grs))
