@@ -369,6 +369,7 @@ setGeneric("read.integrated.table", function(object, path, quiet=FALSE)
 setMethod("read.integrated.table", "SCAN2", function(object, path, quiet=FALSE) {
     object@gatk <- read.and.annotate.integrated.table(path=path, sample.id=object@single.cell,
         region=object@region, quiet=quiet)
+    object
 })
 
 
