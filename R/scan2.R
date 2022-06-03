@@ -850,8 +850,8 @@ read.and.annotate.integrated.table <- function(path, sample.id, region=NULL, qui
     # Add some convenient calculations
     tr[, dp := scalt + scref]
     tr[, af := scalt / dp]
-    data.table::setkey(gatk, chr, pos, refnt, altnt)
-    setindex(gatk, muttype) # allow for fast selection of SNVs or indels
+    data.table::setkey(tr, chr, pos, refnt, altnt)
+    setindex(tr, muttype) # allow for fast selection of SNVs or indels
 
     sc.gt <- tr[[sample.id]]  # the column named after the sample is the GATK GT string for that sample
     tr[, training.site := (phased.gt == '1|0' | phased.gt == '0|1') & sc.gt != './.' & bulk.gt != './.']
