@@ -9,7 +9,7 @@
 # This function should eventually replace the older 2sample version.
 #
 # n.meta.cols - 5 for GATK tables, 17 for integrated table
-read.table.1sample <- function(path, sample.id, region, n.meta.cols=5, quiet=FALSE) {
+read.table.1sample <- function(path, sample.id, region=NULL, n.meta.cols=5, quiet=FALSE) {
     if (!quiet) cat("Importing GATK table..\n")
 
     # Step 1: just get the header and detect the columns corresponding to sample.id
@@ -35,6 +35,11 @@ read.table.1sample <- function(path, sample.id, region, n.meta.cols=5, quiet=FAL
     cols.to.read <- rep("NULL", tot.cols)
     # First 5 are chr, pos, dbsnp, refnt, altnt. Applies to both GATK and integrated
     cols.to.read[1:5] <- c('character', 'integer', rep('character', 3))
+    if (n.meta.cols == 17) {
+        cols.to.read[6:17] <- c('numeric', 'numeric', 'character', 'integer',
+            'integer', 'integer', 'numeric', 'character', 'character', 'logical',
+            'integer', 'character')
+    }
     # Read 3 columns for the single cell, 3 columns for bulk
     cols.to.read[sample.idx + 0:2] <- c('character', 'integer', 'integer')
 
