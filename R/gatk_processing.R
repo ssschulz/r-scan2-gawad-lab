@@ -8,7 +8,7 @@
 #
 # This function should eventually replace the older 2sample version.
 #
-# n.meta.cols - 5 for GATK tables, 17 for integrated table
+# n.meta.cols - 5 for GATK tables, 18 for integrated table
 read.table.1sample <- function(path, sample.id, region=NULL, n.meta.cols=5, quiet=FALSE) {
     if (!quiet) cat("Importing GATK table..\n")
 
@@ -35,10 +35,10 @@ read.table.1sample <- function(path, sample.id, region=NULL, n.meta.cols=5, quie
     cols.to.read <- rep("NULL", tot.cols)
     # First 5 are chr, pos, dbsnp, refnt, altnt. Applies to both GATK and integrated
     cols.to.read[1:5] <- c('character', 'integer', rep('character', 3))
-    if (n.meta.cols == 17) {
-        cols.to.read[6:17] <- c('numeric', 'numeric', 'character', 'integer',
+    if (n.meta.cols == 18) {
+        cols.to.read[6:18] <- c('numeric', 'numeric', 'character', 'integer',
             'integer', 'integer', 'numeric', 'character', 'character', 'logical',
-            'integer', 'character')
+            'integer', 'character', 'logical')
     }
     # Read 3 columns for the single cell, 3 columns for bulk
     cols.to.read[sample.idx + 0:2] <- c('character', 'integer', 'integer')
@@ -259,8 +259,12 @@ annotate.gatk.phasing <- function(gatk, phasing.path, region, quiet=FALSE) {
 #      CIGAR op filters (indel ops) is actually incorrect either way.
 # In any case, this likely has a relatively insignificant effect so we are leaving it as
 # it was in legacy calling for now.
-gatk.resample.phased.sites <- function(gatk, M=20, seed=0)
-{
+#
+# n.meta.cols is a horrible hack to keep metacolumns on the left so that they
+# can be easily selected later. this will certainly be broken inadvertently and
+# cause headaches. notably, this is (final n.meta.cols)-1 because this function
+# adds one new meta column to gatk by reference.
+gatk.resample.phased.sites <- function(gatk, M=20, seed=0, n.meta.cols=17) {
     ret <- list()
     for (mt in c('snv', 'indel')) {
         aux.data <- resample.germline(
@@ -277,7 +281,8 @@ gatk.resample.phased.sites <- function(gatk, M=20, seed=0)
     }
 
     gatk[is.na(resampled.training.site), resampled.training.site := FALSE]
-    setindex(gatk, resampled.training.site)
+    # put resampled.training.site in the left block of columns of metadata
+    setcolumnorder(gatk, neworder=c(1:n.meta.cols, ncol(gatk), (n.meta.cols+1):(ncol(gatk)-1)))
 
     return(ret)
 }
