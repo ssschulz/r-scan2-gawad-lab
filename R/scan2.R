@@ -468,7 +468,7 @@ setMethod("compute.ab.fits", "SCAN2", function(object, path, chroms=1:22,
 setGeneric("compute.ab.estimates", function(object, n.cores=1, quiet=FALSE)
     standardGeneric("compute.ab.estimates"))
 setMethod("compute.ab.estimates", "SCAN2", function(object, n.cores=1, quiet=FALSE) {
-    check.slots(object, c('gatk', 'training.data', 'ab.fits'))
+    check.slots(object, c('gatk', 'ab.fits'))
 
     flank <- 1e5 # currently not configurable by user, partly by design
 
@@ -556,7 +556,7 @@ setMethod("compute.models", "SCAN2", function(object, verbose=TRUE) {
 setGeneric("compute.fdr.prior.data", function(object, mode='legacy', quiet=FALSE)
     standardGeneric("compute.fdr.prior.data"))
 setMethod("compute.fdr.prior.data", "SCAN2", function(object, mode='legacy', quiet=FALSE) {
-    check.slots(object, c('gatk', 'gatk.lowmq', 'training.data', 'static.filter.params'))
+    check.slots(object, c('gatk', 'static.filter.params'))
 
     # FIXME: after integrated table, should probably just use somatic.candidate
     # column here.
@@ -742,12 +742,12 @@ cigar.get.null.sites <- function(object, path=NULL, legacy=TRUE, quiet=FALSE) {
             'excess cigar scores should be computed on full chr1-chr22 data, not chunked data')
 
         if (legacy) {
-            check.slots(object, c('gatk', 'training.data', 'cigar.data', 'resampled.training.data'))
+            check.slots(object, c('gatk', 'cigar.data'))
             null.sites <- object@gatk[resampled.training.site==TRUE]
             if (!quiet) cat(sprintf('LEGACY: computing CIGAR op rates only at resampled training sites (n=%d)..\n',
                 nrow(null.sites)))
         } else {
-            check.slots(object, c('gatk', 'training.data', 'cigar.data'))
+            check.slots(object, c('gatk', 'cigar.data'))
             null.sites <- object@gatk[training.site==TRUE]
             if (!quiet) {
                 cat(sprintf('computing CIGAR op rates for all training sites (n=%d)..\n',
