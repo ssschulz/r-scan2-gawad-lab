@@ -847,7 +847,7 @@ setMethod("compute.static.filters", "SCAN2", function(object, exclude.dbsnp=TRUE
 # consistent across single cells.
 read.and.annotate.integrated.table <- function(path, sample.id, region=NULL, quiet=FALSE) {
     tr <- read.table.1sample(path, sample.id, n.meta.cols=18, region=region, quiet=quiet)
-    setindex(gatk, resampled.training.site)
+    setindex(tr, resampled.training.site)
 
     # Add some convenient calculations
     tr[, dp := scalt + scref]
