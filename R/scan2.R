@@ -577,7 +577,7 @@ setMethod("compute.ab.estimates", "SCAN2", function(object, n.cores=1, quiet=FAL
         if (!quiet) cat('Importing extended hSNP training data from', path, 'using extended range\n')
         extended.range <- GRanges(seqnames=seqnames(object@region)[1],
             ranges=IRanges(start=start(object@region)-flank, end=end(object@region)+flank))
-        extended.training.hsnps <- read.training.data(path, region=extended.range, quiet=quiet)
+        extended.training.hsnps <- read.training.data(path, sample.id=object@single.cell, region=extended.range, quiet=quiet)[muttype=='snv']
         if (!quiet)
             cat(sprintf("hSNP training sites: %d, extended training sites: %d\n",
                 nrow(object@gatk[training.site==TRUE]), nrow(extended.training.hsnps)))
@@ -952,12 +952,26 @@ setMethod("resample.training.data", "SCAN2", function(object, M=20, seed=0, mode
 })
 
 
+read.training.data <- function(path, sample.id, parsimony.phasing=FALSE, region=NULL, quiet=FALSE) {
+    tr <- read.table.1sample(path, sample.id, n.meta.cols=17, region=region, quiet=quiet)
+    sc.gt <- tr[[sample.id]]  # the column named after the sample is the GATK GT string for that sample
+    tr[, training.site := (phased.gt == '1|0' | phased.gt == '0|1') & sc.gt != './.' & bulk.gt != './.']
+    tr[, c('phased.hap1', 'phased.hap2') :=
+        list(ifelse(phased.gt == '0|1', scref, scalt),
+             ifelse(phased.gt == '0|1', scalt, scref))]
+
+    if (parsimony.phasing)
+        adjust.phase(tr, dist.cutoff=parsimony.dist.cutoff, quiet=quiet)
+    tr
+}
+
+
 # col.classes - equivalent to read.table's colClasses.
 #   * Some functions override col.classes to improve memory efficiency. Setting a
 #     col.classes entry to 'NULL' (the string, not R's NULL) discards the column.
 # index - automatically index table by (chr,pos,refnt,altnt) identifiers.
 #   Useful for joining to larger tables.
-read.training.data <- function(path, col.classes, region=NULL, quiet=FALSE, index=TRUE) {
+read.training.data.old <- function(path, col.classes, region=NULL, quiet=FALSE, index=TRUE) {
     tf <- Rsamtools::TabixFile(path)
     open(tf)
     header <- strsplit(read.tabix.header(path), split="\t")[[1]]
@@ -988,7 +1002,7 @@ setGeneric("add.training.data", function(object, path, quiet=FALSE, require.resa
         standardGeneric("add.training.data"))
 setMethod("add.training.data", "SCAN2", function(object, path, quiet=FALSE, require.resampled=FALSE) {
     if (!quiet) cat('Importing hSNP training data from', path, '\n')
-    hsnps <- read.training.data(path, region=object@region, quiet=quiet)
+    hsnps <- read.training.data(path, sample.id=object@single.cell, region=object@region, quiet=quiet)[muttype=='snv']
 
     resampled <- 'resampled' %in% colnames(hsnps)
 
