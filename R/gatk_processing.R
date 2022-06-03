@@ -7,7 +7,9 @@
 # be done quickly.
 #
 # This function should eventually replace the older 2sample version.
-read.gatk.table.1sample <- function(path, sample.id, region, quiet=FALSE) {
+#
+# n.meta.cols - 5 for GATK tables, 17 for integrated table
+read.table.1sample <- function(path, sample.id, region, n.meta.cols=5, quiet=FALSE) {
     if (!quiet) cat("Importing GATK table..\n")
 
     # Step 1: just get the header and detect the columns corresponding to sample.id
@@ -21,8 +23,7 @@ read.gatk.table.1sample <- function(path, sample.id, region, quiet=FALSE) {
     if (!quiet) {
         cat("Selecting columns:\n")
         for (i in 1:length(col.strings)) {
-            # First 5 are chr, pos, dbsnp, refnt, altnt
-            if (i <= 5) {
+            if (i <= n.meta.cols) {
                 cat(sprintf("    (%d)", i), col.strings[i], '\n')
             } else if (any(i == sample.idx + 0:2)) {
                 cat(sprintf("    (%d)", i), col.strings[i], '[single cell]\n')
@@ -32,7 +33,7 @@ read.gatk.table.1sample <- function(path, sample.id, region, quiet=FALSE) {
     
     # Step 2: really read the tables in, but only the relevant columns
     cols.to.read <- rep("NULL", tot.cols)
-    # First 5 are chr, pos, dbsnp, refnt, altnt
+    # First 5 are chr, pos, dbsnp, refnt, altnt. Applies to both GATK and integrated
     cols.to.read[1:5] <- c('character', 'integer', rep('character', 3))
     # Read 3 columns for the single cell, 3 columns for bulk
     cols.to.read[sample.idx + 0:2] <- c('character', 'integer', 'integer')
@@ -44,7 +45,7 @@ read.gatk.table.1sample <- function(path, sample.id, region, quiet=FALSE) {
     colnames(gatk)[new.sample.idx+1:2] <- c('scref', 'scalt')
 
     # Rearrange columns so that the single cell triplet is first, then bulk triplet
-    cols.to.keep <- col.strings[1:5]
+    cols.to.keep <- col.strings[1:n.meta.cols]
     cols.to.keep <- c(cols.to.keep, sample.id, c('scref', 'scalt'))
 
     gatk <- gatk[,..cols.to.keep]
@@ -193,7 +194,7 @@ annotate.gatk <- function(gatk, gatk.counts, genome.string, genome.object, add.m
 
 # 'gatk' is a data.table to be modified by reference
 annotate.gatk.lowmq <- function(gatk, path, bulk, region, quiet=FALSE) {
-    lowmq <- read.gatk.table.1sample(path, sample.id=bulk, region=region, quiet=quiet)
+    lowmq <- read.table.1sample(path, sample.id=bulk, region=region, quiet=quiet)
     data.table::setkey(lowmq, chr, pos, refnt, altnt)
 
     gatk[lowmq, on=.(chr,pos,refnt,altnt), balt.lowmq := i.scalt]
