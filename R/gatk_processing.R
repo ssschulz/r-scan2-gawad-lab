@@ -282,7 +282,7 @@ gatk.resample.phased.sites <- function(gatk, M=20, seed=0, n.meta.cols=17) {
 
     gatk[is.na(resampled.training.site), resampled.training.site := FALSE]
     # put resampled.training.site in the left block of columns of metadata
-    setcolumnorder(gatk, neworder=c(1:n.meta.cols, ncol(gatk), (n.meta.cols+1):(ncol(gatk)-1)))
+    data.table::setcolorder(gatk, neworder=c(1:n.meta.cols, ncol(gatk), (n.meta.cols+1):(ncol(gatk)-1)))
 
     return(ret)
 }
