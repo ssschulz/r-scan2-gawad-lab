@@ -146,7 +146,7 @@ make.master.table <- function(mmq60.tab, mmq1.tab, phased.vcf,
             samplespecific <- gatk[,-(1:7)]
 
             annotate.gatk.bulk(sitewide, samplespecific, bulk.sample, quiet=quiet)
-            annotate.gatk(sitewide, genome.string=genome.string, genome.object=genome.object, add.mutsig=TRUE)
+            annotate.gatk(gatk=sitewide, gatk.counts=samplespecific, genome.string=genome.string, genome.object=genome.object, add.mutsig=TRUE)
             annotate.gatk.lowmq(sitewide, path=mmq1.tab, bulk=bulk.sample, region=gr, quiet=quiet)
             annotate.gatk.phasing(sitewide, phasing.path=phased.vcf, region=gr)
             cbind(sitewide, samplespecific)
