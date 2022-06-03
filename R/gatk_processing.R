@@ -132,8 +132,6 @@ read.gatk.table.2sample <- function(path, sc.sample, bulk.sample, region, quiet=
 #
 # only `gatk.meta` is modified (by reference).
 annotate.gatk.bulk <- function(gatk.meta, gatk, bulk.sample, quiet=FALSE) {
-    #header <- colnames(gatk)
-    #col.strings <- strsplit(header, '\t')[[1]]
     col.strings <- colnames(gatk)
     tot.cols <- length(col.strings)
     bulk.idx <- Inf
@@ -198,7 +196,7 @@ annotate.gatk.lowmq <- function(gatk, path, bulk, region, quiet=FALSE) {
     lowmq <- read.gatk.table.1sample(path, sample.id=bulk, region=region, quiet=quiet)
     data.table::setkey(lowmq, chr, pos, refnt, altnt)
 
-    gatk[lowmq, on=.(chr,pos,refnt,altnt), balt.lowmq := i.balt]
+    gatk[lowmq, on=.(chr,pos,refnt,altnt), balt.lowmq := i.scalt]
 }
 
 
