@@ -952,7 +952,9 @@ setMethod("resample.training.data", "SCAN2", function(object, M=20, seed=0, mode
 })
 
 
-read.training.data <- function(path, sample.id, parsimony.phasing=FALSE, region=NULL, quiet=FALSE) {
+read.training.data <- function(path, sample.id, parsimony.phasing=FALSE, parsimony.dist.cutoff=1e4,
+    region=NULL, quiet=FALSE)
+{
     tr <- read.table.1sample(path, sample.id, n.meta.cols=17, region=region, quiet=quiet)
     sc.gt <- tr[[sample.id]]  # the column named after the sample is the GATK GT string for that sample
     tr[, training.site := (phased.gt == '1|0' | phased.gt == '0|1') & sc.gt != './.' & bulk.gt != './.']
