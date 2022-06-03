@@ -149,7 +149,7 @@ annotate.gatk.bulk <- function(gatk.meta, gatk, bulk.sample, quiet=FALSE) {
 
     gatk.meta[, c('bulk.gt', 'bref', 'balt') :=
         list(gatk[[bulk.idx]], gatk[[bulk.idx+1]], gatk[[bulk.idx+2]])]
-    gatk.meta[, c('bulk.dp', 'bulk.af') := bref+balt, balt/(bref+balt)]
+    gatk.meta[, c('bulk.dp', 'bulk.af') := list(bref+balt, balt/(bref+balt))]
 }
 
 
