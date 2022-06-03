@@ -218,7 +218,7 @@ annotate.gatk.training <- function(gatk, single.cell, bulk) {
 #      CIGAR op filters (indel ops) is actually incorrect either way.
 # In any case, this likely has a relatively insignificant effect so we are leaving it as
 # it was in legacy calling for now.
-gatk.resample.phased.sites <- function(gatk, M=20, seed=0))
+gatk.resample.phased.sites <- function(gatk, M=20, seed=0)
 {
     ret <- list()
     for (mt in c('snv', 'indel')) {
