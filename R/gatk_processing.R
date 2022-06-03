@@ -281,11 +281,14 @@ gatk.resample.phased.sites <- function(gatk, M=20, seed=0)
     for (mt in c('snv', 'indel')) {
         aux.data <- resample.germline(
             sites=gatk[somatic.candidate == TRUE & muttype == mt],
-            hsnps=gatk[training.site == TRUE & muttype == mt],
+            hsnps=gatk[!is.na(phased.gt) & phased.gt != './.' & muttype == mt],
             M=M, seed=seed)
 
         # aux.data$selection is aligned to the input 'hsnps' table
-        gatk[training.site == TRUE & muttype == mt, resampled.training.site := aux.data$selection$keep]
+        # FIXME: resampled.training.site here assumes that all phased sites are
+        # training sites. This is legacy behavior, but isn't ideal.
+        gatk[!is.na(phased.gt) & phased.gt != './.' & muttype == mt,
+            resampled.training.site := aux.data$selection$keep]
         ret[[mt]] <- aux.data
     }
 
