@@ -3,6 +3,7 @@ setClassUnion('null.or.BSgenome', c('NULL', 'BSgenome'))
 setClassUnion('null.or.GRanges', c('NULL', 'GRanges'))
 setClassUnion('null.or.list', c('NULL', 'list'))
 setClassUnion('null.or.logical', c('NULL', 'logical'))
+setClassUnion('null.or.character', c('NULL', 'character'))
 
 # if adding new slots to the class, be sure to update concat(...)
 # to combine the slots properly.
@@ -13,6 +14,7 @@ setClass("SCAN2", slots=c(
     single.cell='character',
     bulk='character',
     gatk="null.or.df",
+    integrated.table.path='null.or.character',
     resampled.training.data="null.or.list",
     ab.fits='null.or.df',
     static.filter.params='null.or.list',
@@ -369,6 +371,7 @@ setGeneric("read.integrated.table", function(object, path, quiet=FALSE)
 setMethod("read.integrated.table", "SCAN2", function(object, path, quiet=FALSE) {
     object@gatk <- read.and.annotate.integrated.table(path=path, sample.id=object@single.cell,
         region=object@region, quiet=quiet)
+    object@integrated.table.path <- path
     object
 })
 
@@ -480,7 +483,7 @@ setMethod("compute.ab.estimates", "SCAN2", function(object, n.cores=1, quiet=FAL
     # need to extend region only if this is a chunked object. otherwise,
     # we already have the full table.
     if (!is.null(object@region)) {
-        path <- object@training.data$path
+        path <- object@integrated.table.path
         if (!quiet) cat('Importing extended hSNP training data from', path, 'using extended range\n')
         extended.range <- GRanges(seqnames=seqnames(object@region)[1],
             ranges=IRanges(start=start(object@region)-flank, end=end(object@region)+flank))
