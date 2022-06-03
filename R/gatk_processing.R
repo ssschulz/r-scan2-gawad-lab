@@ -77,8 +77,9 @@ read.gatk.table.2sample <- function(path, sc.sample, bulk.sample, region, quiet=
 #
 # only `gatk.meta` is modified (by reference).
 annotate.gatk.bulk <- function(gatk.meta, gatk, bulk.sample, quiet=FALSE) {
-    header <- colnames(gatk)
-    col.strings <- strsplit(header, '\t')[[1]]
+    #header <- colnames(gatk)
+    #col.strings <- strsplit(header, '\t')[[1]]
+    col.strings <- colnames(gatk)
     tot.cols <- length(col.strings)
     bulk.idx <- Inf
     if (!missing(bulk.sample))
