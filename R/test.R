@@ -14,9 +14,7 @@ testpipe <- function(test.data=c('legacy_tiny', 'legacy_chr22', 'legacy_custom')
         fpath <- function(...) paste0(custom$path, '/', ...)
     }
 
-    mmq60 <- fpath('mmq60.tab.gz')
-    mmq1 <- fpath('mmq1.tab.gz')
-    hsnps <- fpath('hsnps_resampled.tab.gz')
+    int.tab <- fpath('integrated_table.tab.gz')
     abfits <- fpath('fits.rda')
     sccigars <- fpath('sc_somatic_and_hsnp_spikein_cigars.tab.gz')
     bulkcigars <- fpath('bulk_somatic_and_hsnp_spikein_cigars.tab.gz')
@@ -34,7 +32,7 @@ testpipe <- function(test.data=c('legacy_tiny', 'legacy_chr22', 'legacy_custom')
     }
 
     run.pipeline(sc.sample=sc.sample, bulk.sample=bulk.sample,
-        mmq60=mmq60, mmq1=mmq1, hsnps=hsnps, abfits=abfits,
+        int.tab=int.tab, abfits=abfits,
         sccigars=sccigars, bulkcigars=bulkcigars,
         trainingcigars=trainingcigars,
         fdr.prior.data=fdrpriordata,
