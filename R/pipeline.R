@@ -137,7 +137,7 @@ make.master.table <- function(mmq60.tab, mmq1.tab, phased.vcf,
             gr <- grs[i,]
 
             gatk <- read.tabix.data(path=mmq60.tab, region=gr, quiet=quiet,
-                colClasses=list(character='chr')  # force chromosome column to be type=str
+                colClasses=list(character='chr'))  # force chromosome column to be type=str
 
             # Columns in GATK are split as site data | sample-specific count data/genotypes
             # There are 7 site data columns (chr, pos, dbsnp ID, ref allele, alt allele, mq, mqrs).
