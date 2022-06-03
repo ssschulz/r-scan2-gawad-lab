@@ -167,7 +167,7 @@ annotate.gatk.phasing <- function(gatk, phasing.path, region, quiet=FALSE) {
 
     # phasing.path is a single sample standard VCF, so we specify the column
     # format explicitly.
-    colnames(phase.data) <- c('chr', 'pos', 'dbsnp', 'refnt', 'altnt', 'qual', 'filter', 'info', 'format', 'phasedgt'),
+    colnames(phase.data) <- c('chr', 'pos', 'dbsnp', 'refnt', 'altnt', 'qual', 'filter', 'info', 'format', 'phasedgt')
 
     # This assumes "GT" is the first element of the GT string format, which isn't
     # guaranteed but is the case for our data.
