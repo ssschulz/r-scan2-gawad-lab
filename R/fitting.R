@@ -1,6 +1,6 @@
 # n.tiles - if NULL, then downsampling is not performed (uses full set of
 #           hSNP training sites).
-abmodel.fit.one.chrom <- function(path, chrom, genome.object,
+abmodel.fit.one.chrom <- function(path, sc.sample, chrom, genome.object,
     n.chunks=1, n.logp.samples.per.chunk=20000,  # this default implies no parallelization
     hsnp.tilesize=100, n.tiles=250,
     refine.n.steps=4, refine.top.n=50,
@@ -17,9 +17,7 @@ abmodel.fit.one.chrom <- function(path, chrom, genome.object,
     # SNPs than humans.
     # GRanges interval that covers the whole chromosome
     region <- as(GenomeInfoDb::seqinfo(genome.object), 'GRanges')[chrom,]
-    # More RAM efficiency: only read position, hap1 and depth columns
-    cols.to.read <- c('NULL', 'integer', 'NULL', 'NULL', 'integer', 'NULL', 'integer', 'NULL')
-    hsnps <- read.training.data(path=path, region=region, col.classes=cols.to.read, index=FALSE)
+    hsnps <- read.training.data(path=path, sample.id=sc.sample, region=region)[muttype == 'snv']
 
     hsnps <- abmodel.downsample.hsnps(hsnps, hsnp.tilesize=hsnp.tilesize, n.tiles=n.tiles, verbose=TRUE)
 
