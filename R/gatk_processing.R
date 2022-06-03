@@ -103,8 +103,9 @@ annotate.gatk.bulk <- function(gatk.meta, gatk, bulk.sample, quiet=FALSE) {
 # `gatk` is a data.table, so all of these updates happen by reference.
 # no need to return the result.
 #
-# This can be slow with add.mutsig, particularly for indels.
-annotate.gatk <- function(gatk, bulk.sample, genome.string, add.mutsig=TRUE) {
+# This can be slow with add.mutsig, particularly for indels. Best used
+# on chunked data.
+annotate.gatk <- function(gatk, genome.string, genome.object, add.mutsig=TRUE) {
     data.table::setkey(gatk, chr, pos, refnt, altnt)
 
     # Determine SNV/indel status and then annotate mutation signature channels
@@ -114,8 +115,8 @@ annotate.gatk <- function(gatk, bulk.sample, genome.string, add.mutsig=TRUE) {
 
     if (add.mutsig) {
         gatk[muttype == 'snv',
-            mutsig := get.3mer(chr=chr, pos=pos, refnt=refnt, altnt=altnt, genome=object@genome.object)]
-        chs <- classify.indels(gatk[muttype == 'indel'], genome.string=object@genome.string)
+            mutsig := get.3mer(chr=chr, pos=pos, refnt=refnt, altnt=altnt, genome=genome.object)]
+        chs <- classify.indels(gatk[muttype == 'indel'], genome.string=genome.string)
         gatk[muttype == 'indel', mutsig := chs]
     }
 
