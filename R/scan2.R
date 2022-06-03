@@ -145,19 +145,14 @@ check.slots <- function(object, slots, abort=TRUE) {
             error.occurred = TRUE
             if (s == 'gatk')
                 cat("must import GATK read counts first (see: read.gatk())\n")
-            if (s == 'resampled.training.data')
-                cat("must resample hSNP training data first (see: resample.training.data())\n")
             if (s == 'ab.fits')
                 cat('must import AB model parameters (see: add.ab.fits())\n')
-
             if (s == 'ab.estimates')
                 cat("must import allele balance model estimates first (see: add.ab.estimates())\n")
             if (s == 'cigar.data')
                 cat("must import CIGAR data first (see: add.cigar.data())\n")
-
             if (s == 'excess.cigar.scores')
                 cat("must compute excess CIGAR scores first (see: compute.excess.cigar.scores())\n")
-
             if (s == 'static.filter' | s == 'static.filters' | s == 'static.filter.params')
                 cat("must apply static site filters first (see: add.static.filters())\n")
             if (s == 'fdr.prior.data')
@@ -192,11 +187,11 @@ setMethod("show", "SCAN2", function(object) {
     }
 
     cat("#   AB model training hSNPs:")
-    if (is.null(object@training.data)) {
+    if (!('training.site' %in% object@gatk)) {
         cat(" (no data)\n")
     } else {
         # germline indels are not used for AB model training
-        tdata <- lbject@gatk[training.site==TRUE & muttype=='snv']
+        tdata <- object@gatk[training.site==TRUE & muttype=='snv']
         cat('', nrow(tdata),
             sprintf("phased sites (hap1=%d, hap2=%d)",
                 sum(tdata$phased.gt=='1|0', na.rm=TRUE),
@@ -213,8 +208,8 @@ setMethod("show", "SCAN2", function(object) {
             '<1000 bp', round(cors[2], 3),
             '<10 kbp', round(cors[3], 3),
             '<100 kbp', round(cors[4], 3), '\n')
-        if (!is.null(object@resampled.training.data)) {
-            cat('#        ', nrow(object@gatk[resampled.training.site == TRUE]),
+        if ('resampled.training.site' %in% colnames(object@gatk)) {
+            cat('#        ', nrow(object@gatk[resampled.training.site == TRUE & muttype == 'snv']),
                 'resampled hSNPs\n')
         }
     }
@@ -241,11 +236,15 @@ setMethod("show", "SCAN2", function(object) {
             round(s['1st Qu.'], 3),
             round(s['Median'], 3),
             round(s['3rd Qu.'], 3), '\n')
-        if (!is.null(object@training.data)) {
-            xs <- round(object@gatk[training.site==TRUE,
+        if ('training.site' %in% colnames(object@gatk)) {
+            xs <- round(object@gatk[training.site==TRUE & muttype == 'snv',
                 .(mean=mean(gp.mu), cor=cor(af, ab, use='complete.obs'))],3)
             cat('#       mean at training hSNPs:', xs$mean, '\n')
-            cat('#       correlation with VAF at training hSNPs', xs$cor, '\n')
+            # computing correlation doesn't make sense here because AF and AB
+            # do not necessarily refer to the same haplotype: AF is always the
+            # mutated haplotype.
+                #.(mean=mean(gp.mu), cor=cor(af, ab, use='complete.obs'))],3)
+            #cat('#       correlation with VAF at training hSNPs', xs$cor, '\n')
         }
     }
 
@@ -321,7 +320,6 @@ setMethod("concat", signature="SCAN2", function(...) {
     ensure.same(args, 'genome.string')
     ensure.same(args, 'single.cell')
     ensure.same(args, 'bulk')
-    ret@gatk.lowmq <- data.frame(sites=sum(sapply(args, function(a) ifelse(is.null(a@gatk.lowmq), 0, a@gatk.lowmq$sites))))
     ensure.same(args, 'static.filter.params', 'min.sc.alt')
     ensure.same(args, 'static.filter.params', 'min.sc.dp')
     ensure.same(args, 'static.filter.params', 'min.bulk.dp')
@@ -351,10 +349,6 @@ setMethod("concat", signature="SCAN2", function(...) {
     ret@fdr <- data.frame(mode=init@fdr$mode,
         sites=sum(sapply(args, function(a) ifelse(is.null(a@fdr), 0, a@fdr$sites))))
 
-    ret@training.data <- data.frame(sites=sum(sapply(args, function(a) ifelse(is.null(a@training.data), 0, a@training.data$sites))))
-
-    ret@resampled.training.data <- data.frame(sites=sum(sapply(args, function(a) ifelse(is.null(a@resampled.training.data), 0, a@resampled.training.data$sites))))
-
     # policy: ab.fits has to be the same for all chunks being concat()ed
     # if that's true, just use the first one
     if (any(sapply(args, function(a) any(as.matrix(init@ab.fits) != as.matrix(a@ab.fits)))))
@@ -370,102 +364,13 @@ setMethod("concat", signature="SCAN2", function(...) {
 
 
 
-# Some extra work to make sure we only read in the part of the
-# table relevant to these two samples. Otherwise, memory can become
-# an issue for projects with 10s-100s of cells.
-# region can be a GRanges object with a single interval to read only
-# a subset of the GATK table. The table is tabix indexed, so this can
-# be done quickly.
-read.gatk.table.2sample <- function(path, sc.sample, bulk.sample, region, quiet=FALSE) {
-    if (!quiet) cat("Importing GATK table..\n")
-
-    # Step 1: just get the header and detect the columns corresponding to
-    # sc.sample and bulk.sample to avoid reading the full matrix.
-    tf <- Rsamtools::TabixFile(path)
-    open(tf)
-    header <- read.tabix.header(tf)
-    col.strings <- strsplit(header, '\t')[[1]]
-    tot.cols <- length(col.strings)
-    sc.idx <- which(col.strings == sc.sample)
-    bulk.idx <- which(col.strings == bulk.sample)
-    if (!quiet) {
-        cat("Selecting columns:\n")
-        for (i in 1:length(col.strings)) {
-            # First 5 are chr, pos, dbsnp, refnt, altnt
-            if (i <= 5) {
-                cat(sprintf("    (%d)", i), col.strings[i], '\n')
-            } else if (any(i == sc.idx + 0:2)) {
-                cat(sprintf("    (%d)", i), col.strings[i], '[single cell]\n')
-            } else if (any(i == bulk.idx + 0:2)) {
-                cat(sprintf("    (%d)", i), col.strings[i], '[bulk]\n')
-            }
-        }
-    }
-    
-    # Step 2: really read the tables in, but only the relevant columns
-    cols.to.read <- rep("NULL", tot.cols)
-    # First 5 are chr, pos, dbsnp, refnt, altnt
-    cols.to.read[1:5] <- c('character', 'integer', rep('character', 3))
-    # Read 3 columns for the single cell, 3 columns for bulk
-    cols.to.read[sc.idx + 0:2] <- c('character', 'integer', 'integer')
-    cols.to.read[bulk.idx + 0:2] <- c('character', 'integer', 'integer')
-    gatk <- read.tabix.data(tf=tf, region=region, header=header, quiet=quiet, colClasses=cols.to.read)
-    close(tf)
-    new.sc.idx <- which(colnames(gatk) == sc.sample)
-    new.bulk.idx <- which(colnames(gatk) == bulk.sample)
-    colnames(gatk)[new.sc.idx+1:2] <- c('scref', 'scalt')
-    colnames(gatk)[new.bulk.idx+1:2] <- c('bref', 'balt')
-
-    # Rearrange columns so that the single cell triplet is first, then bulk triplet
-    cols.to.keep <- c(col.strings[1:5], sc.sample, c('scref', 'scalt'), bulk.sample, c('bref', 'balt'))
-    gatk <- gatk[,..cols.to.keep]
-
-    gatk
-}
-
-
-setGeneric("read.gatk", function(object, path, quiet=FALSE, add.mutsig=TRUE)
-    standardGeneric("read.gatk"))
-setMethod("read.gatk", "SCAN2", function(object, path, quiet=FALSE, add.mutsig=TRUE) {
-    gatk <- read.gatk.table.2sample(
-        path, object@single.cell, object@bulk, object@region, quiet=quiet)
-
-    # Add some convenient calculations
-    gatk$dp <- gatk$scalt + gatk$scref
-    gatk$af <- gatk$scalt / gatk$dp
-    gatk$bulk.dp <- gatk$balt + gatk$bref
-    gatk$bulk.af <- gatk$balt / gatk$bulk.dp
-    data.table::setkey(gatk, chr, pos, refnt, altnt)
-
-    # Determine SNV/indel status and then annotate mutation signature channels
-    gatk[, muttype := ifelse(nchar(refnt) == 1 & nchar(altnt) == 1, 'snv', 'indel')]
-    # allow for fast selection of SNVs or indels
-    setindex(gatk, muttype)
-
-    if (add.mutsig) {
-        gatk[muttype == 'snv',
-            mutsig := get.3mer(chr=chr, pos=pos, refnt=refnt, altnt=altnt, genome=object@genome.object)]
-        chs <- classify.indels(gatk[muttype == 'indel'], genome.string=object@genome.string, auto.delete=FALSE)
-        gatk[muttype == 'indel', mutsig := chs]
-    }
-
-    object@gatk <- gatk
-    object
+setGeneric("read.integrated.table", function(object, path, quiet=FALSE)
+    standardGeneric("read.integrated.table"))
+setMethod("read.integrated.table", "SCAN2", function(object, path, quiet=FALSE) {
+    object@gatk <- read.and.annotate.integrated.table(path=path, sample.id=object@single.cell,
+        region=object@region, quiet=quiet)
 })
 
-
-setGeneric("read.gatk.lowmq", function(object, path, quiet=FALSE)
-    standardGeneric("read.gatk.lowmq"))
-setMethod("read.gatk.lowmq", "SCAN2", function(object, path, quiet=FALSE) {
-    check.slots(object, 'gatk')
-
-    lowmq <- read.gatk.table.2sample(path, object@single.cell, object@bulk, object@region, quiet=quiet)
-    data.table::setkey(lowmq, chr, pos, refnt, altnt)
-
-    object@gatk[lowmq, on=.(chr,pos,refnt,altnt), c('scref.lowmq', 'scalt.lowmq', 'bref.lowmq', 'balt.lowmq') := list(i.scref, i.scalt, i.bref, i.balt)]
-    object@gatk.lowmq <- data.frame(sites=nrow(lowmq), path=path)
-    object
-})
 
 
 # Add AB Gaussian process parameter fits for each chromosome.
@@ -578,7 +483,7 @@ setMethod("compute.ab.estimates", "SCAN2", function(object, n.cores=1, quiet=FAL
         if (!quiet) cat('Importing extended hSNP training data from', path, 'using extended range\n')
         extended.range <- GRanges(seqnames=seqnames(object@region)[1],
             ranges=IRanges(start=start(object@region)-flank, end=end(object@region)+flank))
-        extended.training.hsnps <- read.training.data(path, sample.id=object@single.cell, region=extended.range, quiet=quiet)[muttype=='snv' & training.site == TRUE]
+        extended.training.hsnps <- read.training.hsnps(path, sample.id=object@single.cell, region=extended.range, quiet=quiet)
         if (!quiet)
             cat(sprintf("hSNP training sites: %d, extended training sites: %d\n",
                 nrow(object@gatk[training.site==TRUE]), nrow(extended.training.hsnps)))
@@ -652,6 +557,8 @@ setGeneric("compute.fdr.prior.data", function(object, mode='legacy', quiet=FALSE
 setMethod("compute.fdr.prior.data", "SCAN2", function(object, mode='legacy', quiet=FALSE) {
     check.slots(object, c('gatk', 'gatk.lowmq', 'training.data', 'static.filter.params'))
 
+    # FIXME: after integrated table, should probably just use somatic.candidate
+    # column here.
     if (mode == 'legacy') {
         # in legacy mode, only candidate sites passing a small set of pre-genotyping
         # crtieria were used.
@@ -923,105 +830,38 @@ setMethod("compute.static.filters", "SCAN2", function(object, exclude.dbsnp=TRUE
 })
 
 
-setGeneric("resample.training.data", function(object, M=20, seed=0, mode='legacy') 
-        standardGeneric("resample.training.data"))
-setMethod("resample.training.data", "SCAN2", function(object, M=20, seed=0, mode='legacy') {
-    check.slots(object, c('gatk', 'training.data', 'static.filter.params'))
-
-    check.chunked(object,
-        'resampling should be performed on full chr1-chr22 data, not chunked data')
-
-    bulk.gt <- object@gatk[[object@bulk]]
-    somatic.sites <- object@gatk[training.site == FALSE &
-        scalt >= object@static.filter.params$min.sc.alt &
-        balt <= object@static.filter.params$max.bulk.alt &
-        bulk.gt == '0/0' & dbsnp == '.',]
-    # these depth filters weren't used in legacy. i think this was just an oversight.
-    if (mode != 'legacy')
-        somatic.sites <- somatic.sites[
-            bulk.dp >= object@static.filter.params$min.bulk.dp &
-            dp >= object@static.filter.params$min.sc.dp]
-
-    ret <- resample.hsnps(sites=somatic.sites,
-        hsnps=object@gatk[training.site == TRUE], M=M, seed=seed)
-
-    object@gatk[training.site == TRUE, resampled.training.site := ret$selection$keep]
-    object@gatk[is.na(resampled.training.site), resampled.training.site := FALSE]
-    setindex(object@gatk, resampled.training.site)
-    object@resampled.training.data <- ret
-    object
-})
-
-
-read.training.data <- function(path, sample.id, parsimony.phasing=FALSE, parsimony.dist.cutoff=1e4,
-    region=NULL, quiet=FALSE)
-{
+# When reading the integrated table: read all metadata columns (currently 1-17)
+# and only the 3 genotype/count columns corresponding to `sample.id`. This can
+# save significant memory overhead in large (100+ cell) projects.
+#
+# Next, annotate the integrated table with information corresponding to
+# `sample.id`. This includes training site definitions (which varies from cell
+# to cell depending on whether there is no data at the site in that single cell;
+# gt=./.) and assigning single cell ref/alt read counts to phased haplotypes.
+#
+# N.B. parsimony phasing (adjust.phase()) used to be called here, but that is not
+# a good idea. That should happen in the make.integrated.table pipeline where the
+# full single cell+bulk count table is available. Information shared across single
+# cells is useful to improve phasing and the final phase decision should be
+# consistent across single cells.
+read.and.annotate.integrated.table <- function(path, sample.id, region=NULL, quiet=FALSE) {
     tr <- read.table.1sample(path, sample.id, n.meta.cols=17, region=region, quiet=quiet)
+
+    # Add some convenient calculations
+    tr[, dp := scalt + scref]
+    tr[, af := scalt / dp]
+    data.table::setkey(gatk, chr, pos, refnt, altnt)
+    setindex(gatk, muttype) # allow for fast selection of SNVs or indels
+
     sc.gt <- tr[[sample.id]]  # the column named after the sample is the GATK GT string for that sample
     tr[, training.site := (phased.gt == '1|0' | phased.gt == '0|1') & sc.gt != './.' & bulk.gt != './.']
     tr[, c('phased.hap1', 'phased.hap2') :=
         list(ifelse(phased.gt == '0|1', scref, scalt),
              ifelse(phased.gt == '0|1', scalt, scref))]
-
-    if (parsimony.phasing)
-        adjust.phase(tr, dist.cutoff=parsimony.dist.cutoff, quiet=quiet)
     tr
 }
 
 
-# col.classes - equivalent to read.table's colClasses.
-#   * Some functions override col.classes to improve memory efficiency. Setting a
-#     col.classes entry to 'NULL' (the string, not R's NULL) discards the column.
-# index - automatically index table by (chr,pos,refnt,altnt) identifiers.
-#   Useful for joining to larger tables.
-read.training.data.old <- function(path, col.classes, region=NULL, quiet=FALSE, index=TRUE) {
-    tf <- Rsamtools::TabixFile(path)
-    open(tf)
-    header <- strsplit(read.tabix.header(path), split="\t")[[1]]
-    close(tf) # just close it and reopen in read.tabix.data to get the header automatically read in
-
-    # Detect whether training data has been resampled (9 columns) or not (8 columns)
-    if (missing(col.classes)) {
-        col.classes <- c('character', 'integer', 'character', 'character', 'integer', 'integer', 'integer', 'character')
-        if (length(header) == 9 & 'resampled' %in% header)
-            col.classes <- c(col.classes, 'logical')
-    }
-
-    hsnps <- read.tabix.data(path=path, region=region, quiet=quiet, colClasses=col.classes)
-    if (index)
-        data.table::setkey(hsnps, chr, pos, refnt, altnt)
-    hsnps
+read.training.hsnps <- function(path, sample.id, region=NULL, quiet=FALSE) {
+    read.and.annotate.integrated.table(path=path, sample.id=sample.id, region=region, quiet=quiet)[training.site == TRUE & muttype == 'snv']
 }
-
-
-# require.resampled - part of the preprocessing scripts involves downsampling
-#     hSNPs to match the intra-hSNP distance of the somatic candidates. This is
-#     to improve sensitivity estimation via hSNPs because hSNPs are often closer
-#     to other hSNPs than somatic candidates are to hSNPs (i.e., hSNPs are somewhat
-#     clustered in the genome).
-#     Setting require.resampled to TRUE will cause this method to fail if the
-#     resampling process is not detected in the hSNP file specified on 'path'.
-setGeneric("add.training.data", function(object, path, quiet=FALSE, require.resampled=FALSE)
-        standardGeneric("add.training.data"))
-setMethod("add.training.data", "SCAN2", function(object, path, quiet=FALSE, require.resampled=FALSE) {
-    if (!quiet) cat('Importing hSNP training data from', path, '\n')
-    hsnps <- read.training.data(path, sample.id=object@single.cell, region=object@region, quiet=quiet)[muttype=='snv' & training.site==TRUE]
-
-    resampled <- 'resampled' %in% colnames(hsnps)
-
-    if (resampled == FALSE & require.resampled)
-        stop(paste('hSNP table', path, 'appears not to contain resampling information (column="resampled"). The SCAN2 pipeline provides scripts/pregenotype.R to prepare training data for SCAN2 calling'))
-
-    if (!quiet) cat('Joining training data..\n')
-    if (resampled) {
-        object@gatk[hsnps, on=.(chr,pos,refnt,altnt), c('training.phgt', 'training.hap1', 'training.hap2', 'training.dp', 'training.site', 'resampled.training.site') := list(i.phgt, i.hap1, i.hap2, i.dp, TRUE, i.resampled)]
-        object@resampled.training.data <- list(sites=nrow(object@gatk[resampled.training.site == TRUE]))
-    } else {
-        object@gatk[hsnps, on=.(chr,pos,refnt,altnt), c('training.phgt', 'training.hap1', 'training.hap2', 'training.dp', 'training.site') := list(i.phgt, i.hap1, i.hap2, i.dp, TRUE)]
-    }
-    object@gatk[is.na(training.site), training.site := FALSE]
-    # index (not key) the data.table so that selecting training sites is fast
-    setindex(object@gatk, training.site)
-    object@training.data <- data.frame(sites=nrow(hsnps), path=path)
-    object
-})

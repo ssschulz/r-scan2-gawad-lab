@@ -58,16 +58,8 @@ run.pipeline <- function(
 
             gt <- add.static.filter.params(gt)
 
-            pc <- perfcheck(paste('read.gatk',i),
-                x1 <- read.gatk(gt, path=mmq60, quiet=TRUE))
-            p(class='sticky', amount=0, pc)
-
-            pc <- perfcheck(paste('read.gatk.lowmq',i),
-                y1 <- read.gatk.lowmq(x1, path=mmq1, quiet=TRUE))
-            p(class='sticky', amount=0, pc)
-
-            pc <- perfcheck(paste('add.training.data',i),
-                z1 <- add.training.data(y1, path=hsnps, quiet=!verbose, require.resampled=TRUE))
+            pc <- perfcheck(paste('read.integrated.table',i),
+                x1 <- read.integrated.table(gt, path=int.tab, quiet=TRUE))
             p(class='sticky', amount=0, pc)
 
             pc <- perfcheck(paste('add.ab.fits',i),

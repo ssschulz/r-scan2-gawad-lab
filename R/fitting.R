@@ -17,8 +17,7 @@ abmodel.fit.one.chrom <- function(path, sc.sample, chrom, genome.object,
     # SNPs than humans.
     # GRanges interval that covers the whole chromosome
     region <- as(GenomeInfoDb::seqinfo(genome.object), 'GRanges')[chrom,]
-    hsnps <- read.training.data(path=path, sample.id=sc.sample, region=region)[muttype == 'snv' & training.site==TRUE]
-
+    hsnps <- read.training.hsnps(path=path, sample.id=sc.sample, region=region)
     hsnps <- abmodel.downsample.hsnps(hsnps, hsnp.tilesize=hsnp.tilesize, n.tiles=n.tiles, verbose=TRUE)
 
     refine.records <- list()
