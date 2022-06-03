@@ -804,7 +804,7 @@ function(object, config.path,
 setGeneric("compute.static.filters", function(object, exclude.dbsnp=TRUE)
         standardGeneric("compute.static.filters"))
 setMethod("compute.static.filters", "SCAN2", function(object, exclude.dbsnp=TRUE) {
-    check.slots(object, c('gatk', 'cigar.data', 'gatk.lowmq', 'mut.models'))
+    check.slots(object, c('gatk', 'cigar.data', 'mut.models'))
 
     qid <- quantile(object@gatk[training.site == TRUE]$id.score,
         prob=object@static.filter.params$cg.id.q, na.rm=TRUE)
