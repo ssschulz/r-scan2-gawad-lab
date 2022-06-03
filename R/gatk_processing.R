@@ -158,7 +158,7 @@ annotate.gatk.bulk <- function(gatk.meta, gatk, bulk.sample, quiet=FALSE) {
 #
 # This can be slow with add.mutsig, particularly for indels. Best used
 # on chunked data.
-annotate.gatk <- function(gatk, genome.string, genome.object, add.mutsig=TRUE) {
+annotate.gatk <- function(gatk, gatk.counts, genome.string, genome.object, add.mutsig=TRUE) {
     data.table::setkey(gatk, chr, pos, refnt, altnt)
 
     # Determine SNV/indel status and then annotate mutation signature channels
@@ -181,8 +181,8 @@ annotate.gatk <- function(gatk, genome.string, genome.object, add.mutsig=TRUE) {
     # (like low-depth cells).
     # We are continuing legacy behavior, but I'd prefer to fix it at some
     # point.
-    alts <- which(colnames(gatk) == 'alt')
-    sum.alts <- rowSums(as.matrix(gatk[,..alts])) - gatk$balt
+    alts <- which(colnames(gatk.counts) == 'alt')
+    sum.alts <- rowSums(as.matrix(gatk.counts[,..alts])) - gatk$balt
 
     # N.B. rowSums requred >= min.sc.alt, but in legacy uses this was always 2.
     # FIXME: it'd be good to expose this to the end user. Especially for mosaic
