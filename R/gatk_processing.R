@@ -1,4 +1,59 @@
 # Some extra work to make sure we only read in the part of the
+# table relevant to one sample. Otherwise, memory can become
+# an issue for projects with 10s-100s of cells.
+#
+# region can be a GRanges object with a single interval to read only
+# a subset of the GATK table. The table is tabix indexed, so this can
+# be done quickly.
+#
+# This function should eventually replace the older 2sample version.
+read.gatk.table.1sample <- function(path, sample.id, region, quiet=FALSE) {
+    if (!quiet) cat("Importing GATK table..\n")
+
+    # Step 1: just get the header and detect the columns corresponding to sample.id
+    tf <- Rsamtools::TabixFile(path)
+    open(tf)
+    header <- read.tabix.header(tf)
+    col.strings <- strsplit(header, '\t')[[1]]
+    tot.cols <- length(col.strings)
+    sample.idx <- which(col.strings == sample.id)
+
+    if (!quiet) {
+        cat("Selecting columns:\n")
+        for (i in 1:length(col.strings)) {
+            # First 5 are chr, pos, dbsnp, refnt, altnt
+            if (i <= 5) {
+                cat(sprintf("    (%d)", i), col.strings[i], '\n')
+            } else if (any(i == sample.idx + 0:2)) {
+                cat(sprintf("    (%d)", i), col.strings[i], '[single cell]\n')
+            }
+        }
+    }
+    
+    # Step 2: really read the tables in, but only the relevant columns
+    cols.to.read <- rep("NULL", tot.cols)
+    # First 5 are chr, pos, dbsnp, refnt, altnt
+    cols.to.read[1:5] <- c('character', 'integer', rep('character', 3))
+    # Read 3 columns for the single cell, 3 columns for bulk
+    cols.to.read[sample.idx + 0:2] <- c('character', 'integer', 'integer')
+
+    gatk <- read.tabix.data(tf=tf, region=region, header=header, quiet=quiet, colClasses=cols.to.read)
+    close(tf)
+
+    new.sample.idx <- which(colnames(gatk) == sample)
+    colnames(gatk)[new.sample.idx+1:2] <- c('scref', 'scalt')
+
+    # Rearrange columns so that the single cell triplet is first, then bulk triplet
+    cols.to.keep <- col.strings[1:5]
+    cols.to.keep <- c(cols.to.keep, sample.id, c('scref', 'scalt'))
+
+    gatk <- gatk[,..cols.to.keep]
+
+    gatk
+}
+
+
+# Some extra work to make sure we only read in the part of the
 # table relevant to these two samples. Otherwise, memory can become
 # an issue for projects with 10s-100s of cells.
 # region can be a GRanges object with a single interval to read only
@@ -140,7 +195,7 @@ annotate.gatk <- function(gatk, genome.string, genome.object, add.mutsig=TRUE) {
 
 # 'gatk' is a data.table to be modified by reference
 annotate.gatk.lowmq <- function(gatk, path, bulk, region, quiet=FALSE) {
-    lowmq <- read.gatk.table.2sample(path, bulk.sample=bulk, region=region, quiet=quiet)
+    lowmq <- read.gatk.table.1sample(path, sample.id=bulk, region=region, quiet=quiet)
     data.table::setkey(lowmq, chr, pos, refnt, altnt)
 
     gatk[lowmq, on=.(chr,pos,refnt,altnt), balt.lowmq := i.balt]
