@@ -125,7 +125,7 @@ make.master.table <- function(mmq60.tab, mmq1.tab, phased.vcf,
     bulk.sample, genome,
     genome.object=genome.string.to.bsgenome.object(genome),
     grs=tileGenome(seqlengths=seqinfo(genome.object)[as.character(1:22)], tilewidth=10e6, cut.last.tile.in.chrom=TRUE),
-    quiet=FALSE)
+    quiet=TRUE)
 {
     cat('Starting master table pipeline on', length(grs), 'chunks.\n')
     cat('Parallelizing with', future::availableCores(), 'cores.\n')
@@ -136,22 +136,21 @@ make.master.table <- function(mmq60.tab, mmq1.tab, phased.vcf,
         xs <- future.apply::future_lapply(1:length(grs), function(i) {
             gr <- grs[i,]
 
-            gatk <- read.tabix.data(path=mmq60.tab, region=gr, quiet=quiet,
-                colClasses=list(character='chr'))  # force chromosome column to be type=str
+            pc <- perfcheck(paste('read and annotate raw data',i), {
+                gatk <- read.tabix.data(path=mmq60.tab, region=gr, quiet=quiet,
+                    colClasses=list(character='chr'))  # force chromosome column to be type=str
 
-            # Columns in GATK are split as site data | sample-specific count data/genotypes
-            # There are 7 site data columns (chr, pos, dbsnp ID, ref allele, alt allele, mq, mqrs).
-            # Try to keep the columns split by site-wide data | sample-specific data
-            sitewide <- gatk[,1:7]
-            samplespecific <- gatk[,-(1:7)]
+                # Columns in GATK are split as site data | sample-specific count data/genotypes
+                # There are 7 site data columns (chr, pos, dbsnp ID, ref allele, alt allele, mq, mqrs).
+                # Try to keep the columns split by site-wide data | sample-specific data
+                sitewide <- gatk[,1:7]
+                samplespecific <- gatk[,-(1:7)]
 
-            annotate.gatk.bulk(sitewide, samplespecific, bulk.sample, quiet=quiet)
-            annotate.gatk(gatk=sitewide, gatk.counts=samplespecific, genome.string=genome, genome.object=genome.object, add.mutsig=TRUE)
-            annotate.gatk.lowmq(sitewide, path=mmq1.tab, bulk=bulk.sample, region=gr, quiet=quiet)
-            annotate.gatk.phasing(sitewide, phasing.path=phased.vcf, region=gr)
-
-            pc <- perfcheck(paste('read and annotate raw data',i),
-                annotate.gatk.phasing(sitewide, phasing.path=phased.vcf, region=gr))
+                annotate.gatk.bulk(sitewide, samplespecific, bulk.sample, quiet=quiet)
+                annotate.gatk(gatk=sitewide, gatk.counts=samplespecific, genome.string=genome, genome.object=genome.object, add.mutsig=TRUE)
+                annotate.gatk.lowmq(sitewide, path=mmq1.tab, bulk=bulk.sample, region=gr, quiet=quiet)
+                annotate.gatk.phasing(sitewide, phasing.path=phased.vcf, region=gr, quiet=quiet)
+            })
             p(class='sticky', amount=1, pc)
 
             cbind(sitewide, samplespecific)
