@@ -215,7 +215,8 @@ annotate.gatk.lowmq <- function(gatk, path, bulk, region, quiet=FALSE) {
 # phase needs to be joined to a single cell table with alt and ref read
 # counts. Based on phase, (alt,ref) maps to either (hap1,hap2) or (hap2,hap1).
 annotate.gatk.phasing <- function(gatk, phasing.path, region, quiet=FALSE) {
-    phase.data <- read.tabix.data(path=phasing.path, region=region, quiet=quiet)
+    phase.data <- read.tabix.data(path=phasing.path, region=region, quiet=quiet
+        colClasses=list(character='chr'))
 
     if (ncol(phase.data) != 10)
         stop('expected single-sample VCF format with 10 columns')
