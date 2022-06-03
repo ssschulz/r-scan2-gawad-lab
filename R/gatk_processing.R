@@ -40,7 +40,7 @@ read.gatk.table.1sample <- function(path, sample.id, region, quiet=FALSE) {
     gatk <- read.tabix.data(tf=tf, region=region, header=header, quiet=quiet, colClasses=cols.to.read)
     close(tf)
 
-    new.sample.idx <- which(colnames(gatk) == sample)
+    new.sample.idx <- which(colnames(gatk) == sample.id)
     colnames(gatk)[new.sample.idx+1:2] <- c('scref', 'scalt')
 
     # Rearrange columns so that the single cell triplet is first, then bulk triplet
