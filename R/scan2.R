@@ -538,7 +538,8 @@ setMethod("compute.ab.fits", "SCAN2", function(object, path, chroms=1:22,
     }
 
     chrom.refine.records <- setNames(lapply(chroms, abmodel.fit.one.chrom,
-        path=path, genome.object=object@genome.object,
+        path=path, sc.sample=object@single.cell,
+        genome.object=object@genome.object,
         hsnp.tilesize=hsnp.tilesize, n.tiles=n.tiles,
         refine.n.steps=refine.n.steps, n.chunks=n.chunks,
         n.logp.samples.per.chunk=samples.per.chunk), chroms)
