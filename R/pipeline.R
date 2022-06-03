@@ -118,16 +118,16 @@ run.pipeline <- function(
 
 
 
-# Full GATK annotation pipeline. Creates an annotated master table, which
+# Full GATK annotation pipeline. Creates an annotated integrated table, which
 # contains many site-specific annotations and the full matrix of alt and ref
 # read counts for all single cells and bulks.
-make.master.table <- function(mmq60.tab, mmq1.tab, phased.vcf,
+make.integrated.table <- function(mmq60.tab, mmq1.tab, phased.vcf,
     bulk.sample, genome,
     genome.object=genome.string.to.bsgenome.object(genome),
     grs=tileGenome(seqlengths=seqinfo(genome.object)[as.character(1:22)], tilewidth=10e6, cut.last.tile.in.chrom=TRUE),
     quiet=TRUE)
 {
-    cat('Starting master table pipeline on', length(grs), 'chunks.\n')
+    cat('Starting integrated table pipeline on', length(grs), 'chunks.\n')
     cat('Parallelizing with', future::availableCores(), 'cores.\n')
 
     progressr::with_progress({
