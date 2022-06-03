@@ -58,39 +58,39 @@ run.pipeline <- function(
             gt <- add.static.filter.params(gt)
 
             pc <- perfcheck(paste('read.integrated.table',i),
-                x1 <- read.integrated.table(gt, path=int.tab, quiet=TRUE))
+                gt <- read.integrated.table(gt, path=int.tab, quiet=TRUE))
             p(class='sticky', amount=0, pc)
 
             pc <- perfcheck(paste('add.ab.fits',i),
-                w1 <- add.ab.fits(z1, path=abfits))
+                gt <- add.ab.fits(gt, path=abfits))
             p(class='sticky', amount=0, pc)
 
             pc <- perfcheck(paste('compute.ab.estimates',i),
-                v1 <- compute.ab.estimates(w1, quiet=!verbose))
+                gt <- compute.ab.estimates(gt, quiet=!verbose))
             p(class='sticky', amount=0, pc)
 
             pc <- perfcheck(paste('add.cigar.data',i),
-                r1 <- add.cigar.data(v1, sccigars, bulkcigars, quiet=!verbose))
+                gt <- add.cigar.data(gt, sccigars, bulkcigars, quiet=!verbose))
             p(class='sticky', amount=0, pc)
 
             pc <- perfcheck(paste('compute.models',i),
-                s1 <- compute.models(r1, verbose=verbose))
+                gt <- compute.models(gt, verbose=verbose))
             p(class='sticky', amount=0, pc)
 
             pc <- perfcheck(paste('compute.excess.cigar.scores',i),
-                t1 <- compute.excess.cigar.scores(s1, trainingcigars, quiet=!verbose))
+                gt <- compute.excess.cigar.scores(gt, trainingcigars, quiet=!verbose))
             p(class='sticky', amount=0, pc)
 
             pc <- perfcheck(paste('compute.static.filters',i),
-                u1 <- compute.static.filters(t1))
+                gt <- compute.static.filters(gt))
             p(class='sticky', amount=0, pc)
 
             pc <- perfcheck(paste('compute.fdr',i),
-                v1 <- compute.fdr(u1, fdr.prior.data, mode='new'))
+                gt <- compute.fdr(gt, fdr.prior.data, mode='new'))
             p(class='sticky', amount=0, pc)
 
             p()
-            v1
+            gt
         }, future.seed=0)  # CRITICAL! library(future) ensures that each child process
                            # has a different random seed.
     })
