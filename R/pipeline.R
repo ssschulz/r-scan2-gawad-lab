@@ -19,8 +19,7 @@ perfcheck <- function(msg, expr, print.header=FALSE) {
 
 run.pipeline <- function(
     sc.sample, bulk.sample,
-    mmq60, mmq1,
-    hsnps,
+    int.tab,
     abfits,
     sccigars, bulkcigars, trainingcigars,
     fdr.prior.data,
