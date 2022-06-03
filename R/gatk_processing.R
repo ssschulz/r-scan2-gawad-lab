@@ -76,7 +76,7 @@ read.gatk.table.2sample <- function(path, sc.sample, bulk.sample, region, quiet=
 # of ref supporting bulk reads and mutation supporting bulk reads.
 #
 # only `gatk.meta` is modified (by reference).
-gatk.annotate.bulk <- function(gatk.meta, gatk, bulk.sample, quiet=FALSE) {
+annotate.gatk.bulk <- function(gatk.meta, gatk, bulk.sample, quiet=FALSE) {
     header <- colnames(gatk)
     col.strings <- strsplit(header, '\t')[[1]]
     tot.cols <- length(col.strings)
