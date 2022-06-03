@@ -1,6 +1,8 @@
-# Read the first line and strip the leading '#', if it's there.
+# Read the header and strip the leading '#', if it's there.
+# If the header is multilined (e.g., VCFs), then we assume the last line
+# contains column names.
 read.tabix.header <- function(tf) {
-     sub('^#', '', Rsamtools::headerTabix(tf)$header)
+     sub('^#', '', tail(Rsamtools::headerTabix(tf)$header, 1))
 }
 
 # Returns a data.table
