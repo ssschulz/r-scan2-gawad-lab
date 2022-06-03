@@ -121,9 +121,10 @@ run.pipeline <- function(
 # Full GATK annotation pipeline. Creates an annotated master table, which
 # contains many site-specific annotations and the full matrix of alt and ref
 # read counts for all single cells and bulks.
-make.gatk.table <- function(mmq60.tab, mmq1.tab, phased.vcf,
+make.master.table <- function(mmq60.tab, mmq1.tab, phased.vcf,
     bulk.sample, genome,
-    grs=tileGenome(seqlengths=seqinfo(genome.string.to.bsgenome.object(genome))[as.character(1:22)], tilewidth=10e6, cut.last.tile.in.chrom=TRUE),
+    genome.object=genome.string.to.bsgenome.object(genome),
+    grs=tileGenome(seqlengths=seqinfo(genome.object)[as.character(1:22)], tilewidth=10e6, cut.last.tile.in.chrom=TRUE),
     quiet=FALSE)
 {
     cat('Starting master table pipeline on', length(grs), 'chunks.\n')
@@ -144,7 +145,7 @@ make.gatk.table <- function(mmq60.tab, mmq1.tab, phased.vcf,
             samplespecific <- gatk[,-(1:7)]
 
             annotate.gatk.bulk(sitewide, samplespecific, bulk.sample, quiet=quiet)
-            annotate.gatk(sitewide, add.mutsig=TRUE)
+            annotate.gatk(sitewide, genome.string=genome.string, genome.object=genome.object, add.mutsig=TRUE)
             annotate.gatk.lowmq(sitewide, path=mmq1.tab, bulk=bulk.sample, region=gr, quiet=quiet)
             annotate.gatk.phasing(sitewide, phasing.path=phased.vcf, region=gr)
             cbind(sitewide, samplespecific)
