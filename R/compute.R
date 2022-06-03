@@ -360,6 +360,14 @@ compute.fdr.new <- function(lysis.pv, lysis.beta, mda.pv, mda.beta, nt, na) {
 
 
 resample.germline <- function(sites, hsnps, M=50, seed=0) {
+    # Short circuit here if 0 sites given. Try to replicate the data structure that
+    # would be generated below to some extent.
+    if (nrow(sites) == 0 | nrow(hsnps) == 0) {
+        list(selection=data.frame(dist=integer(0), ds=NULL, dh=NULL, u=integer(0),
+                keep=integer(0)),
+            dist.s=NULL, dist.h=NULL)
+    }
+
     # XXX: Random position sampling: maybe add an option to use random
     # instead of somatic candidates?
     # Random positioning is not as realistic as all non-ref sites because
