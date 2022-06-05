@@ -256,8 +256,8 @@ infer.gp.block <- function(ssnvs, fit, hsnps, ctx, flank=1e5, max.hsnps=150, ver
 
     # approx. distn of B|Y at the training sites
     ctx$x <- d$pos
-    ctx$y <- d$hap1
-    ctx$d <- d$hap1 + d$hap2
+    ctx$y <- d$phased.hap1
+    ctx$d <- d$phased.hap1 + d$phased.hap2
     abmodel.approx.logp(a=a, b=b, c=c, d=dparam, ctx=ctx)
 
     # insert the position of the variant to be tested
