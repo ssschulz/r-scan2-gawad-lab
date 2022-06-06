@@ -34,7 +34,7 @@ run.pipeline <- function(
     genome,
     tmpsave.rda,
     grs=tileGenome(seqlengths=seqinfo(genome.string.to.bsgenome.object(genome))[as.character(1:22)], tilewidth=10e6, cut.last.tile.in.chrom=TRUE),
-    report.mem=TRUE, verbose=TRUE)
+    legacy=FALSE, report.mem=TRUE, verbose=TRUE)
 {
     if (!missing(tmpsave.rda)) {
         if (file.exists(tmpsave.rda))
@@ -85,8 +85,16 @@ run.pipeline <- function(
                 gt <- compute.models(gt, verbose=verbose), report.mem=report.mem)
             p(class='sticky', amount=0, pc)
 
+            # Note about legacy mode: legacy mode isn't actually legacy, it's what
+            # is still currently used. Legacy uses only resampled germline hets for
+            # the null CIGAR distn while the new mode uses all germline hets. The new
+            # mode is *way* too slow to ever use because the computation is O(n) where
+            # n is the number of null sites. The new mode needs to approximate the
+            # 2-d CIGAR op probability space with a fixed N (e.g., of gaussians) to
+            # guarantee reasonable runtime.
             pc <- perfcheck(paste('compute.excess.cigar.scores',i),
-                gt <- compute.excess.cigar.scores(gt, trainingcigars, quiet=!verbose), report.mem=report.mem)
+                gt <- compute.excess.cigar.scores(object=gt, path=trainingcigars, legacy=TRUE, quiet=!verbose),
+                    report.mem=report.mem)
             p(class='sticky', amount=0, pc)
 
             pc <- perfcheck(paste('compute.static.filters',i),
@@ -94,7 +102,8 @@ run.pipeline <- function(
             p(class='sticky', amount=0, pc)
 
             pc <- perfcheck(paste('compute.fdr',i),
-                gt <- compute.fdr(gt, fdr.prior.data, mode='new'), report.mem=report.mem)
+                gt <- compute.fdr(gt, fdr.prior.data, mode=ifelse(legacy, 'legacy', 'new')),
+                report.mem=report.mem)
             p(class='sticky', amount=0, pc)
 
             p()
