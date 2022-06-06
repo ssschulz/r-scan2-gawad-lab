@@ -102,7 +102,7 @@ run.pipeline <- function(
             p(class='sticky', amount=0, pc)
 
             pc <- perfcheck(paste('compute.fdr',i),
-                gt <- compute.fdr(gt, fdr.prior.data, mode=ifelse(legacy, 'legacy', 'new')),
+                gt <- compute.fdr(gt, fdr.prior.data, mode=ifelse(legacy, 'legacy', 'new'), quiet=!verbose),
                 report.mem=report.mem)
             p(class='sticky', amount=0, pc)
 

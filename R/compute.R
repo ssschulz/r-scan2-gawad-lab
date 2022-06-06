@@ -317,9 +317,12 @@ min.fdr <- function(pv, alphas, betas, nt, na) {
 # Unlike the real legacy code, the alphas and betas corresponding to
 # the minimum FDR are not reported.
 compute.fdr.legacy <- function(altreads, dp, gp.mu, gp.sd, nt, na, verbose=TRUE) {
+    if (length(dp) == 0)
+        return(list(lysis.fdr=numeric(0), mda.fdr=numeric(0)))
+
     progressr::with_progress({
-        p <- progressr::progress(along=1:(length(dp)/100))
-        fdrs <- future::future_mapply(function(altreads, dp, gp.mu, gp.sd, nt, na, idx) {
+        p <- progressr::progressor(along=1:max(1,length(dp)/100))
+        fdrs <- future.apply::future_mapply(function(altreads, dp, gp.mu, gp.sd, nt, na, idx) {
             # Step1: compute dreads for all relevant models:
             # These dreads() calls are the most expensive part of genotyping
             tb <- mut.model.tables(dp, gp.mu, gp.sd)
@@ -342,20 +345,6 @@ compute.fdr.legacy <- function(altreads, dp, gp.mu, gp.sd, nt, na, verbose=TRUE)
     }, enable=verbose)
 
     list(lysis.fdr=fdrs[1,], mda.fdr=fdrs[2,])
-}
-
-
-compute.fdr.new <- function(lysis.pv, lysis.beta, mda.pv, mda.beta, nt, na) {
-    # avoid division by 0
-    x <- lysis.pv*na
-    denom <- x + lysis.beta*nt
-    lysis.fdr <- ifelse(denom > 0, x / denom, 0)
-
-    x <- mda.pv*na
-    denom <- x + mda.beta*nt
-    mda.fdr <- ifelse(denom > 0, x / denom, 0)
-
-    data.frame(lysis.fdr=lysis.fdr, mda.fdr=mda.fdr)
 }
 
 

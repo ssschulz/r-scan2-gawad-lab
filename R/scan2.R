@@ -632,9 +632,9 @@ setMethod("compute.fdr.prior.data", "SCAN2", function(object, mode='legacy', qui
 })
 
 
-setGeneric("compute.fdr", function(object, path, mode=c('legacy', 'new'))
+setGeneric("compute.fdr", function(object, path, mode=c('legacy', 'new'), quiet=FALSE)
     standardGeneric("compute.fdr"))
-setMethod("compute.fdr", "SCAN2", function(object, path, mode=c('legacy', 'new')) {
+setMethod("compute.fdr", "SCAN2", function(object, path, mode=c('legacy', 'new'), quiet=FALSE) {
     mode <- match.arg(mode)
 
     check.slots(object, c('gatk', 'ab.estimates', 'mut.models'))
@@ -650,16 +650,12 @@ setMethod("compute.fdr", "SCAN2", function(object, path, mode=c('legacy', 'new')
     muttypes <- c('snv', 'indel')
     object@fdr <- setNames(lapply(muttypes, function(mt) {
         # First use NT/NA tables to assign NT and NA to every site
-        nt.na <- estimate.fdr.priors(object@gatk[muttype == mt], object@fdr.prior.data[[mt]])
-        nt <- nt.na$nt
-        na <- nt.na$na
-        object@gatk[muttype == mt, c('nt', 'na') := list(nt, na)]
+        object@gatk[muttype == mt, c('nt', 'na') :=
+            estimate.fdr.priors(.SD, object@fdr.prior.data[[mt]])]
 
-        # Next compute lysis.fdr and mda.fdr, which represent the false discovery rate
-        # of a population of candidate mutation sites with the same DP and VAF as the
-        # site in question.
-        # Legacy computation (finding min FDR over all alphas) and legacy candidate set.
-        # Legacy computation is too slow for applying to all sites.
+        # lysis.fdr and mda.fdr represent the false discovery rate of a population of
+        # candidate mutation sites with the same DP and VAF as the site in question.
+        # Legacy computation finds min FDR over all alphas and is too slow for all sites.
         if (mode == 'legacy') {
             object@gatk[
                 muttype == mt &
@@ -670,7 +666,7 @@ setMethod("compute.fdr", "SCAN2", function(object, path, mode=c('legacy', 'new')
                 dp >= object@static.filter.params$min.sc.dp,
                 c('lysis.fdr', 'mda.fdr') := 
                     compute.fdr.legacy(altreads=scalt, dp=dp, gp.mu=matched.ab(af=af, gp.mu=gp.mu),
-                                       gp.sd=gp.sd, nt=nt, na=na)]
+                                       gp.sd=gp.sd, nt=nt, na=na, verbose=!quiet)]
                 # legacy did NOT require passing min.bulk.dp or 0 bulk alt reads at low MQ
                 #bulk.dp >= object@static.filter.params$min.bulk.dp]
                 #(is.na(balt.lowmq) | balt.lowmq == 0)]
