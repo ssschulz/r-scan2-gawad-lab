@@ -375,6 +375,7 @@ setMethod("concat", signature="SCAN2", function(...) {
     }
     ret@fdr.prior.data <- init@fdr.prior.data
 
+    ret@fdr <- list()
     for (mt in c('snv', 'indel')) {
         ensure.same(args, 'fdr', mt, 'mode')
         ret@fdr[[mt]] <- data.frame(mode=init@fdr[[mt]]$mode,
@@ -673,6 +674,13 @@ setMethod("compute.fdr", "SCAN2", function(object, path, mode=c('legacy', 'new')
                 # legacy did NOT require passing min.bulk.dp or 0 bulk alt reads at low MQ
                 #bulk.dp >= object@static.filter.params$min.bulk.dp]
                 #(is.na(balt.lowmq) | balt.lowmq == 0)]
+            sites <- nrow(object@gatk[
+                muttype == mt &
+                balt == 0 &
+                bulk.gt == '0/0' &
+                dbsnp == '.' &
+                scalt >= object@static.filter.params$min.sc.alt &
+                dp >= object@static.filter.params$min.sc.dp])
         } else if (mode == 'new') {
             # XXX: TODO: calculate adjusted NA/NT values for hSNPs. Equivalent to
             # previous leave-one-out approaches, because AB estimation always leaves
@@ -684,7 +692,9 @@ setMethod("compute.fdr", "SCAN2", function(object, path, mode=c('legacy', 'new')
             object@gatk[muttype == mt, c('lysis.fdr', 'mda.fdr') :=
                 list(lysis.pv*na / (lysis.pv*na + lysis.beta*nt),
                     mda.pv*na / (mda.pv*na + mda.beta*nt))]
+            sites <- nrow(object@gatk[muttype == mt])
         }
+        list(sites=sites, mode=mode)
     }), muttypes)
 
     object
