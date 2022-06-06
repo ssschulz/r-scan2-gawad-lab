@@ -665,7 +665,7 @@ setMethod("compute.fdr", "SCAN2", function(object, path, mode=c('legacy', 'new')
                 scalt >= object@static.filter.params$min.sc.alt &
                 dp >= object@static.filter.params$min.sc.dp,
                 c('lysis.fdr', 'mda.fdr') := 
-                    compute.fdr.legacy(altreads=scalt, dp=dp, gp.mu=matched.ab(af=af, gp.mu=gp.mu),
+                    compute.fdr.legacy(altreads=scalt, dp=dp, gp.mu=match.ab(af=af, gp.mu=gp.mu),
                                        gp.sd=gp.sd, nt=nt, na=na, verbose=!quiet)]
                 # legacy did NOT require passing min.bulk.dp or 0 bulk alt reads at low MQ
                 #bulk.dp >= object@static.filter.params$min.bulk.dp]
