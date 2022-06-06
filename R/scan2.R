@@ -278,6 +278,7 @@ setMethod("show", "SCAN2", function(object) {
     if (is.null(object@fdr.prior.data)) {
         cat("(not computed)\n")
     } else {
+str(object@fdr.prior.data, max.lev=2)
         for (mt in names(object@fdr.prior.data)) {
             cat(sprintf("%d (cands. %d, hets %d, max burd. %d) ",
                 mt, object@fdr.prior.data$candidates.used,
@@ -361,6 +362,9 @@ setMethod("concat", signature="SCAN2", function(...) {
     )
     ensure.same(args, 'excess.cigar.scores', 'legacy')
     ensure.same(args, 'excess.cigar.scores', 'training.sites')
+
+    # fdr.prior.data: 'fcs' should also be identical, but the list is a little
+    # inconvenient to check. the below should detect misuse 99% of the time.
     for (mt in c('snv', 'indel')) {
         ensure.same(args, 'fdr.prior.data', mt, 'bins')
         ensure.same(args, 'fdr.prior.data', mt, 'max.dp')
@@ -370,9 +374,8 @@ setMethod("concat", signature="SCAN2", function(...) {
         ensure.same(args, 'fdr.prior.data', mt, 'na.tab')
         ensure.same(args, 'fdr.prior.data', mt, 'mode')
     }
-    # fdr.prior.data: 'fcs' should also be identical, but the list is a little
-    # inconvenient to check. the above should detect misuse 99% of the time.
     ret@fdr.prior.data <- init@fdr.prior.data
+
     ensure.same(args, 'fdr', 'mode')
     ret@fdr <- data.frame(mode=init@fdr$mode,
         sites=sum(sapply(args, function(a) ifelse(is.null(a@fdr), 0, a@fdr$sites))))
@@ -638,52 +641,56 @@ setMethod("compute.fdr", "SCAN2", function(object, path, mode='legacy') {
     if (!missing(path))
         object@fdr.prior.data <- get(load(path))
 
-    # First use NT/NA tables to assign NT and NA to every site
     check.slots(object, 'fdr.prior.data')
-    nt.na <- estimate.fdr.priors(object@gatk, object@fdr.prior.data)
-    nt <- nt.na$nt
-    na <- nt.na$na
-    object@gatk[, c('nt', 'na') := list(nt, na)]
 
-    # Next compute lysis.fdr and mda.fdr, which represent the false discovery rate
-    # of a population of candidate mutation sites with the same DP and VAF as the
-    # site in question.
-    # Legacy computation (finding min FDR over all alphas) and legacy candidate set.
-    # Legacy computation is too slow for applying to all sites.
-    if (mode == 'legacy') {
-        bulk.sample <- object@bulk
-        bulk.gt <- object@gatk[[bulk.sample]]
-        cand <- object@gatk[
-            balt == 0 &
-            bulk.gt == '0/0' &
-            dbsnp == '.' &
-            scalt >= object@static.filter.params$min.sc.alt &
-            dp >= object@static.filter.params$min.sc.dp]
-            # legacy did NOT require passing min.bulk.dp or 0 bulk alt reads at low MQ
-            #bulk.dp >= object@static.filter.params$min.bulk.dp]
-            #(is.na(balt.lowmq) | balt.lowmq == 0)]
+    for (mt in c('snv', 'indel')) {
+        # First use NT/NA tables to assign NT and NA to every site
+        nt.na <- estimate.fdr.priors(object@gatk[muttype == mt], object@fdr.prior.data[[mt]])
+        nt <- nt.na$nt
+        na <- nt.na$na
+        object@gatk[muttype == mt, c('nt', 'na') := list(nt, na)]
 
-        matched.gp.mu <- match.ab(af=cand$af, gp.mu=cand$gp.mu)
-        cand[, c('lysis.fdr', 'mda.fdr') :=
-            compute.fdr.legacy(altreads=scalt, dp=dp,
-                gp.mu=matched.gp.mu, gp.sd=gp.sd, nt=nt, na=na)]
-        object@gatk[cand, on=.(chr,pos,refnt,altnt),
-            c('lysis.fdr', 'mda.fdr') := list(i.lysis.fdr, i.mda.fdr)]
-        object@fdr <- list(mode=mode, sites=nrow(cand))
-    } else if (mode == 'new') {
-        # XXX: TODO: calculate adjusted NA/NT values for hSNPs. Equivalent to
-        # previous leave-one-out approaches, because AB estimation always leaves
-        # out the site being estimated (whether hSNP or somatic candidate).
-        #
-        # HOWEVER, this FDR heuristic on hSNPs IS NOT a good way to actually call
-        # germline hSNPs if that is your goal. These FDR heuristics are tuned to
-        # the specific set of CANDIDATE SOMATIC MUTATIONS detected for this cell.
-        object@gatk[, c('lysis.fdr', 'mda.fdr') :=
-            list(lysis.pv*na / (lysis.pv*na + lysis.beta*nt),
-                 mda.pv*na / (mda.pv*na + mda.beta*nt))]
-        object@fdr <- list(mode=mode, sites=nrow(object@gatk))
-    } else
-        stop(sprintf("unrecognized mode '%s', expecting either 'legacy' or 'new'", mode))
+        # Next compute lysis.fdr and mda.fdr, which represent the false discovery rate
+        # of a population of candidate mutation sites with the same DP and VAF as the
+        # site in question.
+        # Legacy computation (finding min FDR over all alphas) and legacy candidate set.
+        # Legacy computation is too slow for applying to all sites.
+        if (mode == 'legacy') {
+            bulk.sample <- object@bulk
+            bulk.gt <- object@gatk[[bulk.sample]]
+            cand <- object@gatk[
+                muttype == mt &
+                balt == 0 &
+                bulk.gt == '0/0' &
+                dbsnp == '.' &
+                scalt >= object@static.filter.params$min.sc.alt &
+                dp >= object@static.filter.params$min.sc.dp]
+                # legacy did NOT require passing min.bulk.dp or 0 bulk alt reads at low MQ
+                #bulk.dp >= object@static.filter.params$min.bulk.dp]
+                #(is.na(balt.lowmq) | balt.lowmq == 0)]
+
+            matched.gp.mu <- match.ab(af=cand$af, gp.mu=cand$gp.mu)
+            cand[, c('lysis.fdr', 'mda.fdr') :=
+                compute.fdr.legacy(altreads=scalt, dp=dp,
+                    gp.mu=matched.gp.mu, gp.sd=gp.sd, nt=nt, na=na)]
+            object@gatk[cand, on=.(chr,pos,refnt,altnt),
+                c('lysis.fdr', 'mda.fdr') := list(i.lysis.fdr, i.mda.fdr)]
+            object@fdr <- list(mode=mode, sites=nrow(cand))
+        } else if (mode == 'new') {
+            # XXX: TODO: calculate adjusted NA/NT values for hSNPs. Equivalent to
+            # previous leave-one-out approaches, because AB estimation always leaves
+            # out the site being estimated (whether hSNP or somatic candidate).
+            #
+            # HOWEVER, this FDR heuristic on hSNPs IS NOT a good way to actually call
+            # germline hSNPs if that is your goal. These FDR heuristics are tuned to
+            # the specific set of CANDIDATE SOMATIC MUTATIONS detected for this cell.
+            object@gatk[muttype == mt, c('lysis.fdr', 'mda.fdr') :=
+                list(lysis.pv*na / (lysis.pv*na + lysis.beta*nt),
+                    mda.pv*na / (mda.pv*na + mda.beta*nt))]
+            object@fdr <- list(mode=mode, sites=nrow(object@gatk[muttype == mt]))
+        } else
+            stop(sprintf("unrecognized mode '%s', expecting either 'legacy' or 'new'", mode))
+    }
 
     object
 })
