@@ -339,7 +339,7 @@ compute.fdr.legacy <- function(altreads, dp, gp.mu, gp.sd, nt, na, verbose=TRUE)
             if (idx %% 100 == 1) p(amount=1)
             c(lysis.fdr=lysis.fdr, mda.fdr=mda.fdr)
         }, altreads, dp, gp.mu, gp.sd, nt, na, 1:length(dp))
-    })
+    }, enable=verbose)
 
     data.frame(lysis.fdr=fdrs[1,], mda.fdr=fdrs[2,])
 }
