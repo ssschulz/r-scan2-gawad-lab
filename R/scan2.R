@@ -674,7 +674,7 @@ cigar.emp.score <- function (training, test, which = c("id", "hs"), quiet=FALSE)
             ifelse(dp == 0 | bulkdp == 0, 0,
                 mean(xt >= x & yt >= y, na.rm = T))
         }, test$dp.cigars, test$dp.cigars.bulk, x, y, 1:length(x))
-    })
+    }, enable=!quiet)
 
     # future_mapply returns list() when x is length 0. make this a 0-length
     # numeric so quantile() doesn't fail on it later.
@@ -703,7 +703,6 @@ compute.excess.cigar <- function(data, cigar.training, quiet=FALSE) {
         hsopscores <- cigar.emp.score(training=cigar.training, test=data, which='hs', quiet=quiet)),
     '\n')
 
-    cat('storing in data..\n')
     data[, c('id.score', 'hs.score') := list(idopscores, hsopscores)]
 }
 
