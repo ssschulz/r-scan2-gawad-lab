@@ -110,7 +110,7 @@ test.output <- function(pipeline.output, custom, test.data=c('legacy_tiny', 'leg
     test.equal(l$altnt, p$altnt, "altnt")
     test.equal(l$dbsnp, p$dbsnp, "dbsnp")
     test.equal(l$h25, p$h25, "h25")
-    test.equal(l$hunamp, p$hunamp, "hunamp")
+    test.equal(l$hunamp, p$hunamp, "bulk.gt")  # used to be called hunamp, now unambiguously labeled as bulk.gt
     test.equal(l$dp, p$dp, "dp")
     test.equal(l$af, p$af, "af")
     test.equal(l$bulk.dp, p$bulk.dp, "bulk.dp")
