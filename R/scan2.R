@@ -684,7 +684,6 @@ setMethod("compute.fdr", "SCAN2", function(object, path, mode=c('legacy', 'new')
             object@gatk[muttype == mt, c('lysis.fdr', 'mda.fdr') :=
                 list(lysis.pv*na / (lysis.pv*na + lysis.beta*nt),
                     mda.pv*na / (mda.pv*na + mda.beta*nt))]
-            object@fdr <- list(mode=mode, sites=nrow(object@gatk[muttype == mt]))
         }
     }), muttypes)
 
