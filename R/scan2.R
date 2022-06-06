@@ -278,12 +278,11 @@ setMethod("show", "SCAN2", function(object) {
     if (is.null(object@fdr.prior.data)) {
         cat("(not computed)\n")
     } else {
-str(object@fdr.prior.data, max.lev=2)
         for (mt in names(object@fdr.prior.data)) {
             cat(sprintf("%d (cands. %d, hets %d, max burd. %d) ",
-                mt, object@fdr.prior.data$candidates.used,
-                object@fdr.prior.data$hsnps.used,
-                object@fdr.prior.data$burden[2]))
+                mt, object@fdr.prior.data[[mt]]$candidates.used,
+                object@fdr.prior.data[[mt]]$hsnps.used,
+                object@fdr.prior.data[[mt]]$burden[2]))
         }
         cat('\n')
     }
