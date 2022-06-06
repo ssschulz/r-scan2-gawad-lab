@@ -660,22 +660,6 @@ setMethod("compute.fdr", "SCAN2", function(object, path, mode=c('legacy', 'new')
         # Legacy computation (finding min FDR over all alphas) and legacy candidate set.
         # Legacy computation is too slow for applying to all sites.
         if (mode == 'legacy') {
-            cand <- object@gatk[
-                muttype == mt &
-                balt == 0 &
-                bulk.gt == '0/0' &
-                dbsnp == '.' &
-                scalt >= object@static.filter.params$min.sc.alt &
-                dp >= object@static.filter.params$min.sc.dp]
-                # legacy did NOT require passing min.bulk.dp or 0 bulk alt reads at low MQ
-                #bulk.dp >= object@static.filter.params$min.bulk.dp]
-                #(is.na(balt.lowmq) | balt.lowmq == 0)]
-
-            matched.gp.mu <- match.ab(af=cand$af, gp.mu=cand$gp.mu)
-            fdr <- compute.fdr.legacy(altreads=scalt, dp=dp,
-                        gp.mu=matched.gp.mu, gp.sd=gp.sd, nt=nt, na=na)
-
-            # Assign by reference to the same subset as for 'cand'
             object@gatk[
                 muttype == mt &
                 balt == 0 &
@@ -683,7 +667,12 @@ setMethod("compute.fdr", "SCAN2", function(object, path, mode=c('legacy', 'new')
                 dbsnp == '.' &
                 scalt >= object@static.filter.params$min.sc.alt &
                 dp >= object@static.filter.params$min.sc.dp,
-                c('lysis.fdr', 'mda.fdr') := list(fdr$lysis.fdr, fdr$mda.fdr)]
+                c('lysis.fdr', 'mda.fdr') := 
+                    compute.fdr.legacy(altreads=scalt, dp=dp, gp.mu=matched.ab(af=af, gp.mu=gp.mu),
+                                       gp.sd=gp.sd, nt=nt, na=na)]
+                # legacy did NOT require passing min.bulk.dp or 0 bulk alt reads at low MQ
+                #bulk.dp >= object@static.filter.params$min.bulk.dp]
+                #(is.na(balt.lowmq) | balt.lowmq == 0)]
         } else if (mode == 'new') {
             # XXX: TODO: calculate adjusted NA/NT values for hSNPs. Equivalent to
             # previous leave-one-out approaches, because AB estimation always leaves
