@@ -273,6 +273,19 @@ setMethod("show", "SCAN2", function(object) {
             sum(!object@gatk$static.filter, na.rm=TRUE), "removed",
             sum(is.na(object@gatk$static.filter)), "NA\n")
     }
+
+    cat("#   FDR prior data: ")
+    if (is.null(object@fdr.prior.data)) {
+        cat("(not computed)\n")
+    } else {
+        for (mt in names(object@fdr.prior.data)) {
+            cat(sprintf("%d (cands. %d, hets %d, max burd. %d) ",
+                mt, object@fdr.prior.data$candidates.used,
+                object@fdr.prior.data$hsnps.used,
+                object@fdr.prior.data$burden[2]))
+        }
+        cat('\n')
+    }
 })
 
 
@@ -298,17 +311,28 @@ setMethod("concat", signature="SCAN2", function(...) {
     # rbindlist quickly concatenates data.tables
     ret@gatk <- rbindlist(lapply(args, function(a) a@gatk))
 
-    ensure.same <- function(l, slot.name, var.name) {
+    ensure.same <- function(l, slot.name, var.name, var.name2) {
+        if (missing(var.name) & !missing(var.name2))
+            stop("var.name2 only valid if var.name also specified")
+
         # either all slots are NULL or they have the same value
         if (all(sapply(l, function(element) is.null(slot(element, slot.name))))) {
             return()
         }
         # if var.name isn't supplied, assume that `slot.name` is just a vector
         if (!missing(var.name)) {
-            if (!all(sapply(l, function(element)
-                all(slot(l[[1]], slot.name)[[var.name]] == slot(element, slot.name)[[var.name]]))))
-                stop(paste('list of SCAN2 chunks cannot be concatenated; slot', slot.name,
-                    'does not have consistent values for', var.name))
+            if (missing(var.name2)) {
+                if (!all(sapply(l, function(element)
+                    all(slot(l[[1]], slot.name)[[var.name]] == slot(element, slot.name)[[var.name]]))))
+                    stop(paste('list of SCAN2 chunks cannot be concatenated; slot', slot.name,
+                        'does not have consistent values for', var.name))
+            } else {
+                # very hackish way to allow nested testing
+                if (!all(sapply(l, function(element)
+                    all(slot(l[[1]], slot.name)[[var.name]][[var.name2]] == slot(element, slot.name)[[var.name]][[var.name2]]))))
+                    stop(paste('list of SCAN2 chunks cannot be concatenated; slot', slot.name,
+                        'does not have consistent values for', var.name))
+            }
         } else {
             if (!all(sapply(l, function(element)
                 all(slot(l[[1]], slot.name) == slot(element, slot.name)))))
@@ -337,13 +361,15 @@ setMethod("concat", signature="SCAN2", function(...) {
     )
     ensure.same(args, 'excess.cigar.scores', 'legacy')
     ensure.same(args, 'excess.cigar.scores', 'training.sites')
-    ensure.same(args, 'fdr.prior.data', 'bins')
-    ensure.same(args, 'fdr.prior.data', 'max.dp')
-    ensure.same(args, 'fdr.prior.data', 'candidates.used')
-    ensure.same(args, 'fdr.prior.data', 'hsnps.used')
-    ensure.same(args, 'fdr.prior.data', 'nt.tab')
-    ensure.same(args, 'fdr.prior.data', 'na.tab')
-    ensure.same(args, 'fdr.prior.data', 'mode')
+    for (mt in c('snv', 'indel')) {
+        ensure.same(args, 'fdr.prior.data', mt, 'bins')
+        ensure.same(args, 'fdr.prior.data', mt, 'max.dp')
+        ensure.same(args, 'fdr.prior.data', mt, 'candidates.used')
+        ensure.same(args, 'fdr.prior.data', mt, 'hsnps.used')
+        ensure.same(args, 'fdr.prior.data', mt, 'nt.tab')
+        ensure.same(args, 'fdr.prior.data', mt, 'na.tab')
+        ensure.same(args, 'fdr.prior.data', mt, 'mode')
+    }
     # fdr.prior.data: 'fcs' should also be identical, but the list is a little
     # inconvenient to check. the above should detect misuse 99% of the time.
     ret@fdr.prior.data <- init@fdr.prior.data
@@ -561,37 +587,42 @@ setGeneric("compute.fdr.prior.data", function(object, mode='legacy', quiet=FALSE
 setMethod("compute.fdr.prior.data", "SCAN2", function(object, mode='legacy', quiet=FALSE) {
     check.slots(object, c('gatk', 'static.filter.params'))
 
-    # FIXME: after integrated table, should probably just use somatic.candidate
-    # column here.
-    if (mode == 'legacy') {
-        # in legacy mode, only candidate sites passing a small set of pre-genotyping
-        # crtieria were used.
-        bulk.sample <- object@bulk
-        bulk.gt <- object@gatk[[bulk.sample]]
-        min.sc.alt <- object@static.filter.params$min.sc.alt
-        min.sc.dp <- object@static.filter.params$min.sc.dp
-        min.bulk.dp <- object@static.filter.params$min.bulk.dp
-        max.bulk.alt <- object@static.filter.params$max.bulk.alt
-        cand <- object@gatk[
-            balt <= max.bulk.alt &
-            bulk.gt == '0/0' &
-            dbsnp == '.' &
-            scalt >= min.sc.alt &
-            dp >= min.sc.dp &
-            bulk.dp >= min.bulk.dp &
-            (is.na(balt.lowmq) | balt.lowmq <= max.bulk.alt)]
-        hsnps=object@gatk[training.site == TRUE & scalt >= min.sc.alt]
-    } else {
-        stop("only the legacy mode is currently implemented. check back soon.")
-        # non-legacy mode will apply static filter params, which is almost what is
-        # done above.
-        if (!('static.filter' %in% colnames(object@gatk)))
-            stop('must compute static filters before running compute.fdr.priors')
-    }
+    muttypes <- c('snv', 'indel')
 
-    # Returns a list of FDR prior data. Also record the mode used.
-    object@fdr.prior.data <-
-        c(compute.fdr.prior.data.for.candidates(candidates=cand, hsnps=hsnps, random.seed=0, quiet=quiet), mode=mode)
+    object@fdr.prior.data <- setNames(lapply(muttypes, function(mt) {
+        # FIXME: after integrated table, should probably just use somatic.candidate
+        # column here.
+        if (mode == 'legacy') {
+            # in legacy mode, only candidate sites passing a small set of pre-genotyping
+            # crtieria were used.
+            bulk.sample <- object@bulk
+            bulk.gt <- object@gatk[[bulk.sample]]
+            min.sc.alt <- object@static.filter.params$min.sc.alt
+            min.sc.dp <- object@static.filter.params$min.sc.dp
+            min.bulk.dp <- object@static.filter.params$min.bulk.dp
+            max.bulk.alt <- object@static.filter.params$max.bulk.alt
+            cand <- object@gatk[
+                muttype == mt &
+                balt <= max.bulk.alt &
+                bulk.gt == '0/0' &
+                dbsnp == '.' &
+                scalt >= min.sc.alt &
+                dp >= min.sc.dp &
+                bulk.dp >= min.bulk.dp &
+                (is.na(balt.lowmq) | balt.lowmq <= max.bulk.alt)]
+            hets=object@gatk[muttype == mt & training.site == TRUE & scalt >= min.sc.alt]
+        } else {
+            stop("only the legacy mode is currently implemented. check back soon.")
+            # non-legacy mode will apply static filter params, which is almost what is
+            # done above.
+            if (!('static.filter' %in% colnames(object@gatk)))
+                stop('must compute static filters before running compute.fdr.priors')
+        }
+    
+        # Add the mode used to the fdr prior data structure
+        c(compute.fdr.prior.data.for.candidates(candidates=cand, hsnps=hets, random.seed=0, quiet=quiet), mode=mode)
+    }), muttypes)
+
     object
 })
 
