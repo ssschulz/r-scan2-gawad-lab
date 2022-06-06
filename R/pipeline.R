@@ -58,7 +58,7 @@ run.pipeline <- function(
             gt <- add.static.filter.params(gt)
 
             pc <- perfcheck(paste('read.integrated.table',i),
-                gt <- read.integrated.table(gt, path=int.tab, quiet=TRUE))
+                gt <- read.integrated.table(gt, path=int.tab, quiet=quiet))
             p(class='sticky', amount=0, pc)
 
             pc <- perfcheck(paste('add.ab.fits',i),
