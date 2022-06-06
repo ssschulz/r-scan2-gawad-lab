@@ -76,7 +76,7 @@ mut.model.tables <- function(dp, gp.mu, gp.sd) {
 # significant" as any event with lower probability.
 compute.pvs.and.betas <- function(altreads, dp, gp.mu, gp.sd, verbose=TRUE) {
     progressr::with_progress({
-        p <- progressr::progressor(along=1:(length(dp)/100))
+        if (verbose) p <- progressr::progressor(along=1:(length(dp)/100))
         pab <- mapply(function(altreads, dp, gp.mu, gp.sd, idx) {
             # Step1: compute dreads for all relevant models:
             # These dreads() calls are the most expensive part of genotyping
@@ -91,7 +91,7 @@ compute.pvs.and.betas <- function(altreads, dp, gp.mu, gp.sd, verbose=TRUE) {
             mda.pv <- sum(tb$mda[tb$mda <= tb$mda[altreads + 1]])
             mda.beta <- sum(tb$mut[tb$mda <= tb$mda[altreads + 1]])
 
-            if (idx %% 100 == 1) p()
+            if (verbose & idx %% 100 == 1) p()
             c(abc.pv, lysis.pv, lysis.beta, mda.pv, mda.beta)
         }, altreads, dp, gp.mu, gp.sd, 1:length(dp))
     }, enable=verbose)
