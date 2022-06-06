@@ -9,7 +9,7 @@ perfcheck <- function(msg, expr, print.header=FALSE, report.mem=TRUE) {
         return(sprintf('%30s | %9s %11s %9s %9s',
             'Step (chunk)', 'Mem Mb', 'Peak mem Mb', 'Time (s)', 'Elapsed'))
     }
-    t <- system.time(eval(expr))
+    t <- system.time(eval(expr), gcFirst=report.mem)
     mem.used <- NA
     max.mem.used <- NA
     if (report.mem) {
