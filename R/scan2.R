@@ -633,7 +633,7 @@ setMethod("compute.fdr.prior.data", "SCAN2", function(object, mode='legacy', qui
 
 setGeneric("compute.fdr", function(object, path, mode=c('legacy', 'new'))
     standardGeneric("compute.fdr"))
-setMethod("compute.fdr", "SCAN2", function(object, path, mode='legacy') {
+setMethod("compute.fdr", "SCAN2", function(object, path, mode=c('legacy', 'new')) {
     mode <- match.arg(mode)
 
     check.slots(object, c('gatk', 'ab.estimates', 'mut.models'))
@@ -690,8 +690,6 @@ setMethod("compute.fdr", "SCAN2", function(object, path, mode='legacy') {
                 list(lysis.pv*na / (lysis.pv*na + lysis.beta*nt),
                     mda.pv*na / (mda.pv*na + mda.beta*nt))]
             object@fdr <- list(mode=mode, sites=nrow(object@gatk[muttype == mt]))
-        } else {
-            stop(sprintf("unrecognized mode '%s', expecting either 'legacy' or 'new'", mode))
         }
     }), muttypes)
 
