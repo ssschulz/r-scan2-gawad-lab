@@ -1,16 +1,24 @@
 # Run `expr` and then print a few statistics about memory and runtime
 # print.header - if TRUE, msg and expr are ignored.  It does NOT mean
 #     print msg/expr and ADD a header!
-perfcheck <- function(msg, expr, print.header=FALSE) {
+# report.mem - don't run gc(). each gc() takes 1-2s; on normal whole
+#     genome workloads this is unnoticable, but when running small test
+#     pipelines this can make up 99%+ of the runtime.
+perfcheck <- function(msg, expr, print.header=FALSE, report.mem=TRUE) {
     if (print.header) {
         return(sprintf('%30s | %9s %11s %9s %9s',
             'Step (chunk)', 'Mem Mb', 'Peak mem Mb', 'Time (s)', 'Elapsed'))
     }
     t <- system.time(eval(expr))
-    g <- gc(reset=TRUE)
+    mem.used <- NA
+    max.mem.used <- NA
+    if (!report.mem) {
+        g <- gc(reset=TRUE)
+        mem.used <- sum(g[,which(colnames(g)=='used')+1])
+        max.mem.used <- sum(g[,which(colnames(g)=='max used')+1])
+    }
     sprintf('%30s |  %7.1f %10.1f %7.1f %7.1f', msg,
-        sum(g[,which(colnames(g)=='used')+1]),
-        sum(g[,which(colnames(g)=='max used')+1]),
+        mem.used, max.mem.used,
         # combine user, system, and child cpu time
         sum(t[names(t) != 'elapsed']),
         t['elapsed'])
@@ -26,7 +34,7 @@ run.pipeline <- function(
     genome,
     tmpsave.rda,
     grs=tileGenome(seqlengths=seqinfo(genome.string.to.bsgenome.object(genome))[as.character(1:22)], tilewidth=10e6, cut.last.tile.in.chrom=TRUE),
-    verbose=TRUE)
+    report.mem=TRUE, verbose=TRUE)
 {
     if (!missing(tmpsave.rda)) {
         if (file.exists(tmpsave.rda))
@@ -52,41 +60,41 @@ run.pipeline <- function(
             # Don't put the perfcheck() calls in p(), because progressr
             # doesn't evaluate those arguments if progress bars re turned off.
             pc <- perfcheck(paste('make.scan',i),
-                gt <- make.scan(single.cell=sc.sample, bulk=bulk.sample, genome=genome, region=gr))
+                gt <- make.scan(single.cell=sc.sample, bulk=bulk.sample, genome=genome, region=gr), report.mem=report.mem)
             p(class='sticky', amount=0, pc)
 
             gt <- add.static.filter.params(gt)
 
             pc <- perfcheck(paste('read.integrated.table',i),
-                gt <- read.integrated.table(gt, path=int.tab, quiet=!verbose))
+                gt <- read.integrated.table(gt, path=int.tab, quiet=!verbose), report.mem=report.mem)
             p(class='sticky', amount=0, pc)
 
             pc <- perfcheck(paste('add.ab.fits',i),
-                gt <- add.ab.fits(gt, path=abfits))
+                gt <- add.ab.fits(gt, path=abfits), report.mem=report.mem)
             p(class='sticky', amount=0, pc)
 
             pc <- perfcheck(paste('compute.ab.estimates',i),
-                gt <- compute.ab.estimates(gt, quiet=!verbose))
+                gt <- compute.ab.estimates(gt, quiet=!verbose), report.mem=report.mem)
             p(class='sticky', amount=0, pc)
 
             pc <- perfcheck(paste('add.cigar.data',i),
-                gt <- add.cigar.data(gt, sccigars, bulkcigars, quiet=!verbose))
+                gt <- add.cigar.data(gt, sccigars, bulkcigars, quiet=!verbose), report.mem=report.mem)
             p(class='sticky', amount=0, pc)
 
             pc <- perfcheck(paste('compute.models',i),
-                gt <- compute.models(gt, verbose=verbose))
+                gt <- compute.models(gt, verbose=verbose), report.mem=report.mem)
             p(class='sticky', amount=0, pc)
 
             pc <- perfcheck(paste('compute.excess.cigar.scores',i),
-                gt <- compute.excess.cigar.scores(gt, trainingcigars, quiet=!verbose))
+                gt <- compute.excess.cigar.scores(gt, trainingcigars, quiet=!verbose), report.mem=report.mem)
             p(class='sticky', amount=0, pc)
 
             pc <- perfcheck(paste('compute.static.filters',i),
-                gt <- compute.static.filters(gt))
+                gt <- compute.static.filters(gt), report.mem=report.mem)
             p(class='sticky', amount=0, pc)
 
             pc <- perfcheck(paste('compute.fdr',i),
-                gt <- compute.fdr(gt, fdr.prior.data, mode='new'))
+                gt <- compute.fdr(gt, fdr.prior.data, mode='new'), report.mem=report.mem)
             p(class='sticky', amount=0, pc)
 
             p()
