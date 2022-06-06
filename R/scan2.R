@@ -698,7 +698,7 @@ compute.cigar.scores <- function(cigar.data) {
 compute.excess.cigar <- function(data, cigar.training, quiet=FALSE) {
     pc <- perfcheck("excess indel (I/D) ops",
             idopscores <- cigar.emp.score(training=cigar.training, test=data, which='id', quiet=quiet),
-        report.mem=FALSE),
+        report.mem=FALSE)
     if (!quiet) cat(pc, '\n')
     pc <- perfcheck("excess clipping (H/S) ops",
             hsopscores <- cigar.emp.score(training=cigar.training, test=data, which='hs', quiet=quiet),
