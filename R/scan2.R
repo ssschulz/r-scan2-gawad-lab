@@ -375,9 +375,11 @@ setMethod("concat", signature="SCAN2", function(...) {
     }
     ret@fdr.prior.data <- init@fdr.prior.data
 
-    ensure.same(args, 'fdr', 'mode')
-    ret@fdr <- data.frame(mode=init@fdr$mode,
-        sites=sum(sapply(args, function(a) ifelse(is.null(a@fdr), 0, a@fdr$sites))))
+    for (mt in c('snv', 'indel')) {
+        ensure.same(args, 'fdr', mt, 'mode')
+        ret@fdr[[mt]] <- data.frame(mode=init@fdr[[mt]]$mode,
+            sites=sum(sapply(args, function(a) ifelse(is.null(a@fdr[[mt]]), 0, a@fdr[[mt]]$sites))))
+    }
 
     # policy: ab.fits has to be the same for all chunks being concat()ed
     # if that's true, just use the first one
@@ -642,7 +644,8 @@ setMethod("compute.fdr", "SCAN2", function(object, path, mode='legacy') {
 
     check.slots(object, 'fdr.prior.data')
 
-    for (mt in c('snv', 'indel')) {
+    muttypes <- c('snv', 'indel')
+    object@fdr <- setNames(lapply(muttypes, function(mt) {
         # First use NT/NA tables to assign NT and NA to every site
         nt.na <- estimate.fdr.priors(object@gatk[muttype == mt], object@fdr.prior.data[[mt]])
         nt <- nt.na$nt
@@ -656,7 +659,6 @@ setMethod("compute.fdr", "SCAN2", function(object, path, mode='legacy') {
         # Legacy computation is too slow for applying to all sites.
         if (mode == 'legacy') {
             bulk.sample <- object@bulk
-            bulk.gt <- object@gatk[[bulk.sample]]
             cand <- object@gatk[
                 muttype == mt &
                 balt == 0 &
@@ -674,7 +676,6 @@ setMethod("compute.fdr", "SCAN2", function(object, path, mode='legacy') {
                     gp.mu=matched.gp.mu, gp.sd=gp.sd, nt=nt, na=na)]
             object@gatk[cand, on=.(chr,pos,refnt,altnt),
                 c('lysis.fdr', 'mda.fdr') := list(i.lysis.fdr, i.mda.fdr)]
-            object@fdr <- list(mode=mode, sites=nrow(cand))
         } else if (mode == 'new') {
             # XXX: TODO: calculate adjusted NA/NT values for hSNPs. Equivalent to
             # previous leave-one-out approaches, because AB estimation always leaves
@@ -687,9 +688,10 @@ setMethod("compute.fdr", "SCAN2", function(object, path, mode='legacy') {
                 list(lysis.pv*na / (lysis.pv*na + lysis.beta*nt),
                     mda.pv*na / (mda.pv*na + mda.beta*nt))]
             object@fdr <- list(mode=mode, sites=nrow(object@gatk[muttype == mt]))
-        } else
+        } else {
             stop(sprintf("unrecognized mode '%s', expecting either 'legacy' or 'new'", mode))
-    }
+        }
+    }), muttypes)
 
     object
 })
