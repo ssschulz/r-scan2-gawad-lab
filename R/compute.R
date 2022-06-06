@@ -341,7 +341,7 @@ compute.fdr.legacy <- function(altreads, dp, gp.mu, gp.sd, nt, na, verbose=TRUE)
         }, altreads, dp, gp.mu, gp.sd, nt, na, 1:length(dp))
     }, enable=verbose)
 
-    data.frame(lysis.fdr=fdrs[1,], mda.fdr=fdrs[2,])
+    list(lysis.fdr=fdrs[1,], mda.fdr=fdrs[2,])
 }
 
 

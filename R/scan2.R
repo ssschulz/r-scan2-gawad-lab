@@ -660,7 +660,6 @@ setMethod("compute.fdr", "SCAN2", function(object, path, mode=c('legacy', 'new')
         # Legacy computation (finding min FDR over all alphas) and legacy candidate set.
         # Legacy computation is too slow for applying to all sites.
         if (mode == 'legacy') {
-            bulk.sample <- object@bulk
             cand <- object@gatk[
                 muttype == mt &
                 balt == 0 &
@@ -673,11 +672,18 @@ setMethod("compute.fdr", "SCAN2", function(object, path, mode=c('legacy', 'new')
                 #(is.na(balt.lowmq) | balt.lowmq == 0)]
 
             matched.gp.mu <- match.ab(af=cand$af, gp.mu=cand$gp.mu)
-            cand[, c('lysis.fdr', 'mda.fdr') :=
-                compute.fdr.legacy(altreads=scalt, dp=dp,
-                    gp.mu=matched.gp.mu, gp.sd=gp.sd, nt=nt, na=na)]
-            object@gatk[cand, on=.(chr,pos,refnt,altnt),
-                c('lysis.fdr', 'mda.fdr') := list(i.lysis.fdr, i.mda.fdr)]
+            fdr <- compute.fdr.legacy(altreads=scalt, dp=dp,
+                        gp.mu=matched.gp.mu, gp.sd=gp.sd, nt=nt, na=na)
+
+            # Assign by reference to the same subset as for 'cand'
+            object@gatk[
+                muttype == mt &
+                balt == 0 &
+                bulk.gt == '0/0' &
+                dbsnp == '.' &
+                scalt >= object@static.filter.params$min.sc.alt &
+                dp >= object@static.filter.params$min.sc.dp,
+                c('lysis.fdr', 'mda.fdr') := list(fdr$lysis.fdr, fdr$mda.fdr)]
         } else if (mode == 'new') {
             # XXX: TODO: calculate adjusted NA/NT values for hSNPs. Equivalent to
             # previous leave-one-out approaches, because AB estimation always leaves
@@ -899,7 +905,7 @@ read.and.annotate.integrated.table <- function(path, sample.id, region=NULL, qui
     setindex(tr, muttype) # allow for fast selection of SNVs or indels
 
     sc.gt <- tr[[sample.id]]  # the column named after the sample is the GATK GT string for that sample
-    tr[, training.site := (phased.gt == '1|0' | phased.gt == '0|1') & sc.gt != './.' & bulk.gt != './.']
+    tr[, training.site := (!is.na(phased.gt) & (phased.gt == '1|0' | phased.gt == '0|1')) & sc.gt != './.' & bulk.gt != './.']
     tr[, c('phased.hap1', 'phased.hap2') :=
         list(ifelse(phased.gt == '0|1', scref, scalt),
              ifelse(phased.gt == '0|1', scalt, scref))]
