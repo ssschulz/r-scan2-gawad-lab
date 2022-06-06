@@ -72,6 +72,10 @@ test.output <- function(pipeline.output, custom, test.data=c('legacy_tiny', 'leg
             scalt >= object@static.filter.params$min.sc.alt &
             dp >= object@static.filter.params$min.sc.dp]
 
+    # only SNV calls are in these legacy sets (for now?)
+    if (test.data %in% c('legacy_tiny', 'legacy_chr22'))
+        p <- p[muttype == 'snv']
+
     check.length <- function(a, b, msg) {
         ret <- length(a) != length(b)
         if (ret)
