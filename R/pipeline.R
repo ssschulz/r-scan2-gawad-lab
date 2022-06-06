@@ -12,7 +12,7 @@ perfcheck <- function(msg, expr, print.header=FALSE, report.mem=TRUE) {
     t <- system.time(eval(expr))
     mem.used <- NA
     max.mem.used <- NA
-    if (!report.mem) {
+    if (report.mem) {
         g <- gc(reset=TRUE)
         mem.used <- sum(g[,which(colnames(g)=='used')+1])
         max.mem.used <- sum(g[,which(colnames(g)=='max used')+1])
