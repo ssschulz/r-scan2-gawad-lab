@@ -330,7 +330,7 @@ estimate.fdr.priors.old <- function(candidates, prior.data)
 
 # New implementation of above using a two tables rather than loops
 # XXX: detect hSNP status here and apply NEW FDR adjustment
-estimate.fdr.priors <- function(candidates, prior.data)
+estimate.fdr.priors <- function(candidates, prior.data, use.ghet.loo=FALSE)
 {
     # Assign each candidate mutation to a (VAF, DP) bin
     dp <- candidates$dp
@@ -338,8 +338,14 @@ estimate.fdr.priors <- function(candidates, prior.data)
     vafbin[dp == 0 | vafbin == 0] <- 1
     dp.idx <- pmin(dp, prior.data$max.dp+1) + 1
 
-    list(nt=prior.data$nt.tab[cbind(vafbin, dp.idx)],
-         na=prior.data$na.tab[cbind(vafbin, dp.idx)])
+    if (!use.ghet.loo) {
+        nt.tab <- prior.data$nt.tab
+        na.tab <- prior.data$na.tab
+    } else {
+        nt.tab <- prior.data$ghet.loo.nt.tab
+        na.tab <- prior.data$ghet.loo.na.tab
+    }
+    list(nt=nt.tab[cbind(vafbin, dp.idx)], na=na.tab[cbind(vafbin, dp.idx)])
 }
 
 
