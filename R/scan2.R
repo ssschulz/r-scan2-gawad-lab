@@ -801,11 +801,11 @@ setMethod("compute.excess.cigar.scores", "SCAN2", function(object, path=NULL, le
     object@excess.cigar.scores <- setNames(lapply(muttypes, function(mt) {
         null.sites.mt <- null.sites[muttype == mt]
         pc <- perfcheck("excess CIGAR ops",
-                object@gatk[muttype == mt,
-                    c('id.score', 'hs.score') := list(
-                        cigar.emp.score(training=null.sites.mt, test=.SD, which='id', quiet=quiet),
-                        cigar.emp.score(training=null.sites.mt, test=.SD, which='hs', quiet=quiet),
-                )], report.mem=FALSE)
+            object@gatk[muttype == mt, c('id.score', 'hs.score') := list(
+                    cigar.emp.score(training=null.sites.mt, test=.SD, which='id', quiet=quiet),
+                    cigar.emp.score(training=null.sites.mt, test=.SD, which='hs', quiet=quiet)
+            )],
+            report.mem=FALSE)
         if (!quiet) cat(pc, '\n')
         data.frame(sites=nrow(object@gatk[muttype==mt]),
             null.sites=nrow(null.sites.mt), legacy=legacy)
