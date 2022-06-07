@@ -189,30 +189,26 @@ setMethod("show", "SCAN2", function(object) {
     }
 
     cat("#   AB model training hSNPs:")
-    if (!('training.site' %in% object@gatk)) {
+    if (!('training.site' %in% colnames(object@gatk))) {
         cat(" (no data)\n")
     } else {
         # germline indels are not used for AB model training
+        per.hap <- object@gatk[training.site==TRUE, .N, by=phased.gt]
         tdata <- object@gatk[training.site==TRUE & muttype=='snv']
         cat('', nrow(tdata),
-            sprintf("phased sites (hap1=%d, hap2=%d)",
-                sum(tdata$phased.gt=='1|0', na.rm=TRUE),
-                sum(tdata$phased.gt=='0|1', na.rm=TRUE)),"\n")
-        zzz <- do.call(rbind, lapply(split(tdata, tdata$chr),
-            function(td) {
-                af <- td$phased.hap1/(td$phased.hap1+td$phased.hap2)
-                cbind(dist=diff(td$pos), af1=af[-nrow(td)], af2=td$af[-1])
-        }))
-        cors <- sapply(10^(2:5), function(threshold) {
-            z <- zzz[zzz[,1] <= threshold,]; cor(z[,2], z[,3], use='complete.obs') }) 
+            sprintf("phasing: %s=%d, %s=%d",
+                per.hap$phased.gt[1], per.hap$N[1],
+                per.hap$phased.gt[2], per.hap$N[2])
+        neighbor.approx <- approx.abmodel.covariance(object, bin.breaks=10^0:5)
+        cors <- round(neighbor.approx$y, 3)
         cat('#       VAF correlation between neighboring hSNPs:\n')
-        cat('#           <100 bp', round(cors[1], 3),
-            '<1000 bp', round(cors[2], 3),
-            '<10 kbp', round(cors[3], 3),
-            '<100 kbp', round(cors[4], 3), '\n')
+        cat('#           <10 bp', cors[1], '<100 bp', cors[2],
+            '<1000 bp', cors[3], '<10 kbp', cors[4], '<100 kbp', cors[5], '\n')
         if ('resampled.training.site' %in% colnames(object@gatk)) {
             cat('#        ', nrow(object@gatk[resampled.training.site == TRUE & muttype == 'snv']),
                 'resampled hSNPs\n')
+            cat('#        ', nrow(object@gatk[resampled.training.site == TRUE & muttype == 'indel']),
+                'resampled hIndels\n')
         }
     }
 
@@ -810,8 +806,13 @@ setGeneric("compute.excess.cigar.scores", function(object, path=NULL, legacy=TRU
     standardGeneric("compute.excess.cigar.scores"))
 setMethod("compute.excess.cigar.scores", "SCAN2", function(object, path=NULL, legacy=TRUE, quiet=FALSE) {
     null.sites <- cigar.get.null.sites(object, path, legacy, quiet)
-    compute.excess.cigar(data=object@gatk, cigar.training=null.sites, quiet=quiet)
-    object@excess.cigar.scores <- data.frame(training.sites=nrow(null.sites), legacy=legacy)
+    muttypes <- c('snv', 'indel')
+    object@excess.cigar.scores <- setNames(lapply(muttypes, function(mt) {
+        null.sites.mt <- null.sites[muttype == mt]
+        compute.excess.cigar(data=object@gatk[muttype == mt],
+            cigar.training=null.sites.mt, quiet=quiet)
+        data.frame(training.sites=nrow(null.sites.mt), legacy=legacy)
+    }), muttypes)
     object
 })
 
