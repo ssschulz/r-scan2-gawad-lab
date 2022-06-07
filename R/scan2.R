@@ -587,10 +587,12 @@ setMethod("compute.models", "SCAN2", function(object, verbose=TRUE) {
 })
 
 
-setGeneric("compute.fdr.prior.data", function(object, mode='legacy', quiet=FALSE)
+setGeneric("compute.fdr.prior.data", function(object, mode=c('legacy', 'new'), quiet=FALSE)
     standardGeneric("compute.fdr.prior.data"))
-setMethod("compute.fdr.prior.data", "SCAN2", function(object, mode='legacy', quiet=FALSE) {
+setMethod("compute.fdr.prior.data", "SCAN2", function(object, mode=c('legacy', 'new'), quiet=FALSE) {
     check.slots(object, c('gatk', 'static.filter.params'))
+
+    mode <- match.arg(mode)
 
     muttypes <- c('snv', 'indel')
 
@@ -600,8 +602,6 @@ setMethod("compute.fdr.prior.data", "SCAN2", function(object, mode='legacy', qui
         if (mode == 'legacy') {
             # in legacy mode, only candidate sites passing a small set of pre-genotyping
             # crtieria were used.
-            bulk.sample <- object@bulk
-            bulk.gt <- object@gatk[[bulk.sample]]
             min.sc.alt <- object@static.filter.params$min.sc.alt
             min.sc.dp <- object@static.filter.params$min.sc.dp
             min.bulk.dp <- object@static.filter.params$min.bulk.dp
