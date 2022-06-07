@@ -653,7 +653,14 @@ setMethod("compute.fdr", "SCAN2", function(object, path, mode=c('legacy', 'new')
     object@fdr <- setNames(lapply(muttypes, function(mt) {
         # First use NT/NA tables to assign NT and NA to every site
         object@gatk[muttype == mt, c('nt', 'na') :=
-            estimate.fdr.priors(.SD, object@fdr.prior.data[[mt]])]
+            estimate.fdr.priors(.SD, object@fdr.prior.data[[mt]], use.ghet.loo=FALSE)]
+
+        # Re-assign NT/NA values to germline het training sites using a
+        # leave-one-out appraoch.
+        # Technically this should only be applied to the same sites used
+        # as 'hets' in compute.fdr.prior.data.for.candidates(). 
+        object@gatk[muttype == mt & training.site == TRUE & scalt >= min.sc.alt, c('nt', 'na') :=
+            estimate.fdr.priors(.SD, object@fdr.prior.data[[mt]], use.ghet.loo=TRUE)]
 
         # lysis.fdr and mda.fdr represent the false discovery rate of a population of
         # candidate mutation sites with the same DP and VAF as the site in question.
