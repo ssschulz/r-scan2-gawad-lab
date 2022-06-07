@@ -164,8 +164,7 @@ estimate.somatic.burden <- function(fc, min.s=1, max.s=5000, n.subpops=10, displ
 
 # {germ,som}.df need only have columns named dp and af
 # estimate the population component of FDR
-# ignore.100 - ignore variants with VAF=100
-fcontrol <- function(germ.df, som.df, bins=20, rough.interval=0.99) {
+fcontrol <- function(germ.df, som.df, bins=20, rough.interval=0.99, eps=0.1) {
     germ.afs <- germ.df$af[!is.na(germ.df$af) & germ.df$af > 0]
     som.afs <- som.df$af[!is.na(som.df$af)]
     g <- bin.afs(germ.afs, bins=bins)  # counts, not probabilities
@@ -192,11 +191,11 @@ fcontrol <- function(germ.df, som.df, bins=20, rough.interval=0.99) {
         as.integer(approx.ns[1]), as.integer(approx.ns[2])))
     pops <- lapply(approx.ns, function(n) {
         #        nt <- pmax(n*(g/sum(g))*1*(s > 0), 0.1)
-        nt <- pmax(n*(g/sum(g)), 0.1)
+        nt <- pmax(n*(g/sum(g)), eps)
         # ensure na > 0, since FDR would be 0 for any alpha for na=0
         # XXX: the value 0.1 is totally arbitrary and might need to be
         # more carefully thought out.
-        na <- pmax(s - nt, 0.1)
+        na <- pmax(s - nt, eps)
         cbind(nt=nt, na=na)
     })
 
@@ -206,7 +205,7 @@ fcontrol <- function(germ.df, som.df, bins=20, rough.interval=0.99) {
 }
 
 
-compute.fdr.prior.data.for.candidates <- function(candidates, hsnps, bins=20, random.seed=0, quiet=FALSE)
+compute.fdr.prior.data.for.candidates <- function(candidates, hsnps, bins=20, random.seed=0, quiet=FALSE, eps=0.1)
 {
     # fcontrol -> estimate.somatic.burden relies on simulations to
     # estimate the artifact:mutation ratio.
@@ -226,14 +225,14 @@ compute.fdr.prior.data.for.candidates <- function(candidates, hsnps, bins=20, ra
         fcs <- lapply(0:max.dp, function(thisdp) {
             ret <- fcontrol(germ.df=hsnps[dp == thisdp],
                     som.df=candidates[dp == thisdp],
-                    bins=bins)
+                    bins=bins, eps=eps)
             p()
             ret
         })
         #}, future.seed=0)
         fc.max <- fcontrol(germ.df=hsnps[dp > max.dp],
                     som.df=candidates[dp > max.dp],
-                    bins=bins)
+                    bins=bins, eps=eps)
         p()
     })
     fcs <- c(fcs, list(fc.max))
@@ -255,6 +254,12 @@ compute.fdr.prior.data.for.candidates <- function(candidates, hsnps, bins=20, ra
         cat("        creating true (N_T) and artifact (N_A) count tables based on mutations expected to exist in candidate set..\n")
     }
 
+    b.vec <- sapply(fcs, function(fc) fc$est.somatic.burden[2])
+
+    g.tab <- sapply(fcs, function(fc) fc$g)
+
+    s.tab <- sapply(fcs, function(fc) fc$s)
+
     nt.tab <- sapply(fcs, function(fc) {
             # Either a column of 0.1
             if (is.null(fc$pops))
@@ -274,7 +279,12 @@ compute.fdr.prior.data.for.candidates <- function(candidates, hsnps, bins=20, ra
     })
 
     list(bins=bins, max.dp=max.dp, fcs=fcs, candidates.used=nrow(candidates),
-        hsnps.used=nrow(hsnps), burden=burden, nt.tab=nt.tab, na.tab=na.tab)
+        hsnps.used=nrow(hsnps), burden=burden,
+        # eps, b.vec, g.tab and s.tab are sufficient to reproduce the final
+        # N_T/N_A tabs nt.tab and na.tab. This can be useful for creating
+        # partially adjusted N_T/N_A scores for hSNPs.
+        eps=eps, b.vec=b.vec, g.tab=g.tab, s.tab=s.tab,
+        nt.tab=nt.tab, na.tab=na.tab)
 }
 
 
