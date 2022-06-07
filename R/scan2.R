@@ -735,21 +735,6 @@ compute.cigar.scores <- function(cigar.data) {
 }
 
 
-# modifies 'data' by reference
-compute.excess.cigar <- function(data, cigar.training, quiet=FALSE) {
-    pc <- perfcheck("excess indel (I/D) ops",
-            idopscores <- cigar.emp.score(training=cigar.training, test=data, which='id', quiet=quiet),
-        report.mem=FALSE)
-    if (!quiet) cat(pc, '\n')
-    pc <- perfcheck("excess clipping (H/S) ops",
-            hsopscores <- cigar.emp.score(training=cigar.training, test=data, which='hs', quiet=quiet),
-        report.mem=FALSE)
-    if (!quiet) cat(pc, '\n')
-
-    data[, c('id.score', 'hs.score') := list(idopscores, hsopscores)]
-}
-
-
 read.cigar.data <- function(path, region, quiet=FALSE) {
     if (!quiet) cat('Importing CIGAR stats from', path, '\n')
     col.classes <- c('character', rep('integer', 6))
@@ -815,8 +800,13 @@ setMethod("compute.excess.cigar.scores", "SCAN2", function(object, path=NULL, le
     muttypes <- c('snv', 'indel')
     object@excess.cigar.scores <- setNames(lapply(muttypes, function(mt) {
         null.sites.mt <- null.sites[muttype == mt]
-        compute.excess.cigar(data=object@gatk[muttype == mt],
-            cigar.training=null.sites.mt, quiet=quiet)
+        pc <- perfcheck("excess CIGAR ops",
+                object@gatk[muttype == mt,
+                    c('id.score', 'hs.score') := list(
+                        cigar.emp.score(training=null.sites.mt, test=.SD, which='id', quiet=quiet),
+                        cigar.emp.score(training=null.sites.mt, test=.SD, which='hs', quiet=quiet),
+                )], report.mem=FALSE)
+        if (!quiet) cat(pc, '\n')
         data.frame(sites=nrow(object@gatk[muttype==mt]),
             null.sites=nrow(null.sites.mt), legacy=legacy)
     }), muttypes)
