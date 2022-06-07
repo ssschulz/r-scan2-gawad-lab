@@ -254,29 +254,30 @@ compute.fdr.prior.data.for.candidates <- function(candidates, hsnps, bins=20, ra
         cat("        creating true (N_T) and artifact (N_A) count tables based on mutations expected to exist in candidate set..\n")
     }
 
+    # all necessary data for making NT/NA tables
     b.vec <- sapply(fcs, function(fc) fc$est.somatic.burden[2])
-
     g.tab <- sapply(fcs, function(fc) fc$g)
-
     s.tab <- sapply(fcs, function(fc) fc$s)
 
-    nt.tab <- sapply(fcs, function(fc) {
-            # Either a column of 0.1
-            if (is.null(fc$pops))
-                rep(0.1, bins)
-            # Or a column of the actual max number of true mutations at this
-            # (depth,VAF).
-            else
-                fc$pops$max[1:bins,1]
-    })
+    nt.tab <- make.nt.tab(list(eps=eps, b.vec=b.vec, g.tab=g.tab, s.tab=s.tab))
+    na.tab <- make.na.tab(list(eps=eps, b.vec=b.vec, g.tab=g.tab, s.tab=s.tab))
 
-    # All the same as above, except use pops$max[, COLUMN 2]
-    na.tab <- sapply(fcs, function(fc) {
-            if (is.null(fc$pops))
-                rep(0.1, bins)
-            else
-                fc$pops$max[1:bins,2]
-    })
+    # these tables represent "partially adjusted" scores for leave-one-out (LOO)
+    # calling of germline het SNPs or indels. the basic idea is to mimic a single
+    # germline heterozygous SNP being left out of the germline set and added to
+    # the somatic set. this should (a) increase the total estimated
+    # somatic burden by 1 (i.e., b.vec+1) and (b) increase the somatic candidate
+    # set by 1 as well (s.tab+1).
+    #
+    # (a) is the part that cannot be feasibly recalculated for every hSNP, since
+    #     this is done by simulations
+    # (b) may be slightly confusing because s.tab+1 means adding a new somatic
+    #     site to every VAF bin at every depth. this would indeed be incorrect if
+    #     taken as a whole, but in the case of any particular germline het
+    #     site, only the (VAF, DP) cell in s.tab that matches the germline het
+    #     is used. so adding 1 to the entire table is just a convenient shortcut.
+    ghet.loo.nt.tab <- make.nt.tab(list(eps=eps, b.vec=b.vec+1, g.tab=g.tab, s.tab=s.tab+1))
+    ghet.loo.na.tab <- make.na.tab(list(eps=eps, b.vec=b.vec+1, g.tab=g.tab, s.tab=s.tab+1))
 
     list(bins=bins, max.dp=max.dp, fcs=fcs, candidates.used=nrow(candidates),
         hsnps.used=nrow(hsnps), burden=burden,
@@ -284,7 +285,23 @@ compute.fdr.prior.data.for.candidates <- function(candidates, hsnps, bins=20, ra
         # N_T/N_A tabs nt.tab and na.tab. This can be useful for creating
         # partially adjusted N_T/N_A scores for hSNPs.
         eps=eps, b.vec=b.vec, g.tab=g.tab, s.tab=s.tab,
-        nt.tab=nt.tab, na.tab=na.tab)
+        nt.tab=nt.tab, na.tab=na.tab,
+        ghet.loo.nt.tab=ghet.loo.nt.tab, ghet.loo.na.tab=ghet.loo.na.tab)
+}
+
+make.nt.tab <- function(prior.data) {
+    sapply(1:length(prior.data$b.vec), function(i) {
+        S <- sum(prior.data$g.tab[,i])
+        # this has no effect other than avoiding NaN when no germline sites
+        # are present. it causes the column in the table to be all 'eps' values.
+        if (S == 0)
+            S <- 1
+        pmax(prior.data$b.vec[i] * (prior.data$g.tab[,i]/S), prior.data$eps)
+    })
+}
+
+make.na.tab <- function(prior.data) {
+    pmax(prior.data$s.tab - make.nt.tab(prior.data), prior.data$eps)
 }
 
 
