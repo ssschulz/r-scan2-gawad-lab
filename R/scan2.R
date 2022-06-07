@@ -199,7 +199,7 @@ setMethod("show", "SCAN2", function(object) {
             sprintf("phasing: %s=%d, %s=%d",
                 per.hap$phased.gt[1], per.hap$N[1],
                 per.hap$phased.gt[2], per.hap$N[2]))
-        neighbor.approx <- approx.abmodel.covariance(object, bin.breaks=10^0:5)
+        neighbor.approx <- approx.abmodel.covariance(object, bin.breaks=10^(0:5))
         cors <- round(neighbor.approx$y, 3)
         cat('#       VAF correlation between neighboring hSNPs:\n')
         cat('#           <10 bp', cors[1], '<100 bp', cors[2],
