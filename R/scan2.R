@@ -659,7 +659,7 @@ setMethod("compute.fdr", "SCAN2", function(object, path, mode=c('legacy', 'new')
         # leave-one-out appraoch.
         # Technically this should only be applied to the same sites used
         # as 'hets' in compute.fdr.prior.data.for.candidates(). 
-        object@gatk[muttype == mt & training.site == TRUE & scalt >= min.sc.alt, c('nt', 'na') :=
+        object@gatk[muttype == mt & training.site == TRUE & scalt >= object@static.filter.params$min.sc.alt, c('nt', 'na') :=
             estimate.fdr.priors(.SD, object@fdr.prior.data[[mt]], use.ghet.loo=TRUE)]
 
         # lysis.fdr and mda.fdr represent the false discovery rate of a population of
