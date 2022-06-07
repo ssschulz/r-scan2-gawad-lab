@@ -186,7 +186,7 @@ setGeneric("plot.region", function(object, site=NA, chrom=NA, position=NA, upstr
 setMethod("plot.region", "SCAN2", function(object, site=NA, chrom=NA, position=NA,
     upstream=5e4, downstream=5e4, gp.extend=1e5, n.gp.points=100, recompute=FALSE)
 {
-    check.slots(object, c('gatk', 'training.data', 'ab.estimates'))
+    check.slots(object, c('gatk', 'ab.estimates'))
     if (recompute)
         check.slots(object, 'ab.fits')
 
