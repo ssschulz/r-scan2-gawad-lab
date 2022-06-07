@@ -1,3 +1,20 @@
+# get an approximate idea of correlation between training hSNPs
+# by only looking at adjacent hSNPs. d is the distance between
+# them and (phaf, phaf2) are the allele frequencies of hSNP i
+# and its upstream neighbor hSNP i+1.
+approx.abmodel.covariance <- function(object, bin.breaks=10^(0:5)) {
+    z <- object@gatk[training.site==TRUE & muttype=='snv',
+        .(d=c(diff(pos),0), phaf=phased.hap1/(phased.hap1+phased.hap2))][, phafd:=c(diff(phaf),0)][, phaf2 := phaf+phafd]
+
+    # bin the adjacent hSNPs by the distance between them
+    z[d < 1e5, cut := cut(d, breaks=bin.breaks, ordered_result=T)]
+    
+
+    data.frame(x=bin.breaks[-1],
+        y=z[!is.na(cut), .(cor=cor(phaf,phaf2,use='complete.obs')), by=cut][order(cut)]$cor)
+}
+
+
 # probability distribution of seeing y variant reads at a site with
 # depth d with the estimate (gp.mu, gp.sd) of the local AB. model is
 #     Y|p ~ Bin(d, 1/(1+exp(-b))),    b ~ N(gp.mu, gp.sd)
