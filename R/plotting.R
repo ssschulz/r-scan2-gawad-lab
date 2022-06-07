@@ -297,3 +297,32 @@ plot.gp.confidence <- function(pos, gp.mu, gp.sd, df, sd.mult=2,
         col=tube.col, border=line.col, lty=tube.lty)
     lines(pos, gp.mu, lwd=2, col=line.col, lty=line.lty)
 }
+
+
+plot.abmodel.covariance <- function(object, bin.breaks=c(1, 10^seq(1,5,length.out=50)), ...) {
+    # get an approximate idea of correlation between training hSNPs
+    # by only looking at adjacent hSNPs. d is the distance between
+    # them and (phaf, phaf2) are the allele frequencies of hSNP i
+    # and its upstream neighbor hSNP i+1.
+    z <- object@gatk[training.site==TRUE & muttype=='snv',
+        .(d=c(diff(pos),0), phaf=phased.hap1/(phased.hap1+phased.hap2))][, phafd:=c(diff(phaf),0)][, phaf2 := phaf+phafd]
+
+    # bin the adjacent hSNPs by the distance between them
+    z[d < 1e5, cut := cut(d, breaks=bin.breaks, ordered_result=T)]
+    
+    plot.mle.fit <- function(object, ...) {
+        ps <- colMeans(object@ab.fits)
+        a=ps['a']; b=ps['b']; c=ps['c']; d=ps['d']
+        curve(K.func(x, y=0, a=a, b=b, c=c, d=d)/(exp(a)+exp(c)), ...)
+    }
+
+    # [-1] - use right-hand side of interval for plotting
+    plot(bin.breaks[-1],
+        z[!is.na(cut), .(cor=cor(phaf,phaf2,use='complete.obs')), by=cut][order(cut)]$cor,
+        log='x', type='b', pch=20, ylim=0:1,
+        xlab='Distance between hSNPs (log10)', ylab='Correlation between hSNP VAFs', ...)
+    plot.mle.fit(object, add=TRUE, col=2, lwd=2)
+    legend('topright', pch=c(20,NA), lwd=1:2, col=1:2,
+        legend=c('Adjacent hSNP approx.', 'MLE fit (avg. over chroms)'))
+    abline(v=c(150,300), lty='dotted')
+}
