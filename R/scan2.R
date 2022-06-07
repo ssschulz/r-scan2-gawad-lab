@@ -21,7 +21,7 @@ setClass("SCAN2", slots=c(
     ab.estimates='null.or.df',
     mut.models='null.or.df',
     cigar.data='null.or.df',
-    excess.cigar.scores='null.or.df',
+    excess.cigar.scores='null.or.list',
     fdr.prior.data='null.or.list',
     fdr='null.or.list'))
 
