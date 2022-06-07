@@ -196,7 +196,7 @@ setMethod("show", "SCAN2", function(object) {
         per.hap <- object@gatk[training.site==TRUE, .N, by=phased.gt]
         tdata <- object@gatk[training.site==TRUE & muttype=='snv']
         cat('', nrow(tdata),
-            sprintf("phasing: %s=%d, %s=%d",
+            sprintf("phasing: %s=%d, %s=%d\n",
                 per.hap$phased.gt[1], per.hap$N[1],
                 per.hap$phased.gt[2], per.hap$N[2]))
         neighbor.approx <- approx.abmodel.covariance(object, bin.breaks=10^(0:5))
