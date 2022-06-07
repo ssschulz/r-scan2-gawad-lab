@@ -355,8 +355,14 @@ setMethod("concat", signature="SCAN2", function(...) {
     ret@cigar.data <- data.frame(sc.sites=sum(sapply(args, function(a) ifelse(is.null(a@cigar.data), 0, a@cigar.data$sc.sites))),
                                bulk.sites=sum(sapply(args, function(a) ifelse(is.null(a@cigar.data), 0, a@cigar.data$bulk.sites)))
     )
-    ensure.same(args, 'excess.cigar.scores', 'legacy')
-    ensure.same(args, 'excess.cigar.scores', 'training.sites')
+
+    for (mt in c('snv', 'indel')) {
+        ensure.same(args, 'excess.cigar.scores', mt, 'legacy')
+        ensure.same(args, 'excess.cigar.scores', mt, 'null.sites')
+    }
+    ret@excess.cigar.scores <- init@excess.cigar.scores
+    ret@excess.cigar.scores$snv$sites <- sum(sapply(args, function(a) ifelse(is.null(a@excess.cigar.scores$snv), 0, a@excess.cigar.scores$snv$sites)))
+    ret@excess.cigar.scores$indel$sites <- sum(sapply(args, function(a) ifelse(is.null(a@excess.cigar.scores$indel), 0, a@excess.cigar.scores$indel$sites)))
 
     # fdr.prior.data: 'fcs' should also be identical, but the list is a little
     # inconvenient to check. the below should detect misuse 99% of the time.
@@ -811,7 +817,8 @@ setMethod("compute.excess.cigar.scores", "SCAN2", function(object, path=NULL, le
         null.sites.mt <- null.sites[muttype == mt]
         compute.excess.cigar(data=object@gatk[muttype == mt],
             cigar.training=null.sites.mt, quiet=quiet)
-        data.frame(training.sites=nrow(null.sites.mt), legacy=legacy)
+        data.frame(sites=nrow(object@gatk[muttype==mt]),
+            null.sites=nrow(null.sites.mt), legacy=legacy)
     }), muttypes)
     object
 })
