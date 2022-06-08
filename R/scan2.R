@@ -950,7 +950,7 @@ read.training.hsnps <- function(path, sample.id, region=NULL, quiet=FALSE) {
 # mode=legacy is not computationally feasible.
 setGeneric("call.mutations", function(object, target.fdr=0.01, mode=c('new', 'legacy'), quiet=FALSE)
         standardGeneric("call.mutations"))
-setMethod("call.mutations", "SCAN2", function(object) {
+setMethod("call.mutations", "SCAN2", function(object, target.fdr=0.01, mode=c('new', 'legacy'), quiet=FALSE) {
     check.slots(object, c('gatk', 'static.filter.params', 'mut.models', 'excess.cigar.scores'))
 
     check.chunked(object, 'call.mutations must be called on a SCAN2 object containing all sites, not a chunked parallelized object')
