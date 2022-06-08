@@ -40,7 +40,7 @@ testpipe <- function(test.data=c('legacy_tiny', 'legacy_chr22', 'legacy_custom')
     write.integrated.table(inttab=x$gatk, out.tab=int.tab.path, out.tab.gz=int.tab.gz.path)
 
     run.pipeline(sc.sample=sc.sample, bulk.sample=bulk.sample,
-        int.tab=int.tab.gz, abfits=abfits,
+        int.tab=int.tab.gz.path, abfits=abfits,
         sccigars=sccigars, bulkcigars=bulkcigars,
         trainingcigars=trainingcigars,
         fdr.prior.data=fdrpriordata,
