@@ -223,7 +223,7 @@ setMethod("plot.region", "SCAN2", function(object, site=NA, chrom=NA, position=N
         fit.chr <- object@ab.fits[chrom,,drop=FALSE]
         newdt <- object@gatk[training.site == TRUE & chr == chrom]
         # infer.gp requires hsnps to have hap1 and hap2 columns
-        newdt[, c('hap1', 'hap2') := list(training.hap1, training.hap2)]
+        newdt[, c('hap1', 'hap2') := list(phased.hap1, phased.hap2)]
         gp <- infer.gp1(ssnvs=data.frame(chr=chrom, pos=est.at),
             fit=fit.chr, hsnps=newdt, flank=gp.extend, max.hsnps=150)
         gp <- data.frame(chr=chrom, pos=est.at, ab=1/(1+exp(-gp[,'gp.mu'])), gp)
