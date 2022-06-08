@@ -14,7 +14,9 @@ testpipe <- function(test.data=c('legacy_tiny', 'legacy_chr22', 'legacy_custom')
         fpath <- function(...) paste0(custom$path, '/', ...)
     }
 
-    int.tab <- fpath('integrated_table.tab.gz')
+    mmq60 <- fpath('mmq60.tab.gz')
+    mmq1 <- fpath('mmq1.tab.gz')
+    phased.vcf <- fpath('phased_all.vcf.gz')
     abfits <- fpath('fits.rda')
     sccigars <- fpath('sc_somatic_and_hsnp_spikein_cigars.tab.gz')
     bulkcigars <- fpath('bulk_somatic_and_hsnp_spikein_cigars.tab.gz')
@@ -31,8 +33,14 @@ testpipe <- function(test.data=c('legacy_tiny', 'legacy_chr22', 'legacy_custom')
         grs <- custom$grs
     }
 
+    int.tab.path <- tempfile()
+    int.tab.gz.path <- paste0('.gz', int.tab.path)
+    x <- make.integrated.table(mmq60.tab=mmq60, mmq1.tab=mmq1, phased.vcf=phased.vcf,
+        bulk.sample=bulk.sample, genome='hs37d5')
+    write.integrated.table(inttab=x$gatk, out.tab=int.tab.path, out.tab.gz=int.tab.gz.path)
+
     run.pipeline(sc.sample=sc.sample, bulk.sample=bulk.sample,
-        int.tab=int.tab, abfits=abfits,
+        int.tab=int.tab.gz, abfits=abfits,
         sccigars=sccigars, bulkcigars=bulkcigars,
         trainingcigars=trainingcigars,
         fdr.prior.data=fdrpriordata,
