@@ -289,7 +289,7 @@ setMethod("show", "SCAN2", function(object) {
     if (is.null(object@call.mutations)) {
         cat("(not called)\n")
     } else {
-        cat('', object@call.mutations$snv.pass, 'sSNVs,'
+        cat('', object@call.mutations$snv.pass, 'sSNVs,',
             object@call.mutations$indel.pass, 'sIndels\n')
         cat(sprintf("#       mode=%s, target.fdr=%0.3f\n",
             object@call.mutations$mode,
