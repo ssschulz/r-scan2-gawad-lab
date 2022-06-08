@@ -216,6 +216,8 @@ compute.fdr.prior.data.for.candidates <- function(candidates, hsnps, bins=20, ra
         cat(sprintf("estimating bounds on number of true mutations in candidate set (seed=%d)..\n",
             random.seed))
     }
+    orng <- RNGkind()
+    RNGkind('Mersenne-Twister')
     set.seed(random.seed)
 
     # split candidates by depth; collapse all depths beyond the 80th
@@ -244,6 +246,9 @@ compute.fdr.prior.data.for.candidates <- function(candidates, hsnps, bins=20, ra
         p()
     })
     fcs <- c(fcs, list(fc.max))
+
+    # randomness done (used only in fcontrol())
+    RNGkind(orng[1])
 
     if (!quiet) {
         cat(sprintf("        profiled hSNP and candidate VAFs at depths %d .. %d\n",
