@@ -207,6 +207,9 @@ fcontrol <- function(germ.df, som.df, bins=20, rough.interval=0.99, eps=0.1) {
 
 compute.fdr.prior.data.for.candidates <- function(candidates, hsnps, bins=20, random.seed=0, quiet=FALSE, eps=0.1)
 {
+    if (nrow(hsnps) == 0 & nrow(candidates) > 0)
+        stop(paste('0 hsnps provided but', nrow(candidates), 'candidate sites provided'))
+
     # fcontrol -> estimate.somatic.burden relies on simulations to
     # estimate the artifact:mutation ratio.
     if (!quiet) {
@@ -217,7 +220,12 @@ compute.fdr.prior.data.for.candidates <- function(candidates, hsnps, bins=20, ra
 
     # split candidates by depth; collapse all depths beyond the 80th
     # percentile into one bin
-    max.dp <- as.integer(quantile(hsnps$dp, prob=0.8))
+    # if there are no hets, max.dp=0 will just generate some dummy tables.
+    if (nrow(hsnps) > 0)
+        max.dp <- as.integer(quantile(hsnps$dp, prob=0.8))
+    else
+        max.dp <- 0
+
     progressr::with_progress({
         p <- progressr::progressor(along=0:(max.dp+1))
         # These simulations really aren't slow enough to necessitate parallelizing
