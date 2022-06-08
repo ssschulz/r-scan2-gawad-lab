@@ -240,7 +240,7 @@ setMethod("plot.region", "SCAN2", function(object, site=NA, chrom=NA, position=N
     # information, so plotting VAF is not informative.
     plot.gp.confidence(df=gp, add=FALSE)
     points(d[training.site==TRUE]$pos,
-        d[training.site==TRUE, training.hap1/(training.hap1+training.hap2)],
+        d[training.site==TRUE, phased.hap1/(phased.hap1+phased.hap2)],
         pch=20, cex=1, col=1, ylim=c(-0.2,1))
 
     # 5*max : restrict the depth to the bottom 20% of plot
