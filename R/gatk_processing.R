@@ -290,7 +290,6 @@ gatk.resample.phased.sites <- function(gatk, M=20, seed=0, n.meta.cols=17) {
 
 # Write, bgzip and tabix index the integrated table
 # 'out.tab' is TEMPORARY. The final file is out.tab.gz.
-# There is 
 write.integrated.table <- function(inttab, out.tab,
     out.tab.gz=paste0('out.tab', '.gz'), overwrite=FALSE)
 {
@@ -305,6 +304,6 @@ write.integrated.table <- function(inttab, out.tab,
     Rsamtools::bgzip(out.tab, out.tab.gz)
     # if we get here, overwrite is either TRUE or the file didn't exist,
     # so there's no danger of deleting a file without warning.
-    unlink(out.tab)
+    #unlink(out.tab)
     Rsamtools::indexTabix(file=out.tab.gz, format='vcf', comment='#')
 }
