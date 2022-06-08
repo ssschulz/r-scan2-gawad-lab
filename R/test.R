@@ -34,7 +34,7 @@ testpipe <- function(test.data=c('legacy_tiny', 'legacy_chr22', 'legacy_custom')
     }
 
     int.tab.path <- tempfile()
-    int.tab.gz.path <- paste0('.gz', int.tab.path)
+    int.tab.gz.path <- paste0(int.tab.path, '.gz')
     x <- make.integrated.table(mmq60.tab=mmq60, mmq1.tab=mmq1, phased.vcf=phased.vcf,
         bulk.sample=bulk.sample, genome='hs37d5')
     write.integrated.table(inttab=x$gatk, out.tab=int.tab.path, out.tab.gz=int.tab.gz.path)
