@@ -390,11 +390,14 @@ setMethod("concat", signature="SCAN2", function(...) {
     }
     ret@fdr.prior.data <- init@fdr.prior.data
 
-    ret@fdr <- list()
-    for (mt in c('snv', 'indel')) {
-        ensure.same(args, 'fdr', mt, 'mode')
-        ret@fdr[[mt]] <- data.frame(mode=init@fdr[[mt]]$mode,
-            sites=sum(sapply(args, function(a) ifelse(is.null(a@fdr[[mt]]), 0, a@fdr[[mt]]$sites))))
+    ret@fdr <- NULL
+    if (any(sapply(args, function(a) !is.null(a@fdr)))) {
+        ret@fdr <- list()
+        for (mt in c('snv', 'indel')) {
+            ensure.same(args, 'fdr', mt, 'mode')
+            ret@fdr[[mt]] <- data.frame(mode=init@fdr[[mt]]$mode,
+                sites=sum(sapply(args, function(a) ifelse(is.null(a@fdr[[mt]]), 0, a@fdr[[mt]]$sites))))
+        }
     }
 
     # policy: ab.fits has to be the same for all chunks being concat()ed
