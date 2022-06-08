@@ -30,7 +30,6 @@ run.pipeline <- function(
     int.tab,
     abfits,
     sccigars, bulkcigars, trainingcigars,
-    fdr.prior.data,
     genome,
     tmpsave.rda,
     grs=tileGenome(seqlengths=seqinfo(genome.string.to.bsgenome.object(genome))[as.character(1:22)], tilewidth=10e6, cut.last.tile.in.chrom=TRUE),
@@ -101,10 +100,11 @@ run.pipeline <- function(
                 gt <- compute.static.filters(gt), report.mem=report.mem)
             p(class='sticky', amount=0, pc)
 
-            pc <- perfcheck(paste('compute.fdr',i),
-                gt <- compute.fdr(gt, fdr.prior.data, mode=ifelse(legacy, 'legacy', 'new'), quiet=!verbose),
-                report.mem=report.mem)
-            p(class='sticky', amount=0, pc)
+            # compute.fdr is now part of call.mutations()
+            #pc <- perfcheck(paste('compute.fdr',i),
+                #gt <- compute.fdr(gt, fdr.prior.data, mode=ifelse(legacy, 'legacy', 'new'), quiet=!verbose),
+                #report.mem=report.mem)
+            #p(class='sticky', amount=0, pc)
 
             p()
             gt
@@ -118,9 +118,10 @@ run.pipeline <- function(
     }
 
     x <- do.call(concat, xs)
-    cat("Merged SCAN2 object after chunked pipeline:\n")
-    print(x)
+    x <- call.mutations(x, target.fdr=0.01, mode='new', quiet=!verbose)
 
+    cat("Merged SCAN2 object with calls after chunked pipeline:\n")
+    print(x)
     x
 }
 

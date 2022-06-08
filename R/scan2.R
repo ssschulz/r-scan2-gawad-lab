@@ -23,7 +23,8 @@ setClass("SCAN2", slots=c(
     cigar.data='null.or.df',
     excess.cigar.scores='null.or.list',
     fdr.prior.data='null.or.list',
-    fdr='null.or.list'))
+    fdr='null.or.list',
+    call.mutations='null.or.list'))
 
 
 # "flip" the GP mu around 0 to best match the AF of each candidate mutation. 
@@ -73,7 +74,8 @@ make.scan <- function(single.cell, bulk, genome=c('hs37d5', 'hg38', 'mm10'), reg
         excess.cigar.scores=NULL,
         static.filter.params=NULL,
         fdr.prior.data=NULL,
-        fdr=NULL)
+        fdr=NULL,
+        call.mutations=NULL)
 }
 
 
@@ -281,6 +283,17 @@ setMethod("show", "SCAN2", function(object) {
                 object@fdr.prior.data[[mt]]$hsnps.used,
                 object@fdr.prior.data[[mt]]$burden[2]))
         }
+    }
+
+    cat("#   Somatic mutation calls: ")
+    if (is.null(object@call.mutations)) {
+        cat("(not called)\n")
+    } else {
+        cat('', object@call.mutations$snv.pass, 'sSNVs,'
+            object@call.mutations$indel.pass, 'sIndels\n')
+        cat(sprintf("#       mode=%s, target.fdr=%0.3f\n",
+            object@call.mutations$mode,
+            object@call.mutations$target.fdr))
     }
 })
 
@@ -915,3 +928,39 @@ read.and.annotate.integrated.table <- function(path, sample.id, region=NULL, qui
 read.training.hsnps <- function(path, sample.id, region=NULL, quiet=FALSE) {
     read.and.annotate.integrated.table(path=path, sample.id=sample.id, region=region, quiet=quiet)[training.site == TRUE & muttype == 'snv']
 }
+
+
+# After all site-specific information is computed, somatic mutations can
+# be called.
+#
+# Somatic mutation calling involves determining FDR prior distributions
+# (which are defined by the set of candidate sites), calculating FDR
+# heuristics and finally passing sites based on a set of filters.
+#
+# The most important thing to note about calling mutations is
+# that calls depend on the set of candidate sites defined by static
+# filter parameters. That is, if you change something like the minimum alt
+# reads per single cell, you will in turn change the set of possible
+# candidate sites and need to rerun this function.
+#
+# N.B. because call.mutations must not be called on chunked SCAN2 objects,
+# mode=legacy is not computationally feasible.
+setGeneric("call.mutations", function(object, target.fdr=0.01, mode=c('new', 'legacy'), quiet=FALSE)
+        standardGeneric("call.mutations"))
+setMethod("call.mutations", "SCAN2", function(object) {
+    check.slots(object, c('gatk', 'static.filter.params', 'mut.models', 'excess.cigar.scores'))
+
+    check.chunked(object, 'call.mutations must be called on a SCAN2 object containing all sites, not a chunked parallelized object')
+
+    mode <- match.arg(mode)
+
+    object <- compute.fdr.prior.data(object, mode='legacy', quiet=quiet) # there is no non-legacy mode
+    object <- compute.fdr(object, mode=mode, quiet=quiet)
+    object@gatk[, pass := static.filter == TRUE & lysis.fdr <= target.fdr & mda.fdr <= target.fdr]
+    object@call.mutations <- list(
+        snv.pass=nrow(object@gatk[muttype == 'snv' & pass == TRUE]),
+        indel.pass=nrow(object@gatk[muttype == 'indel' & pass == TRUE]),
+        mode=mode,
+        target.fdr=target.fdr)
+    object
+})
