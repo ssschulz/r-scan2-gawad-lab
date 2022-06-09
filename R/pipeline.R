@@ -68,7 +68,7 @@ run.pipeline <- function(
             } else {
                 # the default values in this function ARE NOT GUARANTEED
                 # to match the defaults in the scan2 script.
-                warn('config.yaml not specified, using R function default static filter parameters, which may not match the scan2 tool')
+                warning('config.yaml not specified, using R function default static filter parameters, which may not match the scan2 tool')
                 gt <- add.static.filter.params(gt, muttype='snv')
                 gt <- add.static.filter.params(gt, muttype='indel')
             }
