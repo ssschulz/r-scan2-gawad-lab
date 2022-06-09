@@ -986,16 +986,20 @@ setMethod("call.mutations", "SCAN2", function(object, target.fdr=0.01, mode=c('n
 
     object <- compute.fdr.prior.data(object, mode='legacy', quiet=quiet) # there is no non-legacy mode
     object <- compute.fdr(object, mode=mode, quiet=quiet)
+
+    # Pass somatic mutations
     object@gatk[, pass := static.filter == TRUE & lysis.fdr <= target.fdr & mda.fdr <= target.fdr]
+
+    # Pass germline heterozygous sites using L-O-O for sensitivity estimation
     object@gatk[resampled.training.site == TRUE,
         training.pass := 
             # same tests as static.filter EXCEPT dbsnp.test, lowmq.test, max.bulk.alt.test,
             # which mostly will fail at training het germline sites.
             (cigar.id.test & cigar.hs.test & dp.test & abc.test & min.sc.alt.test) &
             lysis.fdr <= target.fdr & mda.fdr <= target.fdr]
+
     object@call.mutations <- c(
-        as.list(unlist(object@gatk[muttype == 'snv', .(snv.pass=sum(pass), snv.training.pass=sum(training.pass, na.rm=TRUE), snv.training.sens=mean(training.pass, na.rm=TRUE))])),
-        as.list(unlist(object@gatk[muttype == 'indel', .(indel.pass=sum(pass), indel.training.pass=sum(training.pass, na.rm=TRUE), indel.training.sens=mean(training.pass, na.rm=TRUE))])),
+        as.list(unlist(object@gatk[muttype == 'snv', .(snv.pass=as.integer(sum(pass)), snv.training.pass=as.integer(sum(training.pass, na.rm=TRUE)), snv.training.sens=mean(training.pass, na.rm=TRUE))])),
+        as.list(unlist(object@gatk[muttype == 'indel', .(indel.pass=as.integer(sum(pass)), indel.training.pass=as.integer(sum(training.pass, na.rm=TRUE)), indel.training.sens=mean(training.pass, na.rm=TRUE))])),
         list(mode=mode, target.fdr=target.fdr))
-    object
-})
+    object })
