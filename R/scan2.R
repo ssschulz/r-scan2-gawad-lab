@@ -282,7 +282,7 @@ setMethod("show", "SCAN2", function(object) {
     } else {
         cat('\n')
         for (mt in names(object@fdr.prior.data)) {
-            cat(sprintf("#       %6s: cands. %d, hets %d, max burd. %d\n",
+            cat(sprintf("#       %6s: %8d candidates %8d germline hets %8d max burden\n",
                 mt, object@fdr.prior.data[[mt]]$candidates.used,
                 object@fdr.prior.data[[mt]]$hsnps.used,
                 object@fdr.prior.data[[mt]]$burden[2]))
@@ -293,11 +293,15 @@ setMethod("show", "SCAN2", function(object) {
     if (is.null(object@call.mutations)) {
         cat("(not called)\n")
     } else {
-        cat(object@call.mutations$snv.pass, 'sSNVs,',
-            object@call.mutations$indel.pass, 'sIndels\n')
-        cat(sprintf("#       mode=%s, target.fdr=%0.3f\n",
+        cat(sprintf("mode=%s, target.fdr=%0.3f\n",
             object@call.mutations$mode,
             object@call.mutations$target.fdr))
+        for (mt in names(object@fdr.prior.data)) {
+            cat(sprintf("#       %6s: %8d called %8d training calls (resampled) %0.2f training sensitivity\n",
+                object@call.mutations[[paste0(mt, '.pass')]],
+                object@call.mutations[[paste0(mt, '.training.pass')]],
+                object@call.mutations[[paste0(mt, '.training.sens')]]))
+        }
     }
 })
 
@@ -983,10 +987,15 @@ setMethod("call.mutations", "SCAN2", function(object, target.fdr=0.01, mode=c('n
     object <- compute.fdr.prior.data(object, mode='legacy', quiet=quiet) # there is no non-legacy mode
     object <- compute.fdr(object, mode=mode, quiet=quiet)
     object@gatk[, pass := static.filter == TRUE & lysis.fdr <= target.fdr & mda.fdr <= target.fdr]
-    object@call.mutations <- list(
-        snv.pass=nrow(object@gatk[muttype == 'snv' & pass == TRUE]),
-        indel.pass=nrow(object@gatk[muttype == 'indel' & pass == TRUE]),
-        mode=mode,
-        target.fdr=target.fdr)
+    object@gatk[resampled.training.site == TRUE,
+        training.pass := 
+            # same tests as static.filter EXCEPT dbsnp.test, lowmq.test, max.bulk.alt.test,
+            # which mostly will fail at training het germline sites.
+            (cigar.id.test & cigar.hs.test & dp.test & abc.test & min.sc.alt.test) &
+            lysis.fdr <= target.fdr & mda.fdr <= target.fdr]
+    object@call.mutations <- c(
+        as.list(unlist(object@gatk[muttype == 'snv', .(snv.pass=sum(pass), snv.training.pass=sum(training.pass, na.rm=TRUE), snv.training.sens=mean(training.pass, na.rm=TRUE))])),
+        as.list(unlist(object@gatk[muttype == 'indel', .(indel.pass=sum(pass), indel.training.pass=sum(training.pass, na.rm=TRUE), indel.training.sens=mean(training.pass, na.rm=TRUE))])),
+        list(mode=mode, target.fdr=target.fdr))
     object
 })
