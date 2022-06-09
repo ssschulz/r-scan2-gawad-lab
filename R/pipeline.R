@@ -109,12 +109,6 @@ run.pipeline <- function(
                 gt <- compute.static.filters(gt), report.mem=report.mem)
             p(class='sticky', amount=0, pc)
 
-            # compute.fdr is now part of call.mutations()
-            #pc <- perfcheck(paste('compute.fdr',i),
-                #gt <- compute.fdr(gt, fdr.prior.data, mode=ifelse(legacy, 'legacy', 'new'), quiet=!verbose),
-                #report.mem=report.mem)
-            #p(class='sticky', amount=0, pc)
-
             p()
             gt
         }, future.seed=0)  # CRITICAL! library(future) ensures that each child process
@@ -128,9 +122,6 @@ run.pipeline <- function(
 
     x <- do.call(concat, xs)
     x <- call.mutations(x, target.fdr=0.01, mode=ifelse(legacy, 'legacy', 'new'), quiet=!verbose)
-
-    cat("Merged SCAN2 object with calls after chunked pipeline:\n")
-    print(x)
     x
 }
 
