@@ -71,12 +71,12 @@ test.output <- function(pipeline.output, custom, test.data=c('legacy_tiny', 'leg
     bulk.sample <- object@bulk
     bulk.gt <- object@gatk[[bulk.sample]]
     p <- pipeline.output@gatk[
-            bulk.dp >= object@static.filter.params$min.bulk.dp &
+            bulk.dp >= object@static.filter.params$snv$min.bulk.dp &
             (is.na(balt.lowmq) | balt.lowmq == 0) &
             balt == 0 & bulk.gt == '0/0' &
-            (dbsnp == '.' | !object@static.filter.params$exclude.dbsnp) &
-            scalt >= object@static.filter.params$min.sc.alt &
-            dp >= object@static.filter.params$min.sc.dp]
+            (dbsnp == '.' | !object@static.filter.params$snv$exclude.dbsnp) &
+            scalt >= object@static.filter.params$snv$min.sc.alt &
+            dp >= object@static.filter.params$snv$min.sc.dp]
 
     # only SNV calls are in these legacy sets (for now?)
     if (test.data %in% c('legacy_tiny', 'legacy_chr22'))

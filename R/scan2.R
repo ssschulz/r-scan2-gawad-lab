@@ -157,7 +157,7 @@ check.slots <- function(object, slots, abort=TRUE) {
                 cat("must import CIGAR data first (see: add.cigar.data())\n")
             if (s == 'excess.cigar.scores')
                 cat("must compute excess CIGAR scores first (see: compute.excess.cigar.scores())\n")
-            if (s == 'static.filter' | s == 'static.filters' | s == 'static.filter.params')
+            if (s == s == 'static.filter.params')
                 cat("must apply static site filters first (see: add.static.filters())\n")
             if (s == 'fdr.prior.data')
                 cat("must compute or import FDR priors first (see: compute.fdr.priors())\n")
@@ -267,9 +267,11 @@ setMethod("show", "SCAN2", function(object) {
     if (!('static.filter' %in% colnames(object@gatk))) {
         cat("(not applied)\n")
     } else {
-        cat(sum(object@gatk$static.filter, na.rm=TRUE), "retained",
-            sum(!object@gatk$static.filter, na.rm=TRUE), "removed",
-            sum(is.na(object@gatk$static.filter)), "NA\n")
+        for (mt in c('snv', 'indel')) {
+            tb <- table(object@gatk[muttype == mt, static.filter], useNA='always')
+            cat(sprintf('#       %6s: %8d retained %8d removed %8d NA\n',
+                mt, tb['TRUE'], tb['FALSE'], tb['NA']))
+        }
     }
 
     cat("#   FDR prior data: ")
@@ -278,7 +280,7 @@ setMethod("show", "SCAN2", function(object) {
     } else {
         cat('\n')
         for (mt in names(object@fdr.prior.data)) {
-            cat(sprintf("#       %s: cands. %d, hets %d, max burd. %d\n",
+            cat(sprintf("#       %6s: cands. %d, hets %d, max burd. %d\n",
                 mt, object@fdr.prior.data[[mt]]$candidates.used,
                 object@fdr.prior.data[[mt]]$hsnps.used,
                 object@fdr.prior.data[[mt]]$burden[2]))
@@ -355,14 +357,18 @@ setMethod("concat", signature="SCAN2", function(...) {
     ensure.same(args, 'genome.string')
     ensure.same(args, 'single.cell')
     ensure.same(args, 'bulk')
-    ensure.same(args, 'static.filter.params', 'min.sc.alt')
-    ensure.same(args, 'static.filter.params', 'min.sc.dp')
-    ensure.same(args, 'static.filter.params', 'min.bulk.dp')
-    ensure.same(args, 'static.filter.params', 'max.bulk.alt')
-    ensure.same(args, 'static.filter.params', 'exclude.dbsnp')
-    ensure.same(args, 'static.filter.params', 'cg.id.q')
-    ensure.same(args, 'static.filter.params', 'cg.hs.q')
+
+    for (mt in c('snv', 'indel')) {
+        ensure.same(args, 'static.filter.params', mt, 'min.sc.alt')
+        ensure.same(args, 'static.filter.params', mt, 'min.sc.dp')
+        ensure.same(args, 'static.filter.params', mt, 'min.bulk.dp')
+        ensure.same(args, 'static.filter.params', mt, 'max.bulk.alt')
+        ensure.same(args, 'static.filter.params', mt, 'exclude.dbsnp')
+        ensure.same(args, 'static.filter.params', mt, 'cg.id.q')
+        ensure.same(args, 'static.filter.params', mt, 'cg.hs.q')
+    }
     ret@static.filter.params <- init@static.filter.params
+
     ensure.same(args, 'cigar.data', 'sc.path')
     ensure.same(args, 'cigar.data', 'bulk.path')
     ret@cigar.data <- data.frame(sc.sites=sum(sapply(args, function(a) ifelse(is.null(a@cigar.data), 0, a@cigar.data$sc.sites))),
@@ -620,10 +626,10 @@ setMethod("compute.fdr.prior.data", "SCAN2", function(object, mode=c('legacy', '
         if (mode == 'legacy') {
             # in legacy mode, only candidate sites passing a small set of pre-genotyping
             # crtieria were used.
-            min.sc.alt <- object@static.filter.params$min.sc.alt
-            min.sc.dp <- object@static.filter.params$min.sc.dp
-            min.bulk.dp <- object@static.filter.params$min.bulk.dp
-            max.bulk.alt <- object@static.filter.params$max.bulk.alt
+            min.sc.alt <- object@static.filter.params[[mt]]$min.sc.alt
+            min.sc.dp <- object@static.filter.params[[mt]]$min.sc.dp
+            min.bulk.dp <- object@static.filter.params[[mt]]$min.bulk.dp
+            max.bulk.alt <- object@static.filter.params[[mt]]$max.bulk.alt
             cand <- object@gatk[
                 muttype == mt &
                 balt <= max.bulk.alt &
@@ -675,8 +681,9 @@ setMethod("compute.fdr", "SCAN2", function(object, path, mode=c('legacy', 'new')
         # leave-one-out appraoch.
         # Technically this should only be applied to the same sites used
         # as 'hets' in compute.fdr.prior.data.for.candidates(). 
-        object@gatk[muttype == mt & training.site == TRUE & scalt >= object@static.filter.params$min.sc.alt, c('nt', 'na') :=
-            estimate.fdr.priors(.SD, object@fdr.prior.data[[mt]], use.ghet.loo=TRUE)]
+        object@gatk[muttype == mt & training.site == TRUE &
+            scalt >= object@static.filter.params[[mt]]$min.sc.alt, c('nt', 'na') :=
+                estimate.fdr.priors(.SD, object@fdr.prior.data[[mt]], use.ghet.loo=TRUE)]
 
         # lysis.fdr and mda.fdr represent the false discovery rate of a population of
         # candidate mutation sites with the same DP and VAF as the site in question.
@@ -687,8 +694,8 @@ setMethod("compute.fdr", "SCAN2", function(object, path, mode=c('legacy', 'new')
                 balt == 0 &
                 bulk.gt == '0/0' &
                 dbsnp == '.' &
-                scalt >= object@static.filter.params$min.sc.alt &
-                dp >= object@static.filter.params$min.sc.dp,
+                scalt >= object@static.filter.params[[mt]]$min.sc.alt &
+                dp >= object@static.filter.params[[mt]]$min.sc.dp,
                 c('lysis.fdr', 'mda.fdr') := 
                     compute.fdr.legacy(altreads=scalt, dp=dp, gp.mu=match.ab(af=af, gp.mu=gp.mu),
                                        gp.sd=gp.sd, nt=nt, na=na, verbose=!quiet)]
@@ -700,8 +707,8 @@ setMethod("compute.fdr", "SCAN2", function(object, path, mode=c('legacy', 'new')
                 balt == 0 &
                 bulk.gt == '0/0' &
                 dbsnp == '.' &
-                scalt >= object@static.filter.params$min.sc.alt &
-                dp >= object@static.filter.params$min.sc.dp])
+                scalt >= object@static.filter.params[[mt]]$min.sc.alt &
+                dp >= object@static.filter.params[[mt]]$min.sc.dp])
         } else if (mode == 'new') {
             # XXX: TODO: calculate adjusted NA/NT values for hSNPs. Equivalent to
             # previous leave-one-out approaches, because AB estimation always leaves
@@ -838,26 +845,42 @@ setMethod("compute.excess.cigar.scores", "SCAN2", function(object, path=NULL, le
 
 
 setGeneric("add.static.filter.params", function(object, config.path,
-    min.sc.alt=2, min.sc.dp=6,
+    muttype=c('snv', 'indel'), min.sc.alt=2, min.sc.dp=6,
     max.bulk.alt=0, min.bulk.dp=11, exclude.dbsnp=TRUE, cg.id.q=0.05, cg.hs.q=0.05)
         standardGeneric("add.static.filter.params"))
 setMethod("add.static.filter.params", "SCAN2",
-function(object, config.path,
+function(object, config.path, muttype=c('snv', 'indel'),
     min.sc.alt=2, min.sc.dp=6, max.bulk.alt=0, min.bulk.dp=11,
     exclude.dbsnp=TRUE, cg.id.q=0.05, cg.hs.q=0.05)
 {
+    if (!missing(muttype) & !missing(config.path))
+        stop('exactly one of muttype or config.path must be specified')
+
+    muttype <- match.arg(muttype)
+
+    # if a config file is given, it is expected to have explicit values for all settings
     if (!missing(config.path)) {
         yaml <- yaml::read_yaml(config.path)
-        min.sc.alt <- yaml$min_sc_alt
-        min.sc.dp <- yaml$min_sc_dp
-        max.bulk.alt <- yaml$max_bulk_alt
-        min.bulk.dp <- yaml$min_bulk_dp
-        # exclude.dbsnp, cg.id.q and cg.hs.q are not user configurable at the moment
+        for (mt in c('snv', 'indel')) {
+            object@static.filter[[mt]] <- list(
+                min.sc.alt=yaml[[paste0(mt, '_min_sc_alt')]],
+                min.sc.dp=yaml[[paste0(mt, '_min_sc_dp')]],
+                max.bulk.alt=yaml[[paste0(mt, '_max_bulk_alt')]],
+                min.bulk.dp=yaml[[paste0(mt, '_min_bulk_dp')]],
+                # exclude.dbsnp, cg.id.q and cg.hs.q are not user configurable
+                # at the moment. the defaults in this function's signature are
+                # always used.
+                exclude.dbsnp=exclude.dbsnp,
+                cg.id.q=cg.id.q,
+                cg.hs.q=cg.hs.q
+            )
+        }
+    } else {
+        object@static.filter.params[[muttype]] <- list(
+            min.sc.alt=min.sc.alt, min.sc.dp=min.sc.dp,
+            max.bulk.alt=max.bulk.alt, min.bulk.dp=min.bulk.dp,
+            exclude.dbsnp=exclude.dbsnp, cg.id.q=cg.id.q, cg.hs.q=cg.hs.q)
     }
-    object@static.filter.params <- list(
-        min.sc.alt=min.sc.alt, min.sc.dp=min.sc.dp,
-        max.bulk.alt=max.bulk.alt, min.bulk.dp=min.bulk.dp,
-        exclude.dbsnp=exclude.dbsnp, cg.id.q=cg.id.q, cg.hs.q=cg.hs.q)
     object
 })
         
@@ -867,30 +890,28 @@ setGeneric("compute.static.filters", function(object, exclude.dbsnp=TRUE)
 setMethod("compute.static.filters", "SCAN2", function(object, exclude.dbsnp=TRUE) {
     check.slots(object, c('gatk', 'cigar.data', 'mut.models'))
 
-    qid <- quantile(object@gatk[training.site == TRUE]$id.score,
-        prob=object@static.filter.params$cg.id.q, na.rm=TRUE)
-    qhs <- quantile(object@gatk[training.site == TRUE]$hs.score,
-        prob=object@static.filter.params$cg.hs.q, na.rm=TRUE)
+    for (mt in c('snv', 'indel')) {
+        sfp <- object@static.filter.params[[mt]]
+        qid <- quantile(object@gatk[training.site == TRUE & muttype == mt]$id.score,
+            prob=sfp$cg.id.q, na.rm=TRUE)
+        qhs <- quantile(object@gatk[training.site == TRUE & muttype == mt]$hs.score,
+            prob=sfp$cg.hs.q, na.rm=TRUE)
 
-    # having some issues with data.table accessing objects/dataframes inside the expression
-    max.bulk.alt <- object@static.filter.params$max.bulk.alt
-    min.sc.dp <- object@static.filter.params$min.sc.dp
-    min.bulk.dp <- object@static.filter.params$min.bulk.dp
-    min.sc.alt <- object@static.filter.params$min.sc.alt
-    object@gatk[, c('cigar.id.test', 'cigar.hs.test', 'lowmq.test',
-            'dp.test', 'abc.test', 'min.sc.alt.test', 'max.bulk.alt.test',
-            'dbsnp.test') :=
-                list(id.score > qid,
-                     hs.score > qhs,
-                     is.na(balt.lowmq) | balt.lowmq <= max.bulk.alt,
-                     dp >= min.sc.dp & bulk.dp >= min.bulk.dp,
-                     abc.pv > 0.05,
-                     scalt >= min.sc.alt,
-                     balt <= max.bulk.alt,
-                     !exclude.dbsnp | dbsnp == '.')]
-    object@gatk[,static.filter :=
-        cigar.id.test & cigar.hs.test & lowmq.test & dp.test &
-        abc.test & min.sc.alt.test & max.bulk.alt.test & dbsnp.test]
+        object@gatk[, c('cigar.id.test', 'cigar.hs.test', 'lowmq.test',
+                'dp.test', 'abc.test', 'min.sc.alt.test', 'max.bulk.alt.test',
+                'dbsnp.test') :=
+                    list(id.score > qid,
+                        hs.score > qhs,
+                        is.na(balt.lowmq) | balt.lowmq <= sfp$max.bulk.alt,
+                        dp >= sfp$min.sc.dp & bulk.dp >= sfp$min.bulk.dp,
+                        abc.pv > 0.05,
+                        scalt >= sfp$min.sc.alt,
+                        balt <= sfp$max.bulk.alt,
+                        !sfp$exclude.dbsnp | dbsnp == '.')]
+        object@gatk[, static.filter :=
+            cigar.id.test & cigar.hs.test & lowmq.test & dp.test &
+            abc.test & min.sc.alt.test & max.bulk.alt.test & dbsnp.test]
+    }
     object
 })
 

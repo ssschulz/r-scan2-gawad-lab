@@ -32,6 +32,7 @@ run.pipeline <- function(
     sccigars, bulkcigars, trainingcigars,
     genome,
     tmpsave.rda,
+    config.yaml,
     grs=tileGenome(seqlengths=seqinfo(genome.string.to.bsgenome.object(genome))[as.character(1:22)], tilewidth=10e6, cut.last.tile.in.chrom=TRUE),
     legacy=FALSE, report.mem=TRUE, verbose=TRUE)
 {
@@ -62,7 +63,15 @@ run.pipeline <- function(
                 gt <- make.scan(single.cell=sc.sample, bulk=bulk.sample, genome=genome, region=gr), report.mem=report.mem)
             p(class='sticky', amount=0, pc)
 
-            gt <- add.static.filter.params(gt)
+            if (!missing(config.yaml)) {
+                gt <- add.static.filter.params(gt, config.path=config.yaml)
+            } else {
+                # the default values in this function ARE NOT GUARANTEED
+                # to match the defaults in the scan2 script.
+                warn('config.yaml not specified, using R function default static filter parameters, which may not match the scan2 tool')
+                gt <- add.static.filter.params(gt, muttype='snv')
+                gt <- add.static.filter.params(gt, muttype='indel')
+            }
 
             pc <- perfcheck(paste('read.integrated.table',i),
                 gt <- read.integrated.table(gt, path=int.tab, quiet=!verbose), report.mem=report.mem)
