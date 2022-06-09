@@ -267,6 +267,7 @@ setMethod("show", "SCAN2", function(object) {
     if (!('static.filter' %in% colnames(object@gatk))) {
         cat("(not applied)\n")
     } else {
+        cat('\n')
         for (mt in c('snv', 'indel')) {
             tb <- table(object@gatk[muttype == mt, static.filter], useNA='always')
             cat(sprintf('#       %6s: %8d retained %8d removed %8d NA\n',
