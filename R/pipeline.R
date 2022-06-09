@@ -127,7 +127,7 @@ run.pipeline <- function(
     }
 
     x <- do.call(concat, xs)
-    x <- call.mutations(x, target.fdr=0.01, mode='new', quiet=!verbose)
+    x <- call.mutations(x, target.fdr=0.01, mode=ifelse(legacy, 'legacy', 'new'), quiet=!verbose)
 
     cat("Merged SCAN2 object with calls after chunked pipeline:\n")
     print(x)
