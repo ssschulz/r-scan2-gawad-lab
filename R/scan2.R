@@ -157,7 +157,7 @@ check.slots <- function(object, slots, abort=TRUE) {
                 cat("must import CIGAR data first (see: add.cigar.data())\n")
             if (s == 'excess.cigar.scores')
                 cat("must compute excess CIGAR scores first (see: compute.excess.cigar.scores())\n")
-            if (s == s == 'static.filter.params')
+            if (s == 'static.filter.params')
                 cat("must apply static site filters first (see: add.static.filters())\n")
             if (s == 'fdr.prior.data')
                 cat("must compute or import FDR priors first (see: compute.fdr.priors())\n")
