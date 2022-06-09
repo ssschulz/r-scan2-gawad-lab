@@ -898,7 +898,7 @@ setMethod("compute.static.filters", "SCAN2", function(object, exclude.dbsnp=TRUE
         qhs <- quantile(object@gatk[training.site == TRUE & muttype == mt]$hs.score,
             prob=sfp$cg.hs.q, na.rm=TRUE)
 
-        object@gatk[, c('cigar.id.test', 'cigar.hs.test', 'lowmq.test',
+        object@gatk[muttype == mt, c('cigar.id.test', 'cigar.hs.test', 'lowmq.test',
                 'dp.test', 'abc.test', 'min.sc.alt.test', 'max.bulk.alt.test',
                 'dbsnp.test') :=
                     list(id.score > qid,
