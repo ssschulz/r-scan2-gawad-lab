@@ -32,7 +32,7 @@ run.pipeline <- function(
     sccigars, bulkcigars, trainingcigars,
     genome,
     tmpsave.rda,
-    config.yaml,
+    config.yaml=NULL,
     grs=tileGenome(seqlengths=seqinfo(genome.string.to.bsgenome.object(genome))[as.character(1:22)], tilewidth=10e6, cut.last.tile.in.chrom=TRUE),
     legacy=FALSE, report.mem=TRUE, verbose=TRUE)
 {
@@ -63,7 +63,7 @@ run.pipeline <- function(
                 gt <- make.scan(single.cell=sc.sample, bulk=bulk.sample, genome=genome, region=gr), report.mem=report.mem)
             p(class='sticky', amount=0, pc)
 
-            if (!missing(config.yaml)) {
+            if (!is.null(config.yaml)) {
                 gt <- add.static.filter.params(gt, config.path=config.yaml)
             } else {
                 # the default values in this function ARE NOT GUARANTEED
