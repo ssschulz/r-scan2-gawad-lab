@@ -298,8 +298,8 @@ setMethod("show", "SCAN2", function(object) {
             object@call.mutations$target.fdr))
         for (mt in c('snv', 'indel')) {
             cat(sprintf("#       %6s: %8d called %8d training calls (resampled) %0.2f training sensitivity\n",
-                object@call.mutations[[paste0(mt, '.pass')]],
-                object@call.mutations[[paste0(mt, '.training.pass')]],
+                as.integer(object@call.mutations[[paste0(mt, '.pass')]]),
+                as.integer(object@call.mutations[[paste0(mt, '.training.pass')]]),
                 object@call.mutations[[paste0(mt, '.training.sens')]]))
         }
     }
