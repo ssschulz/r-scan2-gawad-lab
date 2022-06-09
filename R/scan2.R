@@ -268,10 +268,11 @@ setMethod("show", "SCAN2", function(object) {
         cat("(not applied)\n")
     } else {
         cat('\n')
+        na.or.val <- function(x, val=0) ifelse(is.na(x), val, x)
         for (mt in c('snv', 'indel')) {
             tb <- table(object@gatk[muttype == mt, static.filter], useNA='always')
             cat(sprintf('#       %6s: %8d retained %8d removed %8d NA\n',
-                mt, tb['TRUE'], tb['FALSE'], tb['NA']))
+                mt, na.or.val(tb['TRUE']), na.or.val(tb['FALSE']), na.or.val(tb['NA'])))
         }
     }
 
