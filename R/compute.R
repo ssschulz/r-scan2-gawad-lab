@@ -304,17 +304,27 @@ compute.fdr.prior.data.for.candidates <- function(candidates, hsnps, bins=20, ra
 
 make.nt.tab <- function(prior.data) {
     sapply(1:length(prior.data$b.vec), function(i) {
-        S <- sum(prior.data$g.tab[,i])
+        S <- sum(prior.data$s.tab[,i])
+        G <- sum(prior.data$g.tab[,i])
+        if (S == 0 | G == 0)
+            return(rep(prior.data$eps, prior.data$bins))
         # this has no effect other than avoiding NaN when no germline sites
         # are present. it causes the column in the table to be all 'eps' values.
-        if (S == 0)
-            S <- 1
-        pmax(prior.data$b.vec[i] * (prior.data$g.tab[,i]/S), prior.data$eps)
+        if (G == 0)
+            G <- 1
+        pmax(prior.data$b.vec[i] * (prior.data$g.tab[,i]/G), prior.data$eps)
     })
 }
 
 make.na.tab <- function(prior.data) {
-    pmax(prior.data$s.tab - make.nt.tab(prior.data), prior.data$eps)
+    nt.tab <- make.nt.tab(prior.data)
+    sapply(1:length(prior.data$b.vec), function(i) {
+        S <- sum(prior.data$s.tab[,i])
+        G <- sum(prior.data$g.tab[,i])
+        if (S == 0 | G == 0)
+            return(rep(prior.data$eps, prior.data$bins))
+        pmax(prior.data$s.tab[,i] - nt.tab[,i], prior.data$eps)
+    })
 }
 
 
