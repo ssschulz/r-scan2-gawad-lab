@@ -1,3 +1,36 @@
+# some utility functions for comparing results
+check.length <- function(a, b, msg) {
+    ret <- length(a) != length(b)
+    if (ret)
+        cat(sprintf('FAILED lengths (a=%d, b=%d): %s', length(a), length(b), msg))
+    return(ret)
+}
+
+
+test.equal <- function(a, b, msg) {
+    if (check.length(a, b, msg))
+        return()
+    nfail <- sum(xor(is.na(a), is.na(b)) | a != b, na.rm=TRUE)
+    if (nfail > 0)
+        cat(paste0('FAILED (',nfail,') equality:', msg, '\n'))
+    else cat('.')
+}
+
+
+test.tol <- function(a, b, msg, tolerance=1e-6) {
+    if (check.length(a, b, msg))
+        return()
+    nfail <- sum(xor(is.na(a), is.na(b)) | abs(a-b) > tolerance, na.rm=TRUE)
+    if (nfail > 0) {
+        cat(sprintf('FAILED (%d) tolerance (%f):', nfail, tolerance), msg, '\n')
+        w <- which(xor(is.na(a), is.na(b)) | abs(a - b) > 
+            tolerance)
+        cat('indexes: '); print(w)
+        cat('abs(diffs): '); print(abs(a-b)[w])
+    } else cat('.')
+}
+
+
 testpipe <- function(test.data=c('legacy_tiny', 'legacy_chr22', 'legacy_custom'), verbose=FALSE, custom=NULL) {
     test.data <- match.arg(test.data)
     if (test.data == 'legacy_custom' & is.null(custom))
@@ -57,105 +90,84 @@ test.output <- function(pipeline.output, custom, test.data=c('legacy_tiny', 'leg
     }
     l <- get(load(legacy.rda, verb=F))
 
-    # necessary to look at a subset of the legacy output and pipeline
-    # output. in the new pipeline's legacy mode, sites that are not admitted
-    # for FDR prior estimation are *also* not scored for FDR. these sites are
-    # are filtered out by both pipelines in the final calling due to static
-    # filters so ignoring them will not affect validity. the sites can't be
-    # compared due to missing FDR scores in the new pipeline.
-    l <- l[l$bulk.dp >= 11 & (is.na(l$alt.1.lowmq) | l$alt.1.lowmq == 0) & l$dp >= 6,]
+    for (mt in c('snv', 'indel')) {
+        cat(' MUTTYPE =', mt, '-------------------------------------------\n')
+        # necessary to look at a subset of the legacy output and pipeline
+        # output. in the new pipeline's legacy mode, sites that are not admitted
+        # for FDR prior estimation are *also* not scored for FDR. these sites are
+        # are filtered out by both pipelines in the final calling due to static
+        # filters so ignoring them will not affect validity. the sites can't be
+        # compared due to missing FDR scores in the new pipeline.
+        #
+        # don't need to use the higher DP >= 10 cutoff for indels because that
+        # was applied after processing, so the lower DP sites will be present.
+        l <- l[l$bulk.dp >= 11 & (is.na(l$alt.1.lowmq) | l$alt.1.lowmq == 0) & l$dp >= 6,]
+    
+        sfp <- pipeline.output$static.filter.params[[mt]]
+        p <- pipeline.output@gatk[
+                muttype == mt &
+                bulk.dp >= sfp$min.bulk.dp &
+                (is.na(balt.lowmq) | balt.lowmq == 0) &
+                balt == 0 & bulk.gt == '0/0' &
+                (dbsnp == '.' | !sfp$exclude.dbsnp) &
+                scalt >= sfp$min.sc.alt &
+                dp >= sfp$min.sc.dp]
 
-    # XXX: somatic candidate status should really be stored in the data table
-    #p <- pipeline.output@gatk[!is.na(lysis.fdr)]
-    object <- pipeline.output
-    bulk.sample <- object@bulk
-    bulk.gt <- object@gatk[[bulk.sample]]
-    p <- pipeline.output@gatk[
-            bulk.dp >= object@static.filter.params$snv$min.bulk.dp &
-            (is.na(balt.lowmq) | balt.lowmq == 0) &
-            balt == 0 & bulk.gt == '0/0' &
-            (dbsnp == '.' | !object@static.filter.params$snv$exclude.dbsnp) &
-            scalt >= object@static.filter.params$snv$min.sc.alt &
-            dp >= object@static.filter.params$snv$min.sc.dp]
+        test.equal(l$chr, p$chr, "chr")
+        test.equal(l$pos, p$pos, "pos")
+        test.equal(l$refnt, p$refnt, "refnt")
+        test.equal(l$altnt, p$altnt, "altnt")
+        test.equal(l$dbsnp, p$dbsnp, "dbsnp")
+        test.equal(l$h25, p$h25, "h25")
+        test.equal(l$hunamp, p$bulk.gt, "bulk.gt")  # used to be called hunamp, now unambiguously labeled as bulk.gt
+        test.equal(l$dp, p$dp, "dp")
+        test.equal(l$af, p$af, "af")
+        test.equal(l$bulk.dp, p$bulk.dp, "bulk.dp")
+    
+        test.tol(abs(l$gp.mu), abs(p$gp.mu), "gp.mu")
+        test.tol(l$gp.sd, p$gp.sd, "gp.sd")
+        test.tol(pmin(l$ab,1-l$ab), pmin(p$ab,1-p$ab), "ab")
+        test.tol(l$abc.pv, p$abc.pv, "abc.pv")
+        test.tol(l$lysis.pv, p$lysis.pv, "lysis.pv")
+        test.tol(l$mda.pv, p$mda.pv, "mda.pv")
+        test.tol(l$nt, p$nt, "nt")
+        test.tol(l$na, p$na, "na")
+        # the beta in the current SCAN2 table is not derived from the same min.
+        # FDR method used in legacy. the old beta is computed internally when
+        # calculating the final FDR estimates, but it is not saved in the table.
+        #test.tol(l$lysis.beta, p$lysis.beta, "lysis.beta")
+        test.tol(l$lysis.fdr, p$lysis.fdr, "lysis.fdr")
+        #test.tol(l$mda.beta, p$mda.beta, "mda.beta")
+        test.tol(l$mda.fdr, p$mda.fdr, "mda.fdr")
 
-    # only SNV calls are in these legacy sets (for now?)
-    if (test.data %in% c('legacy_tiny', 'legacy_chr22'))
-        p <- p[muttype == 'snv']
-
-    check.length <- function(a, b, msg) {
-        ret <- length(a) != length(b)
-        if (ret)
-            cat(sprintf('FAILED lengths (a=%d, b=%d): %s', length(a), length(b), msg))
-        return(ret)
+        # CIGARs are necessarily different because the legacy script (which used
+        # samtools view at every candidate site and was too slow for all-sites mode)
+        # produces different CIGAR counts than the new script (which uses pysam).
+        # the counts generally trend together very well, but they would have to be
+        # exact for these tests to work out.
+        if (FALSE) {
+            test.tol(l$id.score.y, p$id.score.y, "id.score.y")
+            test.tol(l$id.score.x, p$id.score.x, "id.score.x")
+            test.tol(l$id.score, p$id.score, "id.score")
+            test.tol(l$hs.score.y, p$hs.score.y, "hs.score.y")
+            test.tol(l$hs.score.x, p$hs.score.x, "hs.score.x")
+            test.tol(l$hs.score, p$hs.score, "hs.score")
+            test.tol(l$cigar.id.test, p$cigar.id.test, "cigar.id.test")
+            test.tol(l$cigar.hs.test, p$cigar.hs.test, "cigar.hs.test")
+        
+            test.equal(l$M.cigars, p$M.cigars, "M.cigars")
+            test.equal(l$ID.cigars, p$ID.cigars, "ID.cigars")
+            test.equal(l$HS.cigars, p$HS.cigars, "HS.cigars")
+            test.equal(l$other.cigars, p$other.cigars, "other.cigars")
+            test.equal(l$dp.cigars, p$dp.cigars, "dp.cigars")
+            test.equal(l$M.cigars.bulk, p$M.cigars.bulk, "M.cigars.bulk")
+            test.equal(l$ID.cigars.bulk, p$ID.cigars.bulk, "ID.cigars.bulk")
+            test.equal(l$HS.cigars.bulk, p$HS.cigars.bulk, "HS.cigars.bulk")
+            test.equal(l$other.cigars.bulk, p$other.cigars.bulk, "other.cigars.bulk")
+            test.equal(l$dp.cigars.bulk, p$dp.cigars.bulk, "dp.cigars.bulk")
+        }
+        test.equal(l$lowmq.test, p$lowmq.test, "lowmq.test")
+        test.equal(l$dp.test, p$dp.test, "dp.test")
+        cat('\n')
     }
-
-    test.equal <- function(a, b, msg) {
-        if (check.length(a, b, msg))
-            return()
-        nfail <- sum(xor(is.na(a), is.na(b)) | a != b, na.rm=TRUE)
-        if (nfail > 0)
-            cat(paste0('FAILED (',nfail,') equality:', msg, '\n'))
-        else cat('.')
-    }
-    test.tol <- function(a, b, msg, tolerance=1e-6) {
-        if (check.length(a, b, msg))
-            return()
-        nfail <- sum(xor(is.na(a), is.na(b)) | abs(a-b) > tolerance, na.rm=TRUE)
-        if (nfail > 0) {
-            cat(sprintf('FAILED (%d) tolerance (%f):', nfail, tolerance), msg, '\n')
-            w <- which(xor(is.na(a), is.na(b)) | abs(a - b) > 
-                tolerance)
-            cat('indexes: '); print(w)
-            cat('abs(diffs): '); print(abs(a-b)[w])
-        } else cat('.')
-    }
-
-    test.equal(l$chr, p$chr, "chr")
-    test.equal(l$pos, p$pos, "pos")
-    test.equal(l$refnt, p$refnt, "refnt")
-    test.equal(l$altnt, p$altnt, "altnt")
-    test.equal(l$dbsnp, p$dbsnp, "dbsnp")
-    test.equal(l$h25, p$h25, "h25")
-    test.equal(l$hunamp, p$bulk.gt, "bulk.gt")  # used to be called hunamp, now unambiguously labeled as bulk.gt
-    test.equal(l$dp, p$dp, "dp")
-    test.equal(l$af, p$af, "af")
-    test.equal(l$bulk.dp, p$bulk.dp, "bulk.dp")
-
-    test.tol(abs(l$gp.mu), abs(p$gp.mu), "gp.mu")
-    test.tol(l$gp.sd, p$gp.sd, "gp.sd")
-    test.tol(pmin(l$ab,1-l$ab), pmin(p$ab,1-p$ab), "ab")
-    test.tol(l$abc.pv, p$abc.pv, "abc.pv")
-    test.tol(l$lysis.pv, p$lysis.pv, "lysis.pv")
-    test.tol(l$mda.pv, p$mda.pv, "mda.pv")
-    test.tol(l$nt, p$nt, "nt")
-    test.tol(l$na, p$na, "na")
-    # the beta in the current SCAN2 table is not derived from the same min.
-    # FDR method used in legacy. the old beta is computed internally when
-    # calculating the final FDR estimates, but it is not saved in the table.
-    #test.tol(l$lysis.beta, p$lysis.beta, "lysis.beta")
-    test.tol(l$lysis.fdr, p$lysis.fdr, "lysis.fdr")
-    #test.tol(l$mda.beta, p$mda.beta, "mda.beta")
-    test.tol(l$mda.fdr, p$mda.fdr, "mda.fdr")
-    test.tol(l$id.score.y, p$id.score.y, "id.score.y")
-    test.tol(l$id.score.x, p$id.score.x, "id.score.x")
-    test.tol(l$id.score, p$id.score, "id.score")
-    test.tol(l$hs.score.y, p$hs.score.y, "hs.score.y")
-    test.tol(l$hs.score.x, p$hs.score.x, "hs.score.x")
-    test.tol(l$hs.score, p$hs.score, "hs.score")
-    test.tol(l$cigar.id.test, p$cigar.id.test, "cigar.id.test")
-    test.tol(l$cigar.hs.test, p$cigar.hs.test, "cigar.hs.test")
-
-    test.equal(l$lowmq.test, p$lowmq.test, "lowmq.test")
-    test.equal(l$M.cigars, p$M.cigars, "M.cigars")
-    test.equal(l$ID.cigars, p$ID.cigars, "ID.cigars")
-    test.equal(l$HS.cigars, p$HS.cigars, "HS.cigars")
-    test.equal(l$other.cigars, p$other.cigars, "other.cigars")
-    test.equal(l$dp.cigars, p$dp.cigars, "dp.cigars")
-    test.equal(l$M.cigars.bulk, p$M.cigars.bulk, "M.cigars.bulk")
-    test.equal(l$ID.cigars.bulk, p$ID.cigars.bulk, "ID.cigars.bulk")
-    test.equal(l$HS.cigars.bulk, p$HS.cigars.bulk, "HS.cigars.bulk")
-    test.equal(l$other.cigars.bulk, p$other.cigars.bulk, "other.cigars.bulk")
-    test.equal(l$dp.cigars.bulk, p$dp.cigars.bulk, "dp.cigars.bulk")
-    test.equal(l$dp.test, p$dp.test, "dp.test")
-    cat('\n')
 }
