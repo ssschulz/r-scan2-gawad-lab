@@ -869,7 +869,7 @@ function(object, config.path, muttype=c('snv', 'indel'),
     if (!missing(config.path)) {
         yaml <- yaml::read_yaml(config.path)
         for (mt in c('snv', 'indel')) {
-            object@static.filter[[mt]] <- list(
+            object@static.filter.params[[mt]] <- list(
                 min.sc.alt=yaml[[paste0(mt, '_min_sc_alt')]],
                 min.sc.dp=yaml[[paste0(mt, '_min_sc_dp')]],
                 max.bulk.alt=yaml[[paste0(mt, '_max_bulk_alt')]],
