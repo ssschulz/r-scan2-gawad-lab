@@ -140,6 +140,16 @@ test.output <- function(pipeline.output, custom, test.data=c('legacy_tiny', 'leg
         #test.tol(l$mda.beta, p$mda.beta, "mda.beta")
         test.tol(l$mda.fdr, p$mda.fdr, "mda.fdr")
 
+        # test cross sample panel values
+        if (mt == 'indel') {
+            test.equal(l$nalleles, p$nalleles, 'panel: nalleles')
+            test.equal(l$unique.donors, p$unique.donors, 'panel: unique.donors')
+            test.equal(l$unique.cells, p$unique.cells, 'panel: unique.cells')
+            test.equal(l$unique.bulks, p$unique.bulks, 'panel: unique.bulks')
+            test.equal(l$max.out, p$max.out, 'panel: max.out')
+            test.equal(l$sum.out, p$sum.out, 'panel: sum.out')
+            test.equal(l$sum.bulk, p$sum.bulk, 'panel: sum.bulk')
+        }
         # CIGARs are necessarily different because the legacy script (which used
         # samtools view at every candidate site and was too slow for all-sites mode)
         # produces different CIGAR counts than the new script (which uses pysam).
