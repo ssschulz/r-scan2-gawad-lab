@@ -272,8 +272,8 @@ compute.fdr.prior.data.for.candidates <- function(candidates, hsnps, bins=20, ra
     g.tab <- sapply(fcs, function(fc) fc$g)
     s.tab <- sapply(fcs, function(fc) fc$s)
 
-    nt.tab <- make.nt.tab(list(eps=eps, b.vec=b.vec, g.tab=g.tab, s.tab=s.tab))
-    na.tab <- make.na.tab(list(eps=eps, b.vec=b.vec, g.tab=g.tab, s.tab=s.tab))
+    nt.tab <- make.nt.tab(list(bins=bins, eps=eps, b.vec=b.vec, g.tab=g.tab, s.tab=s.tab))
+    na.tab <- make.na.tab(list(bins=bins, eps=eps, b.vec=b.vec, g.tab=g.tab, s.tab=s.tab))
 
     # these tables represent "partially adjusted" scores for leave-one-out (LOO)
     # calling of germline het SNPs or indels. the basic idea is to mimic a single
@@ -289,8 +289,8 @@ compute.fdr.prior.data.for.candidates <- function(candidates, hsnps, bins=20, ra
     #     taken as a whole, but in the case of any particular germline het
     #     site, only the (VAF, DP) cell in s.tab that matches the germline het
     #     is used. so adding 1 to the entire table is just a convenient shortcut.
-    ghet.loo.nt.tab <- make.nt.tab(list(eps=eps, b.vec=b.vec+1, g.tab=g.tab, s.tab=s.tab+1))
-    ghet.loo.na.tab <- make.na.tab(list(eps=eps, b.vec=b.vec+1, g.tab=g.tab, s.tab=s.tab+1))
+    ghet.loo.nt.tab <- make.nt.tab(list(bins=bins, eps=eps, b.vec=b.vec+1, g.tab=g.tab, s.tab=s.tab+1))
+    ghet.loo.na.tab <- make.na.tab(list(bins=bins, eps=eps, b.vec=b.vec+1, g.tab=g.tab, s.tab=s.tab+1))
 
     list(bins=bins, max.dp=max.dp, fcs=fcs, candidates.used=nrow(candidates),
         hsnps.used=nrow(hsnps), burden=burden,
