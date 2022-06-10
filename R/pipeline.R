@@ -132,7 +132,7 @@ run.pipeline <- function(
 # read counts for all single cells and bulks.
 make.integrated.table <- function(mmq60.tab, mmq1.tab, phased.vcf,
     bulk.sample, genome,
-    genome.object=genome.string.to.bsgenome.object(genome),
+    panel=NULL, genome.object=genome.string.to.bsgenome.object(genome),
     grs=tileGenome(seqlengths=seqinfo(genome.object)[as.character(1:22)], tilewidth=10e6, cut.last.tile.in.chrom=TRUE),
     quiet=TRUE, report.mem=FALSE)
 {
@@ -159,6 +159,7 @@ make.integrated.table <- function(mmq60.tab, mmq1.tab, phased.vcf,
                 annotate.gatk(gatk=sitewide, gatk.counts=samplespecific, genome.string=genome, genome.object=genome.object, add.mutsig=TRUE)
                 annotate.gatk.lowmq(sitewide, path=mmq1.tab, bulk=bulk.sample, region=gr, quiet=quiet)
                 annotate.gatk.phasing(sitewide, phasing.path=phased.vcf, region=gr, quiet=quiet)
+                annotate.gatk.panel(sitewide, panel.path=panel, region=gr, quiet=quiet)
             }, report.mem=report.mem)
             p(class='sticky', amount=1, pc)
 

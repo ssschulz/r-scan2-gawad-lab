@@ -8,8 +8,8 @@
 #
 # This function should eventually replace the older 2sample version.
 #
-# n.meta.cols - 5 for GATK tables, 18 for integrated table
-read.table.1sample <- function(path, sample.id, region=NULL, n.meta.cols=5, quiet=FALSE) {
+# n.meta.cols - 5 for GATK tables, 25 for integrated table
+read.table.1sample <- function(path, sample.id, region=NULL, n.meta.cols=25, quiet=FALSE) {
     if (!quiet) cat("Importing GATK table..\n")
 
     # Step 1: just get the header and detect the columns corresponding to sample.id
@@ -35,10 +35,10 @@ read.table.1sample <- function(path, sample.id, region=NULL, n.meta.cols=5, quie
     cols.to.read <- rep("NULL", tot.cols)
     # First 5 are chr, pos, dbsnp, refnt, altnt. Applies to both GATK and integrated
     cols.to.read[1:5] <- c('character', 'integer', rep('character', 3))
-    if (n.meta.cols == 18) {
-        cols.to.read[6:18] <- c('numeric', 'numeric', 'character', 'integer',
+    if (n.meta.cols == 25) {
+        cols.to.read[6:25] <- c('numeric', 'numeric', 'character', 'integer',
             'integer', 'integer', 'numeric', 'character', 'character', 'logical',
-            'integer', 'character', 'logical')
+            'integer', 'character', 'logical', rep('integer', 7))
     }
     # Read 3 columns for the single cell, 3 columns for bulk
     cols.to.read[sample.idx + 0:2] <- c('character', 'integer', 'integer')
@@ -244,6 +244,36 @@ annotate.gatk.phasing <- function(gatk, phasing.path, region, quiet=FALSE) {
 }
 
 
+# if 'panel.path' is NULL, then columns with dummy counts of 0 (so as to
+# not throw off filters) will be joined. this is easily discernable from
+# real data since unique.donors can never be <1 for any non-ref site in
+# this sample (the donor would include this one).
+annotate.gatk.panel <- function(gatk, panel.path, region=NULL, quiet=FALSE) {
+    if (!is.null(panel.path)) {
+        panel <- read.tabix.data(path=panel.path, region=region, quiet=quiet,
+            colClasses=list(character='chr'))  # force chromosome to be interpreted as a string
+
+        # update by reference
+        # N.B. only join by chromosome and position here. Because the panel often
+        # involves 50+ cells and 10+ individuals, it is common for sites that
+        # would be biallelic in this sample to become multiallelic when considering
+        # all samples.
+        # At multiallelic sites, the panel counts actually do not tell us which of
+        # the alleles is supported in the other cells/subjects, only that there are
+        # non-reference alleles supported in those other cells/subjects. One day
+        # we will hopefully avoid this by decomposing alleles via vcfallelicprimitives
+        # or some similar tool.
+        gatk[panel, on=.(chr,pos),
+            c('nalleles', 'unique.donors', 'unique.cells', 'unique.bulks', 'max.out', 'sum.out', 'sum.bulk') :=
+                list(i.nalleles, i.unique.donors, i.unique.cells, i.unique.bulks, i.max.out, i.sum.out, i.sum.bulk)]
+    } else {
+        gatk[panel,
+            c('nalleles', 'unique.donors', 'unique.cells', 'unique.bulks', 'max.out', 'sum.out', 'sum.bulk') :=
+                list(0, 0, 0, 0, 0, 0, 0)]
+    }
+}
+
+
 # Again, modifying 'gatk' by reference.
 # Returns list of resampling auxiliary data with one entry for SNVs and one for indels
 # and modifies `gatk` by reference.
@@ -264,7 +294,7 @@ annotate.gatk.phasing <- function(gatk, phasing.path, region, quiet=FALSE) {
 # can be easily selected later. this will certainly be broken inadvertently and
 # cause headaches. notably, this is (final n.meta.cols)-1 because this function
 # adds one new meta column to gatk by reference.
-gatk.resample.phased.sites <- function(gatk, M=20, seed=0, n.meta.cols=17) {
+gatk.resample.phased.sites <- function(gatk, M=20, seed=0, n.meta.cols=24) {
     ret <- list()
     for (mt in c('snv', 'indel')) {
         aux.data <- resample.germline(

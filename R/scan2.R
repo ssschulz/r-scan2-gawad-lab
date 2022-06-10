@@ -923,7 +923,7 @@ setMethod("compute.static.filters", "SCAN2", function(object, exclude.dbsnp=TRUE
 })
 
 
-# When reading the integrated table: read all metadata columns (currently 1-18)
+# When reading the integrated table: read all metadata columns (currently 1-25)
 # and only the 3 genotype/count columns corresponding to `sample.id`. This can
 # save significant memory overhead in large (100+ cell) projects.
 #
@@ -938,7 +938,7 @@ setMethod("compute.static.filters", "SCAN2", function(object, exclude.dbsnp=TRUE
 # cells is useful to improve phasing and the final phase decision should be
 # consistent across single cells.
 read.and.annotate.integrated.table <- function(path, sample.id, region=NULL, quiet=FALSE) {
-    tr <- read.table.1sample(path, sample.id, n.meta.cols=18, region=region, quiet=quiet)
+    tr <- read.table.1sample(path, sample.id, n.meta.cols=25, region=region, quiet=quiet)
     setindex(tr, resampled.training.site)
 
     # Add some convenient calculations
