@@ -199,7 +199,7 @@ annotate.gatk <- function(gatk, gatk.counts, genome.string, genome.object, add.m
 
 # 'gatk' is a data.table to be modified by reference
 annotate.gatk.lowmq <- function(gatk, path, bulk, region, quiet=FALSE) {
-    lowmq <- read.table.1sample(path, sample.id=bulk, region=region, quiet=quiet)
+    lowmq <- read.table.1sample(path, sample.id=bulk, region=region, n.meta.cols=5, quiet=quiet)
     data.table::setkey(lowmq, chr, pos, refnt, altnt)
 
     gatk[lowmq, on=.(chr,pos,refnt,altnt), balt.lowmq := i.scalt]
