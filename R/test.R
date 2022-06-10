@@ -90,6 +90,7 @@ test.output <- function(pipeline.output, test.data=c('legacy_tiny', 'legacy_chr2
             legacy.rda <- paste0(custom$path, '/', mt, '_somatic_genotypes.rda')
         }
 
+        l <- get(load(legacy.rda))
         cat(' MUTTYPE =', mt, '-------------------------------------------\n')
 
         # necessary to look at a subset of the legacy output and pipeline
