@@ -690,13 +690,14 @@ setMethod("compute.fdr", "SCAN2", function(object, path, mode=c('legacy', 'new')
         # candidate mutation sites with the same DP and VAF as the site in question.
         # Legacy computation finds min FDR over all alphas and is too slow for all sites.
         if (mode == 'legacy') {
+            sfp <- object@static.filter.params[['snv']]
             object@gatk[
                 muttype == mt &
                 balt == 0 &
                 bulk.gt == '0/0' &
                 dbsnp == '.' &
-                scalt >= object@static.filter.params[[mt]]$min.sc.alt &
-                dp >= object@static.filter.params[[mt]]$min.sc.dp,
+                scalt >= sfp$min.sc.alt &
+                dp >= sfp$min.sc.dp,
                 c('lysis.fdr', 'mda.fdr') := 
                     compute.fdr.legacy(altreads=scalt, dp=dp, gp.mu=match.ab(af=af, gp.mu=gp.mu),
                                        gp.sd=gp.sd, nt=nt, na=na, verbose=!quiet)]
@@ -708,16 +709,9 @@ setMethod("compute.fdr", "SCAN2", function(object, path, mode=c('legacy', 'new')
                 balt == 0 &
                 bulk.gt == '0/0' &
                 dbsnp == '.' &
-                scalt >= object@static.filter.params[[mt]]$min.sc.alt &
-                dp >= object@static.filter.params[[mt]]$min.sc.dp])
+                scalt >= sfp$min.sc.alt &
+                dp >= sfp$min.sc.dp])
         } else if (mode == 'new') {
-            # XXX: TODO: calculate adjusted NA/NT values for hSNPs. Equivalent to
-            # previous leave-one-out approaches, because AB estimation always leaves
-            # out the site being estimated (whether hSNP or somatic candidate).
-            #
-            # HOWEVER, this FDR heuristic on hSNPs IS NOT a good way to actually call
-            # germline hSNPs if that is your goal. These FDR heuristics are tuned to
-            # the specific set of CANDIDATE SOMATIC MUTATIONS detected for this cell.
             object@gatk[muttype == mt, c('lysis.fdr', 'mda.fdr') :=
                 list(lysis.pv*na / (lysis.pv*na + lysis.beta*nt),
                     mda.pv*na / (mda.pv*na + mda.beta*nt))]
