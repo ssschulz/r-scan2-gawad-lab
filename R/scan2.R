@@ -644,7 +644,7 @@ setMethod("compute.fdr.prior.data", "SCAN2", function(object, mode=c('legacy', '
                 dp >= sfp$min.sc.dp &
                 bulk.dp >= sfp$min.bulk.dp &
                 (is.na(balt.lowmq) | balt.lowmq <= sfp$max.bulk.alt)]
-            hets=object@gatk[muttype == mt & training.site == TRUE & scalt >= min.sc.alt]
+            hets=object@gatk[muttype == mt & training.site == TRUE & scalt >= sfp$min.sc.alt]
         } else {
             hets <- object@gatk[muttype == mt & somatic.candidate == TRUE]
         }
