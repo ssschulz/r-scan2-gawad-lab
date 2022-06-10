@@ -624,35 +624,29 @@ setMethod("compute.fdr.prior.data", "SCAN2", function(object, mode=c('legacy', '
     check.slots(object, c('gatk', 'static.filter.params'))
 
     mode <- match.arg(mode)
+    if (!('static.filter' %in% colnames(object@gatk)))
+        stop('must compute static filters before running compute.fdr.priors')
 
     muttypes <- c('snv', 'indel')
-
     object@fdr.prior.data <- setNames(lapply(muttypes, function(mt) {
-        # FIXME: after integrated table, should probably just use somatic.candidate
-        # column here.
         if (mode == 'legacy') {
             # in legacy mode, only candidate sites passing a small set of pre-genotyping
-            # crtieria were used.
-            min.sc.alt <- object@static.filter.params[[mt]]$min.sc.alt
-            min.sc.dp <- object@static.filter.params[[mt]]$min.sc.dp
-            min.bulk.dp <- object@static.filter.params[[mt]]$min.bulk.dp
-            max.bulk.alt <- object@static.filter.params[[mt]]$max.bulk.alt
+            # crtieria were used. also, notably, indel-specific hard filters (the only one
+            # was dp >= 10 instead of dp >= 6) was not used here even though it should've
+            # been.
+            sfp <- object@static.filter.params[['snv']]
             cand <- object@gatk[
                 muttype == mt &
-                balt <= max.bulk.alt &
+                balt <= sfp$max.bulk.alt &
                 bulk.gt == '0/0' &
                 dbsnp == '.' &
-                scalt >= min.sc.alt &
-                dp >= min.sc.dp &
-                bulk.dp >= min.bulk.dp &
-                (is.na(balt.lowmq) | balt.lowmq <= max.bulk.alt)]
+                scalt >= sfp$min.sc.alt &
+                dp >= sfp$min.sc.dp &
+                bulk.dp >= sfp$min.bulk.dp &
+                (is.na(balt.lowmq) | balt.lowmq <= sfp$max.bulk.alt)]
             hets=object@gatk[muttype == mt & training.site == TRUE & scalt >= min.sc.alt]
         } else {
-            stop("only the legacy mode is currently implemented. check back soon.")
-            # non-legacy mode will apply static filter params, which is almost what is
-            # done above.
-            if (!('static.filter' %in% colnames(object@gatk)))
-                stop('must compute static filters before running compute.fdr.priors')
+            hets <- object@gatk[muttype == mt & somatic.candidate == TRUE]
         }
     
         # Add the mode used to the fdr prior data structure
