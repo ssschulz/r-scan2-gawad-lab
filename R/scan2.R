@@ -984,7 +984,8 @@ setMethod("call.mutations", "SCAN2", function(object, target.fdr=0.01, mode=c('n
     object <- compute.fdr(object, mode=mode, quiet=quiet)
 
     # Pass somatic mutations
-    object@gatk[, pass := static.filter == TRUE & lysis.fdr <= target.fdr & mda.fdr <= target.fdr]
+    object@gatk[, pass := static.filter == TRUE &
+        lysis.fdr <= target.fdr & mda.fdr <= target.fdr]
 
     # Pass germline heterozygous sites using L-O-O for sensitivity estimation
     object@gatk[resampled.training.site == TRUE,
