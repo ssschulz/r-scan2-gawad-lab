@@ -267,7 +267,7 @@ annotate.gatk.panel <- function(gatk, panel.path, region=NULL, quiet=FALSE) {
             c('nalleles', 'unique.donors', 'unique.cells', 'unique.bulks', 'max.out', 'sum.out', 'sum.bulk') :=
                 list(i.nalleles, i.unique.donors, i.unique.cells, i.unique.bulks, i.max.out, i.sum.out, i.sum.bulk)]
     } else {
-        gatk[panel,
+        gatk[,
             c('nalleles', 'unique.donors', 'unique.cells', 'unique.bulks', 'max.out', 'sum.out', 'sum.bulk') :=
                 list(0, 0, 0, 0, 0, 0, 0)]
     }

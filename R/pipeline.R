@@ -31,16 +31,10 @@ run.pipeline <- function(
     abfits,
     sccigars, bulkcigars, trainingcigars,
     genome,
-    tmpsave.rda,
     config.yaml=NULL,
     grs=tileGenome(seqlengths=seqinfo(genome.string.to.bsgenome.object(genome))[as.character(1:22)], tilewidth=10e6, cut.last.tile.in.chrom=TRUE),
     legacy=FALSE, report.mem=TRUE, verbose=TRUE)
 {
-    if (!missing(tmpsave.rda)) {
-        if (file.exists(tmpsave.rda))
-            stop('temporary save file tmpsave.rda already exists, please delete it first')
-    }
-
     cat('Starting chunked SCAN2 pipeline on', length(grs), 'chunks\n')
     cat('Setting OpenBLAS corecount to 1. This prevents multithreaded matrix multiplication in chunks where it is undesired.\n')
     RhpcBLASctl::blas_set_num_threads(1)
@@ -115,10 +109,6 @@ run.pipeline <- function(
                            # has a different random seed.
     })
     cat("Chunked pipeline complete.\n")
-    if (!missing(tmpsave.rda)) {
-        cat('Saving pre-merged chunks to', tmpsave.rda, '\n')
-        save(xs, file=tmpsave.rda)
-    }
 
     x <- do.call(concat, xs)
     x <- call.mutations(x, target.fdr=0.01, mode=ifelse(legacy, 'legacy', 'new'), quiet=!verbose)
