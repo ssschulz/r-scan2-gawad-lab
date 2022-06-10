@@ -38,7 +38,7 @@ read.table.1sample <- function(path, sample.id, region=NULL, n.meta.cols=25, qui
     if (n.meta.cols == 25) {
         cols.to.read[6:25] <- c('numeric', 'numeric', 'character', 'integer',
             'integer', 'integer', 'numeric', 'character', 'character', 'logical',
-            'integer', 'character', 'logical', rep('integer', 7))
+            'integer', 'character', rep('integer', 7), 'logical')
     }
     # Read 3 columns for the single cell, 3 columns for bulk
     cols.to.read[sample.idx + 0:2] <- c('character', 'integer', 'integer')
