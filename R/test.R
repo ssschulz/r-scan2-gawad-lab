@@ -103,7 +103,7 @@ test.output <- function(pipeline.output, custom, test.data=c('legacy_tiny', 'leg
         # was applied after processing, so the lower DP sites will be present.
         l <- l[l$bulk.dp >= 11 & (is.na(l$alt.1.lowmq) | l$alt.1.lowmq == 0) & l$dp >= 6,]
     
-        sfp <- pipeline.output$static.filter.params[[mt]]
+        sfp <- pipeline.output@static.filter.params[[mt]]
         p <- pipeline.output@gatk[
                 muttype == mt &
                 bulk.dp >= sfp$min.bulk.dp &
