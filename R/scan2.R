@@ -980,7 +980,7 @@ setMethod("call.mutations", "SCAN2", function(object, target.fdr=0.01, mode=c('n
 
     mode <- match.arg(mode)
 
-    object <- compute.fdr.prior.data(object, mode='legacy', quiet=quiet) # there is no non-legacy mode
+    object <- compute.fdr.prior.data(object, mode=mode, quiet=quiet) # there is no non-legacy mode
     object <- compute.fdr(object, mode=mode, quiet=quiet)
 
     # Pass somatic mutations
