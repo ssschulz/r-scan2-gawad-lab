@@ -78,20 +78,20 @@ testpipe <- function(test.data=c('legacy_tiny', 'legacy_chr22', 'legacy_custom')
         genome='hs37d5', grs=grs, verbose=TRUE)
 }
 
-test.output <- function(pipeline.output, custom, test.data=c('legacy_tiny', 'legacy_chr22', 'legacy_custom')) {
+test.output <- function(pipeline.output, test.data=c('legacy_tiny', 'legacy_chr22', 'legacy_custom'), custom=NULL) {
     test.data <- match.arg(test.data)
 
-    if (test.data != 'legacy_custom') {
-        legacy.rda <-
-            system.file('extdata', paste0(test.data, '_somatic_genotypes.rda'),
-                package='scan2')
-    } else {
-        legacy.rda <- paste0(custom$path, '/', 'somatic_genotypes.rda')
-    }
-    l <- get(load(legacy.rda, verb=F))
-
     for (mt in c('snv', 'indel')) {
+        if (test.data != 'legacy_custom') {
+            legacy.rda <-
+                system.file('extdata', paste0(test.data, '_', mt, '_somatic_genotypes.rda'),
+                    package='scan2')
+        } else {
+            legacy.rda <- paste0(custom$path, '/', mt, '_somatic_genotypes.rda')
+        }
+
         cat(' MUTTYPE =', mt, '-------------------------------------------\n')
+
         # necessary to look at a subset of the legacy output and pipeline
         # output. in the new pipeline's legacy mode, sites that are not admitted
         # for FDR prior estimation are *also* not scored for FDR. these sites are
@@ -103,9 +103,12 @@ test.output <- function(pipeline.output, custom, test.data=c('legacy_tiny', 'leg
         # was applied after processing, so the lower DP sites will be present.
         l <- l[l$bulk.dp >= 11 & (is.na(l$alt.1.lowmq) | l$alt.1.lowmq == 0) & l$dp >= 6,]
     
-        sfp <- pipeline.output@static.filter.params[[mt]]
+        # always use snv filters here: legacy code did not apply DP >= 10 (the
+        # only difference between SNV and indel hard filters) until after analysis.
+        sfp <- pipeline.output@static.filter.params[['snv']]
         p <- pipeline.output@gatk[
                 muttype == mt &
+                (muttype == 'snv' | !is.na(nalleles)) & # sites not in the panel were removed by merge(), but only for indels
                 bulk.dp >= sfp$min.bulk.dp &
                 (is.na(balt.lowmq) | balt.lowmq == 0) &
                 balt == 0 & bulk.gt == '0/0' &
