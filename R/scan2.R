@@ -906,7 +906,7 @@ setMethod("compute.static.filters", "SCAN2", function(object, exclude.dbsnp=TRUE
 
         object@gatk[muttype == mt, c('cigar.id.test', 'cigar.hs.test', 'lowmq.test',
                 'dp.test', 'abc.test', 'min.sc.alt.test', 'max.bulk.alt.test',
-                'dbsnp.test') :=
+                'dbsnp.test', 'csf.test') :=
                     list(id.score > qid,
                         hs.score > qhs,
                         is.na(balt.lowmq) | balt.lowmq <= sfp$max.bulk.alt,
@@ -914,10 +914,11 @@ setMethod("compute.static.filters", "SCAN2", function(object, exclude.dbsnp=TRUE
                         abc.pv > 0.05,
                         scalt >= sfp$min.sc.alt,
                         balt <= sfp$max.bulk.alt,
-                        !sfp$exclude.dbsnp | dbsnp == '.')]
+                        !sfp$exclude.dbsnp | dbsnp == '.',
+                        muttype == 'snv' | unique.donors <= 1 | max.out <= 2)]
         object@gatk[, static.filter :=
             cigar.id.test & cigar.hs.test & lowmq.test & dp.test &
-            abc.test & min.sc.alt.test & max.bulk.alt.test & dbsnp.test]
+            abc.test & min.sc.alt.test & max.bulk.alt.test & dbsnp.test & csf.test]
     }
     object
 })
