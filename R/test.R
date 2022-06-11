@@ -127,7 +127,7 @@ test.output <- function(pipeline.output,
         p <- pipeline.output@gatk[
                 muttype == mt &
                 # indel sites not in the panel (nalleles=0) were removed by merge() in legacy
-                (muttype == 'snv' | nalleles == 0) &
+                (muttype == 'snv' | nalleles > 0) &
                 bulk.dp >= sfp$min.bulk.dp &
                 (is.na(balt.lowmq) | balt.lowmq == 0) &
                 balt == 0 & bulk.gt == '0/0' &
