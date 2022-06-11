@@ -56,6 +56,7 @@ testpipe <- function(test.data=c('legacy_tiny', 'legacy_chr22', 'legacy_custom')
     mmq60 <- fpath('mmq60.tab.gz')
     mmq1 <- fpath('mmq1.tab.gz')
     phased.vcf <- fpath('phased_all.vcf.gz')
+    panel <- fpath('cross_sample_panel.tab.gz')
     abfits <- fpath('fits.rda')
     sccigars <- fpath('sc_somatic_and_hsnp_spikein_cigars.tab.gz')
     bulkcigars <- fpath('bulk_somatic_and_hsnp_spikein_cigars.tab.gz')
@@ -80,8 +81,8 @@ testpipe <- function(test.data=c('legacy_tiny', 'legacy_chr22', 'legacy_custom')
     run.pipeline(sc.sample=sc.sample, bulk.sample=bulk.sample,
         int.tab=int.tab.gz.path, abfits=abfits,
         sccigars=sccigars, bulkcigars=bulkcigars,
-        trainingcigars=trainingcigars,
-        legacy=legacy, genome='hs37d5', grs=grs, verbose=TRUE)
+        trainingcigars=trainingcigars, panel=panel,
+        legacy=legacy, genome='hs37d5', grs=grs, verbose=FALSE)
 }
 
 test.output <- function(pipeline.output, test.data=c('legacy_tiny', 'legacy_chr22', 'legacy_custom'), custom=NULL) {
