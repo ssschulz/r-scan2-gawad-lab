@@ -31,7 +31,13 @@ test.tol <- function(a, b, msg, tolerance=1e-6) {
 }
 
 
-testpipe <- function(test.data=c('legacy_tiny', 'legacy_chr22', 'legacy_custom'), verbose=FALSE, custom=NULL) {
+testpipe <- function(test.data=c('legacy_tiny', 'legacy_chr22', 'legacy_custom'), verbose=FALSE, custom=NULL, legacy=TRUE, n.cores=future::nbrOfWorkers())
+{
+    if (n.cores > 1) {
+        require(future)
+        future::plan(multicore, workers=n.cores)
+    }
+
     test.data <- match.arg(test.data)
     if (test.data == 'legacy_custom' & is.null(custom))
         stop('when test.data=legacy_custom, a list must be supplied to "custom"')
@@ -75,7 +81,7 @@ testpipe <- function(test.data=c('legacy_tiny', 'legacy_chr22', 'legacy_custom')
         int.tab=int.tab.gz.path, abfits=abfits,
         sccigars=sccigars, bulkcigars=bulkcigars,
         trainingcigars=trainingcigars,
-        genome='hs37d5', grs=grs, verbose=TRUE)
+        legacy=legacy, genome='hs37d5', grs=grs, verbose=TRUE)
 }
 
 test.output <- function(pipeline.output, test.data=c('legacy_tiny', 'legacy_chr22', 'legacy_custom'), custom=NULL) {
