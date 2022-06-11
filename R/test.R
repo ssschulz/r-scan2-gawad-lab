@@ -31,7 +31,7 @@ test.tol <- function(a, b, msg, tolerance=1e-6) {
 }
 
 
-testpipe <- function(test.data=c('legacy_tiny', 'legacy_chr22', 'legacy_custom'), verbose=FALSE, custom=NULL, legacy=TRUE, n.cores=future::nbrOfWorkers())
+testpipe <- function(test.data=c('legacy_tiny', 'legacy_chr22', 'legacy_custom'), verbose=FALSE, custom=NULL, legacy=TRUE, n.cores=future::availableCores())
 {
     if (n.cores > 1) {
         require(future)
