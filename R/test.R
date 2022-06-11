@@ -74,20 +74,30 @@ testpipe <- function(test.data=c('legacy_tiny', 'legacy_chr22', 'legacy_custom')
 
     int.tab.path <- tempfile()
     int.tab.gz.path <- paste0(int.tab.path, '.gz')
-    x <- make.integrated.table(mmq60.tab=mmq60, mmq1.tab=mmq1, phased.vcf=phased.vcf,
+    x <- make.integrated.table(mmq60.tab=mmq60, mmq1.tab=mmq1,
+        phased.vcf=phased.vcf, panel=panel,
         bulk.sample=bulk.sample, genome='hs37d5', grs=grs)
     write.integrated.table(inttab=x$gatk, out.tab=int.tab.path, out.tab.gz=int.tab.gz.path)
 
-    run.pipeline(sc.sample=sc.sample, bulk.sample=bulk.sample,
+    ret <- run.pipeline(sc.sample=sc.sample, bulk.sample=bulk.sample,
         int.tab=int.tab.gz.path, abfits=abfits,
         sccigars=sccigars, bulkcigars=bulkcigars,
-        trainingcigars=trainingcigars, panel=panel,
+        trainingcigars=trainingcigars,
         legacy=legacy, genome='hs37d5', grs=grs, verbose=FALSE)
+
+    attr(ret, 'testpipe.legacy') <- legacy
+    attr(ret, 'testpipe.test.data') <- test.data
+    attr(ret, 'testpipe.custom') <- custom
+
+    ret
 }
 
-test.output <- function(pipeline.output, test.data=c('legacy_tiny', 'legacy_chr22', 'legacy_custom'), custom=NULL) {
-    test.data <- match.arg(test.data)
 
+test.output <- function(pipeline.output,
+    test.data=attr(pipeline.output, 'testpipe.test.data'),
+    custom=attr(pipeline.output, 'testpipe.custom'),
+    legacy=attr(pipeline.output, 'legacy'))
+{
     for (mt in c('snv', 'indel')) {
         if (test.data != 'legacy_custom') {
             legacy.rda <-
