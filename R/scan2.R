@@ -997,8 +997,19 @@ setMethod("call.mutations", "SCAN2", function(object, target.fdr=0.01, mode=c('n
             (cigar.id.test & cigar.hs.test & dp.test & abc.test & min.sc.alt.test) &
             lysis.fdr <= target.fdr & mda.fdr <= target.fdr]
 
+    # NAs are especially present in legacy output where not all sites
+    # have CIGAR data, not all sites have FDR values and sites not in
+    # the cross sample panel (which were originally removed by merge())
+    # may have NAs (though they shouldn't; 0-fills should be used).
     object@call.mutations <- c(
-        as.list(unlist(object@gatk[muttype == 'snv', .(snv.pass=as.integer(sum(pass)), snv.training.pass=as.integer(sum(training.pass, na.rm=TRUE)), snv.training.sens=mean(training.pass, na.rm=TRUE))])),
-        as.list(unlist(object@gatk[muttype == 'indel', .(indel.pass=as.integer(sum(pass)), indel.training.pass=as.integer(sum(training.pass, na.rm=TRUE)), indel.training.sens=mean(training.pass, na.rm=TRUE))])),
+        as.list(unlist(object@gatk[muttype == 'snv',
+            .(snv.pass=as.integer(sum(pass, na.rm=TRUE)),
+              snv.training.pass=as.integer(sum(training.pass, na.rm=TRUE)),
+              snv.training.sens=mean(training.pass, na.rm=TRUE))])),
+        as.list(unlist(object@gatk[muttype == 'indel',
+            .(indel.pass=as.integer(sum(pass, na.rm=TRUE)),
+              indel.training.pass=as.integer(sum(training.pass, na.rm=TRUE)),
+              indel.training.sens=mean(training.pass, na.rm=TRUE))])),
         list(mode=mode, target.fdr=target.fdr))
-    object })
+    object
+})
