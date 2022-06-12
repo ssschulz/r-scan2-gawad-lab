@@ -6,7 +6,6 @@
 # a subset of the GATK table. The table is tabix indexed, so this can
 # be done quickly.
 digest.depth.2sample <- function(path, sc.sample, bulk.sample, clamp.dp=500, region=NULL, quiet=FALSE) {
-    # Step 1: just get the header and detect the columns corresponding to sample.id
     tf <- Rsamtools::TabixFile(path)
     open(tf)
     header <- read.tabix.header(tf)
@@ -33,7 +32,6 @@ digest.depth.2sample <- function(path, sc.sample, bulk.sample, clamp.dp=500, reg
         }
     }
     
-    # Step 2: really read the tables in, but only the relevant columns
     cols.to.read <- rep("NULL", length(col.strings))
     # We don't care about chromosome/position here, only depth counts
     cols.to.read[c(sc.sample.idx, bulk.sample.idx)] <- c('integer', 'integer')
