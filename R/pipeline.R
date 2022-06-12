@@ -161,3 +161,35 @@ make.integrated.table <- function(mmq60.tab, mmq1.tab, phased.vcf,
     resampling.details <- gatk.resample.phased.sites(gatk)
     list(gatk=gatk, resampling.details=resampling.details)
 }
+
+
+digest.depth.profile <- function(path, sc.sample, bulk.sample,
+    genome,
+    clamp.dp=500,
+    genome.object=genome.string.to.bsgenome.object(genome),
+    grs=tileGenome(seqlengths=seqinfo(genome.object)[as.character(1:22)], tilewidth=10e6, cut.last.tile.in.chrom=TRUE),
+    quiet=TRUE, report.mem=TRUE)
+{
+    cat('Digesting depth profile using', length(grs), 'chunks.\n')
+    cat('Parallelizing with', future::nbrOfWorkers(), 'cores.\n')
+
+    progressr::with_progress({
+        p <- progressr::progressor(along=1:length(grs))
+        p(amount=0, class='sticky', perfcheck(print.header=TRUE))
+        xs <- future.apply::future_lapply(1:length(grs), function(i) {
+            gr <- grs[i,]
+
+            pc <- perfcheck(paste('data',i),
+                dptab <- digest.depth.2sample(path=path, sc.sample=sample.id, bulk.sample=bulk.sample, clamp.dp=clamp.dp, region=gr, quiet=quiet),
+                report.mem=report.mem)
+            p(class='sticky', amount=1, pc)
+
+            dptab
+        })
+    })
+
+    # Sum all of the tables
+    dptab <- Reduce(`+`, xs)
+
+    list(dptab=dptab, clamp.dp=clamp.dp)
+}
