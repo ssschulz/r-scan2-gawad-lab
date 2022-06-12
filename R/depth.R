@@ -13,11 +13,11 @@ read.table.1sample <- function(path, sc.sample, bulk.sample, clamp.dp=500, regio
     col.strings <- strsplit(header, '\t')[[1]]
 
     if (!(sc.sample %in% col.strings))
-        stop(paste('single cell sample' sc.sample, 'not found in table'))
+        stop(paste('single cell sample', sc.sample, 'not found in table'))
     sc.sample.idx <- which(col.strings == sc.sample)
 
     if (!(bulk.sample %in% col.strings))
-        stop(paste('bulk sample' bulk.sample, 'not found in table'))
+        stop(paste('bulk sample', bulk.sample, 'not found in table'))
     bulk.sample.idx <- which(col.strings == bulk.sample)
 
     if (!quiet) {
