@@ -30,6 +30,7 @@ run.pipeline <- function(
     int.tab,
     abfits,
     sccigars, bulkcigars, trainingcigars,
+    dptab,
     genome,
     config.yaml=NULL,
     grs=tileGenome(seqlengths=seqinfo(genome.string.to.bsgenome.object(genome))[as.character(1:22)], tilewidth=10e6, cut.last.tile.in.chrom=TRUE),
