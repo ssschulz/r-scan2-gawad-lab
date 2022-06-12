@@ -5,7 +5,7 @@
 # region can be a GRanges object with a single interval to read only
 # a subset of the GATK table. The table is tabix indexed, so this can
 # be done quickly.
-read.depth.1sample <- function(path, sc.sample, bulk.sample, clamp.dp=500, region=NULL, quiet=FALSE) {
+digest.depth.2sample <- function(path, sc.sample, bulk.sample, clamp.dp=500, region=NULL, quiet=FALSE) {
     # Step 1: just get the header and detect the columns corresponding to sample.id
     tf <- Rsamtools::TabixFile(path)
     open(tf)
