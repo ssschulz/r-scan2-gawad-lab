@@ -40,17 +40,21 @@ digest.depth.2sample <- function(path, sc.sample, bulk.sample, clamp.dp=500, reg
     gatk.doc <- read.tabix.data(tf=tf, region=region, header=header, quiet=quiet, colClasses=cols.to.read)
     close(tf)
 
-    # Standardize on 1st column: single cell, 2nd column: bulk
-    setcolorder(gatk.doc, c(sc.sample, bulk.sample))
+    if (nrow(gatk.doc) > 0) {
+        # Standardize on 1st column: single cell, 2nd column: bulk
+        setcolorder(gatk.doc, c(sc.sample, bulk.sample))
 
-    # Set maximum depth to clamp.dp
-    gatk.doc <- apply(gatk.doc, 2, pmin, clamp.dp)
+        # Set maximum depth to clamp.dp
+        gatk.doc <- apply(gatk.doc, 2, pmin, clamp.dp)
 
-    # add points (0,0) ... (clamp.dp,clamp.dp) to the gatk depthofcoverage output
-    # so that the result of R's table() will at least be (clamp.dp x clamp.dp)
-    # in dimension.
-    # subtracting one from the diagonal easily removes this afterward.
-    gatk.doc <- rbind(gatk.doc, data.table(0:clamp.dp, 0:clamp.dp), use.names=FALSE)
+        # add points (0,0) ... (clamp.dp,clamp.dp) to the gatk depthofcoverage output
+        # so that the result of R's table() will at least be (clamp.dp x clamp.dp)
+        # in dimension.
+        # subtracting one from the diagonal easily removes this afterward.
+        gatk.doc <- rbind(gatk.doc, data.table(0:clamp.dp, 0:clamp.dp), use.names=FALSE)
+    } else {
+        gatk.doc <- data.table(0:clamp.dp, 0:clamp.dp)
+    }
 
     dptab <- table(gatk.doc) - diag(clamp.dp+1)
 
