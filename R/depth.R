@@ -43,7 +43,7 @@ read.depth.1sample <- function(path, sc.sample, bulk.sample, clamp.dp=500, regio
     close(tf)
 
     # Standardize on 1st column: single cell, 2nd column: bulk
-    setcolorder(gatk.doc, c(sc.sample.id, bulk.sample.id))
+    setcolorder(gatk.doc, c(sc.sample, bulk.sample))
 
     # Set maximum depth to clamp.dp
     gatk.doc <- apply(gatk.doc, 2, pmin, clamp.dp)
