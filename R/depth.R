@@ -45,7 +45,7 @@ digest.depth.2sample <- function(path, sc.sample, bulk.sample, clamp.dp=500, reg
         setcolorder(gatk.doc, c(sc.sample, bulk.sample))
 
         # Set maximum depth to clamp.dp
-        gatk.doc <- apply(gatk.doc, 2, pmin, clamp.dp)
+        gatk.doc <- gatk.doc[, lapply(.SD, pmin, clamp.dp)]
 
         # add points (0,0) ... (clamp.dp,clamp.dp) to the gatk depthofcoverage output
         # so that the result of R's table() will at least be (clamp.dp x clamp.dp)
