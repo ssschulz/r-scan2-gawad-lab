@@ -179,7 +179,7 @@ digest.depth.profile <- function(path, sc.sample, bulk.sample,
         xs <- future.apply::future_lapply(1:length(grs), function(i) {
             gr <- grs[i,]
 
-            pc <- perfcheck(paste('data',i),
+            pc <- perfcheck(paste('digest.depth.2sample',i),
                 dptab <- digest.depth.2sample(path=path, sc.sample=sc.sample,
                     bulk.sample=bulk.sample, clamp.dp=clamp.dp, region=gr, quiet=quiet),
                 report.mem=report.mem)
