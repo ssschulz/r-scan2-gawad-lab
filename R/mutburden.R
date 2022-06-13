@@ -35,8 +35,8 @@ setMethod("compute.mutburden", "SCAN2", function(object, gbp.per.genome=get.gbp.
             ret <- data.frame(
                 ncalls=NA,
                 callable.sens=NA,
-                callable.bp=sapply(split(dptab[,-(1:sfp$min.bulk.dp)], rowqs), sum)
-            )
+                callable.bp=NA
+            )[1,1,1]
         } else {
             # somatic sites
             s <- object@gatk[pass == TRUE & muttype == mt]
