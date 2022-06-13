@@ -76,7 +76,7 @@ setMethod("compute.mutburden", "SCAN2", function(object, gbp.per.genome=get.gbp.
         # Sensitivity estimates only from germline training sites with the same
         # depth cutoffs as somatic candidates. Detailed depth tables will be used
         # to ensure extrapolation to the rest of the genome is equitable.
-        ret$callable.burden <- ret$ncalls / ret$callable.gsens
+        ret$callable.burden <- ret$ncalls / ret$callable.sens
         # dividing by 2 makes it haploid gb
         ret$rate.per.gb <- ret$callable.burden / ret$callable.bp * 1e9/2
         ret$burden <- ret$rate.per.gb * gbp.per.genome
