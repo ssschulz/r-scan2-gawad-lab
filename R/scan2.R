@@ -24,7 +24,9 @@ setClass("SCAN2", slots=c(
     excess.cigar.scores='null.or.list',
     fdr.prior.data='null.or.list',
     fdr='null.or.list',
-    call.mutations='null.or.list'))
+    call.mutations='null.or.list',
+    depth.profile='null.or.list',
+    mutburden='null.or.list'))
 
 
 # "flip" the GP mu around 0 to best match the AF of each candidate mutation. 
@@ -75,7 +77,8 @@ make.scan <- function(single.cell, bulk, genome=c('hs37d5', 'hg38', 'mm10'), reg
         static.filter.params=NULL,
         fdr.prior.data=NULL,
         fdr=NULL,
-        call.mutations=NULL)
+        call.mutations=NULL,
+        mutburden=NULL)
 }
 
 
@@ -297,11 +300,10 @@ setMethod("show", "SCAN2", function(object) {
             object@call.mutations$mode,
             object@call.mutations$target.fdr))
         for (mt in c('snv', 'indel')) {
-            cat(sprintf("#       %6s: %8d called %8d resamp. training calls %3.2f%% training sensitivity\n",
+            cat(sprintf("#       %6s: %8d called %8d resampled training calls\n"
                 mt,
                 as.integer(object@call.mutations[[paste0(mt, '.pass')]]),
-                as.integer(object@call.mutations[[paste0(mt, '.training.pass')]]),
-                100*object@call.mutations[[paste0(mt, '.training.sens')]]))
+                as.integer(object@call.mutations[[paste0(mt, '.training.pass')]])))
         }
     }
 })
@@ -991,7 +993,7 @@ setMethod("call.mutations", "SCAN2", function(object, target.fdr=0.01, mode=c('n
 
     # Pass germline heterozygous sites using L-O-O for sensitivity estimation
     object@gatk[resampled.training.site == TRUE,
-        training.pass := 
+        resampled.training.pass := 
             # same tests as static.filter EXCEPT dbsnp.test, lowmq.test, max.bulk.alt.test,
             # which mostly will fail at training het germline sites.
             (cigar.id.test & cigar.hs.test & dp.test & abc.test & min.sc.alt.test) &
@@ -1004,12 +1006,25 @@ setMethod("call.mutations", "SCAN2", function(object, target.fdr=0.01, mode=c('n
     object@call.mutations <- c(
         as.list(unlist(object@gatk[muttype == 'snv',
             .(snv.pass=as.integer(sum(pass, na.rm=TRUE)),
-              snv.training.pass=as.integer(sum(training.pass, na.rm=TRUE)),
-              snv.training.sens=mean(training.pass, na.rm=TRUE))])),
+              snv.resampled.training.pass=as.integer(sum(resampled.training.pass, na.rm=TRUE)))])),
         as.list(unlist(object@gatk[muttype == 'indel',
             .(indel.pass=as.integer(sum(pass, na.rm=TRUE)),
-              indel.training.pass=as.integer(sum(training.pass, na.rm=TRUE)),
-              indel.training.sens=mean(training.pass, na.rm=TRUE))])),
+              indel.resampled.training.pass=as.integer(sum(resampled.training.pass, na.rm=TRUE)))])),
         list(mode=mode, target.fdr=target.fdr))
+    object
+})
+
+
+setGeneric("add.depth.profile", function(object, depth.path)
+        standardGeneric("add.depth.profile"))
+setMethod("add.depth.profile", "SCAN2", function(object, depth.path) {
+    vars <- load(depth.path)  # should contain two objects: dptab and clamp.dp
+    if (!all(c('dptab', 'clamp.dp') %in% vars))
+        stop('depth.profile RDA file expected to contain dptab and clamp.dp objects')
+
+    object@depth.profile <- list(
+        dptab=dptab,
+        clamp.dp=clamp.dp
+    )
     object
 })
