@@ -300,7 +300,7 @@ setMethod("show", "SCAN2", function(object) {
         for (mt in names(object@fdr.prior.data)) {
             sfp <- object@static.filter.params[[mt]]
             dptab <- object@depth.profile$dptab
-            cat(sprintf("#       %6s: genome <:   %0.1f min. bulk DP,   %0.1f min. sc DP,   %0.1f either\n",
+            cat(sprintf("#       %6s: genome <:   min. bulk DP %0.1f%%,   min. sc DP %0.1f%%,   either %0.1f%%\n",
                 mt,
                 100*sum(dptab[, 1:sfp$min.bulk.dp])/sum(dptab),
                 100*sum(dptab[1:sfp$min.sc.dp,])/sum(dptab),
