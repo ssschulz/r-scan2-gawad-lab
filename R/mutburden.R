@@ -1,8 +1,17 @@
 # Number of haploid basepairs (in billions) per genome. The default
 # value of 5.845001134 corresponds to AUTOSOMES ONLY as determined by GRCh37
-setGeneric("compute.mutburden", function(object, gbp.per.genome=5.845001134, quiet=FALSE)
+get.gbp.by.genome <- function(object) {
+    if (object@genome.string == 'hs37d5') {
+        return(5.845001134)
+    } else {
+        stop(paste('gbp not yet implemented for genome', object@genome.string))
+    }
+}
+
+
+setGeneric("compute.mutburden", function(object, gbp.per.genome=get.gbp.by.genome(object), quiet=FALSE)
         standardGeneric("compute.mutburden"))
-setMethod("compute.mutburden", "SCAN2", function(object, gbp.per.genome=5.845001134, quiet=FALSE) {
+setMethod("compute.mutburden", "SCAN2", function(object, gbp.per.genome=get.gbp.by.genome(object), quiet=FALSE) {
     check.slots(object, c('call.mutations', 'depth.profile'))
 
     muttypes <- c('snv', 'indel')
