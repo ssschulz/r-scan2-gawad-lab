@@ -292,6 +292,21 @@ setMethod("show", "SCAN2", function(object) {
         }
     }
 
+    cat("#   Depth profile: ")
+    if (is.null(object@depth.profile)) {
+        cat("(not added)\n")
+    } else {
+        for (mt in names(object@fdr.prior.data)) {
+            sfp <- object@static.filter.params[[mt]]
+            dptab <- object@depth.profile$dptab
+            cat(sprintf("#       %6s: genome <:   %0.1f min. bulk DP,   %0.1f min. sc DP,   %0.1f either\n",
+                mt,
+                100*sum(dptab[, 1:sfp$min.bulk.dp])/sum(dptab),
+                100*sum(dptab[1:sfp$min.sc.dp,])/sum(dptab),
+                100*(1 - (sum(dptab[(sfp$min.sc.dp+1):nrow(dptab),(sfp$min.bulk.dp+1):ncol(dptab)])/sum(dptab)))))
+        }
+    }
+
     cat("#   Somatic mutation calls: ")
     if (is.null(object@call.mutations)) {
         cat("(not called)\n")
@@ -300,10 +315,21 @@ setMethod("show", "SCAN2", function(object) {
             object@call.mutations$mode,
             object@call.mutations$target.fdr))
         for (mt in c('snv', 'indel')) {
-            cat(sprintf("#       %6s: %8d called %8d resampled training calls\n"
+            cat(sprintf("#       %6s: %8d called %8d resampled training calls\n",
                 mt,
                 as.integer(object@call.mutations[[paste0(mt, '.pass')]]),
                 as.integer(object@call.mutations[[paste0(mt, '.training.pass')]])))
+        }
+    }
+
+    cat("#   Somatic mutation burden: ")
+    if (is.null(object@mutburden)) {
+        cat("(not computed)\n")
+    } else {
+        for (mt in c('snv', 'indel')) {
+            mb <- object@mutburden[[mt]]
+            cat(sprintf("#       %6s: %6d somatic,   %0.1f estimated sens.,   %0.2f muts/haploid GB,   %0.2f muts per genome\n",
+                mt, mb$ncalls, mb$callable.sens, mb$rate.per.gb, mb$burden))
         }
     }
 })
