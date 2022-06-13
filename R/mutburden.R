@@ -36,7 +36,7 @@ setMethod("compute.mutburden", "SCAN2", function(object, gbp.per.genome=get.gbp.
                 ncalls=NA,
                 callable.sens=NA,
                 callable.bp=NA
-            )[1,1,1]
+            )[c(1,1,1),]
         } else {
             # somatic sites
             s <- object@gatk[pass == TRUE & muttype == mt]
