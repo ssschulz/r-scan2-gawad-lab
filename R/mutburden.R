@@ -83,4 +83,6 @@ setMethod("compute.mutburden", "SCAN2", function(object, gbp.per.genome=get.gbp.
         ret$pre.genotyping.burden <- pre.geno.burden
         ret
     }), muttypes)
+
+    object
 })
