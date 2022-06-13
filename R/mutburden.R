@@ -66,8 +66,7 @@ setMethod("compute.mutburden", "SCAN2", function(object, gbp.per.genome=get.gbp.
             # around can also be interesting.
             ret <- data.frame(
                 ncalls=sapply(qstouse, function(q) sum(s[dpq == q]$pass, na.rm=TRUE)),
-                callable.sens=g[bulk.dp >= sfp$min.bulk.dp,
-                    mean(resampled.training.pass, na.rm=TRUE), by=dpq],
+                callable.sens=sapply(qstouse, function(q) mean(g[bulk.dp >= sfp$min.bulk.dp & dpq == q]$resampled.training.pass, na.rm=TRUE)),
                 callable.bp=sapply(split(dptab[,-(1:sfp$min.bulk.dp)], rowqs), sum)
             )
         }
