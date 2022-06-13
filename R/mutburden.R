@@ -18,15 +18,15 @@ setMethod("compute.mutburden", "SCAN2", function(object, gbp.per.genome=get.gbp.
     object@mutburden[[mt]] <- setNames(lapply(muttypes, function(mt) {
         # [2] is the maximum burden; the minimum burden [1] is almost always ~0
         pre.geno.burden <- object@fdr.prior.data[[mt]]$burden[2]
-
-        # "callable" means:
-        # Sensitivity estimates only from germline training sites with the same
-        # depth cutoffs as somatic candidates. Detailed depth tables will be used
-        # to ensure extrapolation to the rest of the genome is equitable.
         sfp <- object@static.filter.params[[mt]]
     
         # germline sites
         g <- object@gatk[resampled.training.site == TRUE & muttype == mt]
+
+        # (single cell  x  bulk) depth table
+        dptab <- object@depth.profile$dptab
+        dptab <- dptab[1:min(max(g$dp)+1, nrow(dptab)),]
+
         # these computations rely on there being a reasonably large number
         # of germline sites tested. even 100 is very few; we expect more like
         # 100,000.
@@ -54,8 +54,6 @@ setMethod("compute.mutburden", "SCAN2", function(object, gbp.per.genome=get.gbp.
 
             # select the subset of the depth profile passing the bulk depth requirement
             # cut down dptab to the max value in g$dp (+1 because 1 corresponds to dp=0)
-            dptab <- object@depth.profile$dptab
-            dptab <- dptab[1:min(max(g$dp)+1, nrow(dptab)),]
             rowqs <- cut(0:(nrow(dptab)-1), qbreaks, include.lowest=T, labels=F)
             rowqs[rowqs==3] <- 2
     
@@ -74,11 +72,16 @@ setMethod("compute.mutburden", "SCAN2", function(object, gbp.per.genome=get.gbp.
             )
         }
 
+        # "callable" means:
+        # Sensitivity estimates only from germline training sites with the same
+        # depth cutoffs as somatic candidates. Detailed depth tables will be used
+        # to ensure extrapolation to the rest of the genome is equitable.
         ret$callable.burden <- ret$ncalls / ret$callable.gsens
         # dividing by 2 makes it haploid gb
         ret$rate.per.gb <- ret$callable.burden / ret$callable.bp * 1e9/2
         ret$burden <- ret$rate.per.gb * gbp.per.genome
         ret$somatic.sens <- ret$ncalls / ret$burden
+        ret$pre.genotyping.burden <- pre.geno.burden
         ret
     }), muttypes)
 })
