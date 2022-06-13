@@ -34,7 +34,8 @@ setMethod("compute.mutburden", "SCAN2", function(object, gbp.per.genome=5.845001
 
         # select the subset of the depth profile passing the bulk depth requirement
         # cut down dptab to the max value in g$dp (+1 because 1 corresponds to dp=0)
-        dptab <- object@depth.profile$dptab[1:min(max(g$dp)+1, nrow(dptab)),]
+        dptab <- object@depth.profile$dptab
+        dptab <- dptab[1:min(max(g$dp)+1, nrow(dptab)),]
         rowqs <- cut(0:(nrow(dptab)-1), qbreaks, include.lowest=T, labels=F)
         rowqs[rowqs==3] <- 2
 
