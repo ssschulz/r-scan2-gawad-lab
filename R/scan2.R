@@ -318,7 +318,7 @@ setMethod("show", "SCAN2", function(object) {
             cat(sprintf("#       %6s: %8d called %8d resampled training calls\n",
                 mt,
                 as.integer(object@call.mutations[[paste0(mt, '.pass')]]),
-                as.integer(object@call.mutations[[paste0(mt, '.training.pass')]])))
+                as.integer(object@call.mutations[[paste0(mt, '.resampled.training.pass')]])))
         }
     }
 
@@ -328,7 +328,7 @@ setMethod("show", "SCAN2", function(object) {
     } else {
         for (mt in c('snv', 'indel')) {
             mb <- object@mutburden[[mt]]
-            cat(sprintf("#       %6s: %6d somatic,   %0.1f estimated sens.,   %0.2f muts/haploid GB,   %0.2f muts per genome\n",
+            cat(sprintf("\n#       %6s: %6d somatic,   %0.1f estimated sens.,   %0.2f muts/haploid GB,   %0.2f muts per genome\n",
                 mt, mb$ncalls, mb$callable.sens, mb$rate.per.gb, mb$burden))
         }
     }
@@ -727,13 +727,14 @@ setMethod("compute.fdr", "SCAN2", function(object, path, mode=c('legacy', 'new')
         # Legacy computation finds min FDR over all alphas and is too slow for all sites.
         if (mode == 'legacy') {
             sfp <- object@static.filter.params[['snv']]
+            # legacy computed FDR only for (almost) candidate sites and het germline
+            # variants chosen for sensitivity calculation
             object@gatk[
                 muttype == mt &
-                balt == 0 &
-                bulk.gt == '0/0' &
-                dbsnp == '.' &
-                scalt >= sfp$min.sc.alt &
-                dp >= sfp$min.sc.dp,
+                (resampled.training.site |
+                    (balt == 0 & bulk.gt == '0/0' &
+                     dbsnp == '.' & scalt >= sfp$min.sc.alt &
+                     dp >= sfp$min.sc.dp)),
                 c('lysis.fdr', 'mda.fdr') := 
                     compute.fdr.legacy(altreads=scalt, dp=dp, gp.mu=match.ab(af=af, gp.mu=gp.mu),
                                        gp.sd=gp.sd, nt=nt, na=na, verbose=!quiet)]
