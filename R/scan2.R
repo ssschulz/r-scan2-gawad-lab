@@ -296,6 +296,7 @@ setMethod("show", "SCAN2", function(object) {
     if (is.null(object@depth.profile)) {
         cat("(not added)\n")
     } else {
+        cat('\n')
         for (mt in names(object@fdr.prior.data)) {
             sfp <- object@static.filter.params[[mt]]
             dptab <- object@depth.profile$dptab
@@ -326,10 +327,11 @@ setMethod("show", "SCAN2", function(object) {
     if (is.null(object@mutburden)) {
         cat("(not computed)\n")
     } else {
+        cat('\n')
         for (mt in c('snv', 'indel')) {
             mb <- object@mutburden[[mt]]
-            cat(sprintf("\n#       %6s: %6d somatic,   %0.1f estimated sens.,   %0.2f muts/haploid GB,   %0.2f muts per genome\n",
-                mt, mb$ncalls, mb$callable.sens, mb$rate.per.gb, mb$burden))
+            cat(sprintf("#       %6s: %6d somatic,   %0.1f estimated sens.,   %0.1f muts/haploid GB,   %0.1f muts per genome\n",
+                mt, mb$ncalls, 100*mb$callable.sens, mb$rate.per.gb, mb$burden))
         }
     }
 })
