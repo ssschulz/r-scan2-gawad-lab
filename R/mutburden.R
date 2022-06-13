@@ -15,7 +15,7 @@ setMethod("compute.mutburden", "SCAN2", function(object, gbp.per.genome=get.gbp.
     check.slots(object, c('call.mutations', 'depth.profile'))
 
     muttypes <- c('snv', 'indel')
-    object@mutburden[[mt]] <- setNames(lapply(muttypes, function(mt) {
+    object@mutburden <- setNames(lapply(muttypes, function(mt) {
         # [2] is the maximum burden; the minimum burden [1] is almost always ~0
         pre.geno.burden <- object@fdr.prior.data[[mt]]$burden[2]
         sfp <- object@static.filter.params[[mt]]
