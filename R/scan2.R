@@ -330,8 +330,8 @@ setMethod("show", "SCAN2", function(object) {
         cat('\n')
         for (mt in c('snv', 'indel')) {
             mb <- object@mutburden[[mt]]
-            cat(sprintf("#       %6s: %6d somatic,   %0.1f estimated sens.,   %0.1f muts/haploid GB,   %0.1f muts per genome\n",
-                mt, mb$ncalls, 100*mb$callable.sens, mb$rate.per.gb, mb$burden))
+            cat(sprintf("#       %6s: %6d somatic,   %0.1f sens.,   %0.3f callable Gbp,   %0.1f muts/haploid Gbp,   %0.1f muts per genome\n",
+                mt, mb$ncalls, 100*mb$callable.sens, mb$callable.bp/1e9 mb$rate.per.gb, mb$burden))
         }
     }
 })
