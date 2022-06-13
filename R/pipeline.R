@@ -115,6 +115,7 @@ run.pipeline <- function(
     x <- call.mutations(x, target.fdr=0.01, mode=ifelse(legacy, 'legacy', 'new'), quiet=!verbose)
     x <- add.depth.profile(x, depth.path=dptab)
     x <- compute.mutburden(x)
+    x
 }
 
 
