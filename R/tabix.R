@@ -15,9 +15,6 @@ read.tabix.header <- function(tf) {
 # likely is not sufficient) piped through cut to get only the relevant
 # columns.
 tabix.read.only.cols <- function(path, header, colClasses, region=NULL) {
-print('got header ----')
-print(header)
-
     if (!is.null(region) & length(region) > 1)
         stop('region must contain only a single interval')
 
@@ -43,7 +40,6 @@ print(header)
         command <- paste(command, "|", cut.command)
     } 
 
-print(command)
     system(command, intern=TRUE)
 }
 
@@ -94,16 +90,6 @@ read.tabix.data <- function(path, header, region=NULL, colClasses=NULL, quiet=TR
     if (length(data) == 0)
         data <- ''
 
-cat("header = ------------------------\n")
-print(header)
-
-cat("data = ------------------------\n")
-str(data)
-
-cat ("colClasses = -------------------\n")
-str(colClasses)
-print(colClasses)
-
     # tabix.read.only.cols has already dropped any NULL colClasses
     # this function does not fully implement colClasses features as in
     # read.table and fread
@@ -117,6 +103,5 @@ print(colClasses)
 
     if (!quiet) cat("Read", nrow(ret), 'lines\n')
 
-str(ret)
     ret
 }
