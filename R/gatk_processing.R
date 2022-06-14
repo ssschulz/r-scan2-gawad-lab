@@ -16,6 +16,7 @@ read.table.1sample <- function(path, sample.id, region=NULL, n.meta.cols=25, qui
     tf <- Rsamtools::TabixFile(path)
     open(tf)
     header <- read.tabix.header(tf)
+    close(tf)
     col.strings <- strsplit(header, '\t')[[1]]
     tot.cols <- length(col.strings)
     sample.idx <- which(col.strings == sample.id)
@@ -43,8 +44,7 @@ read.table.1sample <- function(path, sample.id, region=NULL, n.meta.cols=25, qui
     # Read 3 columns for the single cell, 3 columns for bulk
     cols.to.read[sample.idx + 0:2] <- c('character', 'integer', 'integer')
 
-    gatk <- read.tabix.data(tf=tf, region=region, header=header, quiet=quiet, colClasses=cols.to.read)
-    close(tf)
+    gatk <- read.tabix.data(path=path, region=region, header=header, quiet=quiet, colClasses=cols.to.read)
 
     new.sample.idx <- which(colnames(gatk) == sample.id)
     colnames(gatk)[new.sample.idx+1:2] <- c('scref', 'scalt')
@@ -52,79 +52,6 @@ read.table.1sample <- function(path, sample.id, region=NULL, n.meta.cols=25, qui
     # Rearrange columns so that the single cell triplet is first, then bulk triplet
     cols.to.keep <- col.strings[1:n.meta.cols]
     cols.to.keep <- c(cols.to.keep, sample.id, c('scref', 'scalt'))
-
-    gatk <- gatk[,..cols.to.keep]
-
-    gatk
-}
-
-
-# Some extra work to make sure we only read in the part of the
-# table relevant to these two samples. Otherwise, memory can become
-# an issue for projects with 10s-100s of cells.
-# region can be a GRanges object with a single interval to read only
-# a subset of the GATK table. The table is tabix indexed, so this can
-# be done quickly.
-read.gatk.table.2sample <- function(path, sc.sample, bulk.sample, region, quiet=FALSE) {
-    if (!quiet) cat("Importing GATK table..\n")
-
-    # Step 1: just get the header and detect the columns corresponding to
-    # sc.sample and bulk.sample to avoid reading the full matrix.
-    tf <- Rsamtools::TabixFile(path)
-    open(tf)
-    header <- read.tabix.header(tf)
-    col.strings <- strsplit(header, '\t')[[1]]
-    tot.cols <- length(col.strings)
-    sc.idx <- Inf
-    if (!missing(sc.sample))
-        sc.idx <- which(col.strings == sc.sample)
-    bulk.idx <- Inf
-    if (!missing(bulk.sample))
-        bulk.idx <- which(col.strings == bulk.sample)
-
-    if (!quiet) {
-        cat("Selecting columns:\n")
-        for (i in 1:length(col.strings)) {
-            # First 5 are chr, pos, dbsnp, refnt, altnt
-            if (i <= 5) {
-                cat(sprintf("    (%d)", i), col.strings[i], '\n')
-            } else if (any(i == sc.idx + 0:2)) {
-                cat(sprintf("    (%d)", i), col.strings[i], '[single cell]\n')
-            } else if (any(i == bulk.idx + 0:2)) {
-                cat(sprintf("    (%d)", i), col.strings[i], '[bulk]\n')
-            }
-        }
-    }
-    
-    # Step 2: really read the tables in, but only the relevant columns
-    cols.to.read <- rep("NULL", tot.cols)
-    # First 5 are chr, pos, dbsnp, refnt, altnt
-    cols.to.read[1:5] <- c('character', 'integer', rep('character', 3))
-    # Read 3 columns for the single cell, 3 columns for bulk
-    if (!missing(sc.sample))
-        cols.to.read[sc.idx + 0:2] <- c('character', 'integer', 'integer')
-    if (!missing(bulk.sample))
-        cols.to.read[bulk.idx + 0:2] <- c('character', 'integer', 'integer')
-
-    gatk <- read.tabix.data(tf=tf, region=region, header=header, quiet=quiet, colClasses=cols.to.read)
-    close(tf)
-
-    if (!missing(sc.sample)) {
-        new.sc.idx <- which(colnames(gatk) == sc.sample)
-        colnames(gatk)[new.sc.idx+1:2] <- c('scref', 'scalt')
-    }
-
-    if (!missing(bulk.sample)) {
-        new.bulk.idx <- which(colnames(gatk) == bulk.sample)
-        colnames(gatk)[new.bulk.idx+1:2] <- c('bref', 'balt')
-    }
-
-    # Rearrange columns so that the single cell triplet is first, then bulk triplet
-    cols.to.keep <- col.strings[1:5]
-    if (!missing(sc.sample))
-        cols.to.keep <- c(cols.to.keep, sc.sample, c('scref', 'scalt'))
-    if (!missing(bulk.sample))
-        cols.to.keep <- c(cols.to.keep, bulk.sample, c('bref', 'balt'))
 
     gatk <- gatk[,..cols.to.keep]
 

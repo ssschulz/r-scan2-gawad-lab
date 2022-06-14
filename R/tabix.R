@@ -5,24 +5,50 @@ read.tabix.header <- function(tf) {
      sub('^#', '', tail(Rsamtools::headerTabix(tf)$header, 1))
 }
 
+
+# Rsamtools::scanTabix does not provide a mechanism to read a subset of
+# columns. This causes major memory over-usage in large projects with
+# 10s-100s of cells when reading joint/integrated tables.
+#
+# If colClasses was specified, use a system call to the tabix binary
+# (meaning tabix must be installed on the system; the Rsamtools package
+# likely is not sufficient) piped through cut to get only the relevant
+# columns.
+tabix.read.only.cols <- function(path, colClasses, region=NULL) {
+    if (!is.null(region) & length(region) > 1)
+        stop('region must contain only a single interval')
+
+    command <- paste('tabix', path)
+    if (!is.null(region))
+        command <- paste(command,
+            sprintf('%s:%d-%d', seqnames(region)[1], start(region)[1], end(region)[1]))
+
+    if (!missing(colClasses)) {
+        cut.command <- paste0('cut -f', paste(which(colClasses != 'NULL'), collapse=','))
+        command <- paste(command, "|", cut.command)
+    } 
+
+print(command)
+    system(command, intern=TRUE)
+}
+
+
 # Returns a data.table
 # region can only be a GRanges object with a single interval for the moment
 # (we just don't have any other use cases currently).
-read.tabix.data <- function(path, tf, region=NULL,
-    header=read.tabix.header(tf), quiet=TRUE, ...)
+read.tabix.data <- function(path, header, region=NULL, quiet=TRUE, ...)
 {
-    if ((missing(tf) & missing(path)) |(!missing(tf) & !missing(path)))
-        stop('exactly one of "tf" or "path" must be specified')
-
-    if (missing(tf)) {
+    if (missing(header)) {
         tf <- Rsamtools::TabixFile(path)
         open(tf)
-        header <- read.tabix.header(tf)  # because tf didn't exist
+        header <- read.tabix.header(tf)
+        close(tf)
     }
 
-    if (is.null(region))
-        data <- Rsamtools::scanTabix(tf)[[1]]
-    else {
+    if (is.null(region)) {
+        #data <- Rsamtools::scanTabix(tf)[[1]]
+        data <- tabix.read.only.cols(path=path, region=NULL, ...)
+    } else {
         # Important: if a chromosome is requested that isn't in the Tabix file,
         # then instead of returning empty data it throws an error. The behavior
         # we'd prefer is to return a 0-row table with the same format that would
@@ -39,7 +65,8 @@ read.tabix.data <- function(path, tf, region=NULL,
             }
         } else {
             # otherwise, all regions were in the tabix file. go ahead with reading
-            data <- Rsamtools::scanTabix(tf, param=region)[[1]]
+            #data <- Rsamtools::scanTabix(tf, param=region)[[1]]
+            data <- tabix.read.only.cols(path=path, region=region, ...)
         }
     }
 
@@ -50,10 +77,6 @@ read.tabix.data <- function(path, tf, region=NULL,
         data <- ''
 
     ret <- data.table::fread(text=c(header, data), ...)
-
-    # Only close tf if this function opened it; otherwise caller is responsible
-    if (missing(tf))
-        close(tf)
 
     if (!quiet) cat("Read", nrow(ret), 'lines\n')
 

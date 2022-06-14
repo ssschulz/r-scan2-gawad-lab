@@ -9,6 +9,7 @@ digest.depth.2sample <- function(path, sc.sample, bulk.sample, clamp.dp=500, reg
     tf <- Rsamtools::TabixFile(path)
     open(tf)
     header <- read.tabix.header(tf)
+    close(tf)
     col.strings <- strsplit(header, '\t')[[1]]
 
     if (!(sc.sample %in% col.strings))
@@ -37,8 +38,7 @@ digest.depth.2sample <- function(path, sc.sample, bulk.sample, clamp.dp=500, reg
     cols.to.read[c(sc.sample.idx, bulk.sample.idx)] <- c('integer', 'integer')
 
     # Reading in a somewhat preparsed GATK DepthOfCoverage table
-    gatk.doc <- read.tabix.data(tf=tf, region=region, header=header, quiet=quiet, colClasses=cols.to.read)
-    close(tf)
+    gatk.doc <- read.tabix.data(path=path, region=region, header=header, quiet=quiet, colClasses=cols.to.read)
 
     if (nrow(gatk.doc) > 0) {
         # Standardize on 1st column: single cell, 2nd column: bulk
