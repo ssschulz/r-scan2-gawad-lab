@@ -13,7 +13,7 @@ perfcheck <- function(msg, expr, print.header=FALSE, report.mem=TRUE) {
     mem.used <- NA
     max.mem.used <- NA
     if (report.mem) {
-        g <- gc(reset=TRUE)
+        g <- gc(full=TRUE, reset=TRUE)
         mem.used <- sum(g[,which(colnames(g)=='used')+1])
         max.mem.used <- sum(g[,which(colnames(g)=='max used')+1])
     }
@@ -190,7 +190,7 @@ digest.depth.profile <- function(path, sc.sample, bulk.sample,
 
             dptab
         })
-    })
+    }, enable=TRUE)
 
     # Sum all of the tables
     dptab <- Reduce(`+`, xs)
