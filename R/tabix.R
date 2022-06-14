@@ -68,7 +68,10 @@ read.tabix.data <- function(path, header, region=NULL, quiet=TRUE, ...)
         # then instead of returning empty data it throws an error. The behavior
         # we'd prefer is to return a 0-row table with the same format that would
         # otherwise be returned.
+        tf <- Rsamtools::TabixFile(path)
+        open(tf)
         chrs.in.file <- Rsamtools::seqnamesTabix(tf)
+        close(tf)
         chrs.in.region <- unique(seqnames(region))
         if (!all(chrs.in.region %in% chrs.in.file)) {
             # XXX: This (and many other things that interact with region) only
