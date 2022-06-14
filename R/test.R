@@ -61,6 +61,7 @@ testpipe <- function(test.data=c('legacy_tiny', 'legacy_chr22', 'legacy_custom')
     sccigars <- fpath('sc_somatic_and_hsnp_spikein_cigars.tab.gz')
     bulkcigars <- fpath('bulk_somatic_and_hsnp_spikein_cigars.tab.gz')
     trainingcigars <- fpath('cigardata.tab.gz')
+    dptab <- fpath('sc_dptab.rda')
 
     if (test.data == 'legacy_tiny') {
         grs <- GRanges(seqnames=22, ranges=IRanges(start=c(30e6, 31e6),
@@ -82,7 +83,7 @@ testpipe <- function(test.data=c('legacy_tiny', 'legacy_chr22', 'legacy_custom')
     ret <- run.pipeline(sc.sample=sc.sample, bulk.sample=bulk.sample,
         int.tab=int.tab.gz.path, abfits=abfits,
         sccigars=sccigars, bulkcigars=bulkcigars,
-        trainingcigars=trainingcigars,
+        trainingcigars=trainingcigars, dptab=dptab,
         legacy=legacy, genome='hs37d5', grs=grs, verbose=FALSE)
 
     attr(ret, 'testpipe.legacy') <- legacy
