@@ -100,6 +100,10 @@ print(header)
 cat("data = ------------------------\n")
 str(data)
 
+cat ("colClasses = -------------------\n")
+str(colClasses)
+print(colClasses)
+
     # tabix.read.only.cols has already dropped any NULL colClasses
     # this function does not fully implement colClasses features as in
     # read.table and fread
