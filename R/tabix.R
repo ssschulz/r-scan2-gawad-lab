@@ -80,5 +80,7 @@ read.tabix.data <- function(path, header, region=NULL, quiet=TRUE, ...)
 
     if (!quiet) cat("Read", nrow(ret), 'lines\n')
 
+print(ret)
+stop('testing')
     ret
 }
