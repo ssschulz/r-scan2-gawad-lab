@@ -43,6 +43,8 @@ read.tabix.data <- function(path, header, region=NULL, quiet=TRUE, ...)
         open(tf)
         header <- read.tabix.header(tf)
         close(tf)
+print('header missing; read:')
+print(header)
     }
 
     if (is.null(region)) {
@@ -76,11 +78,17 @@ read.tabix.data <- function(path, header, region=NULL, quiet=TRUE, ...)
     if (length(data) == 0)
         data <- ''
 
+cat("header = ------------------------\n")
+print(header)
+
+cat("data = ------------------------\n")
+str(data)
+
     ret <- data.table::fread(text=c(header, data), ...)
 
     if (!quiet) cat("Read", nrow(ret), 'lines\n')
 
-print(ret)
+str(ret)
 stop('testing')
     ret
 }
