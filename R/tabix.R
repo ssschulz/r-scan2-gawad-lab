@@ -102,6 +102,5 @@ str(data)
     if (!quiet) cat("Read", nrow(ret), 'lines\n')
 
 str(ret)
-stop('testing')
     ret
 }
