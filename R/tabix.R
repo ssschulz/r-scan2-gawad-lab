@@ -14,7 +14,10 @@ read.tabix.header <- function(tf) {
 # (meaning tabix must be installed on the system; the Rsamtools package
 # likely is not sufficient) piped through cut to get only the relevant
 # columns.
-tabix.read.only.cols <- function(path, colClasses, region=NULL) {
+tabix.read.only.cols <- function(path, header, colClasses, region=NULL) {
+print('got header ----')
+print(header)
+
     if (!is.null(region) & length(region) > 1)
         stop('region must contain only a single interval')
 
@@ -23,8 +26,20 @@ tabix.read.only.cols <- function(path, colClasses, region=NULL) {
         command <- paste(command,
             sprintf('%s:%d-%d', seqnames(region)[1], start(region)[1], end(region)[1]))
 
-    if (!missing(colClasses)) {
-        cut.command <- paste0('cut -f', paste(which(colClasses != 'NULL'), collapse=','))
+    # handle two types of colClasses:
+    #  1. character vector of types, 1 per column. If any column is not specified
+    #     then it is not read.
+    #  2. list of column types with names in the form of, e.g., character=c('column 1', 'column 7', ...)
+    #     IMPORTANTLY: it doesn't matter what is specified in the list form; we DO NOT ALLOW
+    #     NULL SKIPPING in the list form. So all columns will be read.
+    if (!missing(colClasses) & !is.list(colClasses)) {
+        if (is.character(colClasses)) {
+            new.col.classes <- rep('NULL', length(header))
+            new.col.classes[1:length(colClasses)] <- colClasses
+        } else {
+            stop('colClasses must either be a character vector or a list')
+        }
+        cut.command <- paste0('cut -f', paste(which(new.col.classes != 'NULL'), collapse=','))
         command <- paste(command, "|", cut.command)
     } 
 
@@ -43,13 +58,11 @@ read.tabix.data <- function(path, header, region=NULL, quiet=TRUE, ...)
         open(tf)
         header <- read.tabix.header(tf)
         close(tf)
-print('header missing; read:')
-print(header)
     }
 
     if (is.null(region)) {
         #data <- Rsamtools::scanTabix(tf)[[1]]
-        data <- tabix.read.only.cols(path=path, region=NULL, ...)
+        data <- tabix.read.only.cols(path=path, header=header, region=NULL, ...)
     } else {
         # Important: if a chromosome is requested that isn't in the Tabix file,
         # then instead of returning empty data it throws an error. The behavior
@@ -68,7 +81,7 @@ print(header)
         } else {
             # otherwise, all regions were in the tabix file. go ahead with reading
             #data <- Rsamtools::scanTabix(tf, param=region)[[1]]
-            data <- tabix.read.only.cols(path=path, region=region, ...)
+            data <- tabix.read.only.cols(path=path, header=header, region=region, ...)
         }
     }
 
