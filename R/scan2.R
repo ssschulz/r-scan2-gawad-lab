@@ -577,8 +577,11 @@ setMethod("compute.ab.estimates", "SCAN2", function(object, n.cores=1, quiet=FAL
     if (!is.null(object@region)) {
         path <- object@integrated.table.path
         if (!quiet) cat('Importing extended hSNP training data from', path, 'using extended range\n')
-        extended.range <- GRanges(seqnames=seqnames(object@region)[1],
-            ranges=IRanges(start=start(object@region)-flank, end=end(object@region)+flank))
+        # trim() always generates a warning for first and last regions on a chromosome
+        # because adding/subtracting flank goes outside of the chromosome boundaries.
+        # I wish I could disable it, but can't find a way.
+        extended.range <- trim(GRanges(seqnames=seqnames(object@region)[1],
+            ranges=IRanges(start=start(object@region)-flank, end=end(object@region)+flank)))
         extended.training.hsnps <- read.training.hsnps(path, sample.id=object@single.cell, region=extended.range, quiet=quiet)
         if (!quiet)
             cat(sprintf("hSNP training sites: %d, extended training sites: %d\n",
