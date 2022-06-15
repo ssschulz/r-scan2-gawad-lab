@@ -582,7 +582,7 @@ setMethod("compute.ab.estimates", "SCAN2", function(object, n.cores=1, quiet=FAL
         # I wish I could disable it, but can't find a way.
         extended.range <- trim(GRanges(seqnames=seqnames(object@region)[1],
             ranges=IRanges(start=start(object@region)-flank, end=end(object@region)+flank),
-            seqinfo=seqinfo(genome.object)))
+            seqinfo=seqinfo(object@genome.object)))
         extended.training.hsnps <- read.training.hsnps(path, sample.id=object@single.cell, region=extended.range, quiet=quiet)
         if (!quiet)
             cat(sprintf("hSNP training sites: %d, extended training sites: %d\n",
