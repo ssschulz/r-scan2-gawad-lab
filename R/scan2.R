@@ -778,7 +778,7 @@ setMethod("compute.fdr", "SCAN2", function(object, path, mode=c('legacy', 'new')
 })
 
 
-cigar.emp.score <- function (training, test, which = c("id", "hs"), quiet=FALSE) {
+cigar.emp.score <- function (training, test, which = c("id", "hs"), legacy=FALSE, quiet=FALSE) {
     xt <- training[[paste0(which, ".score.x")]]
     yt <- training[[paste0(which, ".score.y")]]
     x <- test[[paste0(which, ".score.x")]]
@@ -786,12 +786,15 @@ cigar.emp.score <- function (training, test, which = c("id", "hs"), quiet=FALSE)
 
     dp <- test$dp.cigars
     bulkdp <- test$dp.cigars.bulk
+    # in legacy mode, dp=0 or bulkdp=0 (which results in division by 0)
+    # caused NaN scores. new mode instead sets this to 0.
+    fill <- ifelse(legacy, NaN, 0)
 
     progressr::with_progress({
         if (!quiet) p <- progressr::progressor(along=1:(length(x)/100))
         ret <- future.apply::future_mapply(function(dp, bulkdp, x, y, i) {
             if (!quiet & i %% 100 == 1) p()
-            ifelse(dp == 0 | bulkdp == 0, 0,
+            ifelse(dp == 0 | bulkdp == 0, fill,
                 mean(xt >= x & yt >= y, na.rm = T))
         }, test$dp.cigars, test$dp.cigars.bulk, x, y, 1:length(x))
     }, enable=!quiet)
@@ -880,8 +883,8 @@ setMethod("compute.excess.cigar.scores", "SCAN2", function(object, path=NULL, le
         null.sites.mt <- null.sites[muttype == mt]
         pc <- perfcheck("excess CIGAR ops",
             object@gatk[muttype == mt, c('id.score', 'hs.score') := list(
-                    cigar.emp.score(training=null.sites.mt, test=.SD, which='id', quiet=quiet),
-                    cigar.emp.score(training=null.sites.mt, test=.SD, which='hs', quiet=quiet)
+                    cigar.emp.score(training=null.sites.mt, test=.SD, which='id', quiet=quiet, legacy=legacy),
+                    cigar.emp.score(training=null.sites.mt, test=.SD, which='hs', quiet=quiet, legacy=legacy)
             )],
             report.mem=FALSE)
         if (!quiet) cat(pc, '\n')
