@@ -867,6 +867,7 @@ cigar.get.null.sites <- function(object, path=NULL, legacy=TRUE, quiet=FALSE) {
 setGeneric("compute.excess.cigar.scores", function(object, path=NULL, legacy=TRUE, quiet=FALSE)
     standardGeneric("compute.excess.cigar.scores"))
 setMethod("compute.excess.cigar.scores", "SCAN2", function(object, path=NULL, legacy=TRUE, quiet=FALSE) {
+    check.slots(object, c('gatk', 'static.filter.params', 'cigar.data'))
     null.sites <- cigar.get.null.sites(object, path, legacy, quiet)
     compute.cigar.scores(null.sites)
     if (!quiet) {
@@ -880,6 +881,7 @@ setMethod("compute.excess.cigar.scores", "SCAN2", function(object, path=NULL, le
     }
     muttypes <- c('snv', 'indel')
     object@excess.cigar.scores <- setNames(lapply(muttypes, function(mt) {
+        sfp <- object@static.filter.params[[mt]]
         null.sites.mt <- null.sites[muttype == mt]
         pc <- perfcheck("excess CIGAR ops",
             object@gatk[muttype == mt, c('id.score', 'hs.score') := list(
@@ -889,7 +891,12 @@ setMethod("compute.excess.cigar.scores", "SCAN2", function(object, path=NULL, le
             report.mem=FALSE)
         if (!quiet) cat(pc, '\n')
         data.frame(sites=nrow(object@gatk[muttype==mt]),
-            null.sites=nrow(null.sites.mt), legacy=legacy)
+            null.sites=nrow(null.sites.mt),
+            # These must not be calculated on chunked objects; the full
+            # set of null sites must be available.
+            id.score.q=quantile(null.sites.mt$id.score, prob=sfp$cg.id.q, na.rm=TRUE),
+            hs.score.q=quantile(null.sites.mt$hs.score, prob=sfp$cg.hs.q, na.rm=TRUE),
+            legacy=legacy)
     }), muttypes)
     object
 })
@@ -943,16 +950,11 @@ setMethod("compute.static.filters", "SCAN2", function(object, exclude.dbsnp=TRUE
 
     for (mt in c('snv', 'indel')) {
         sfp <- object@static.filter.params[[mt]]
-        qid <- quantile(object@gatk[resampled.training.site == TRUE & muttype == mt]$id.score,
-            prob=sfp$cg.id.q, na.rm=TRUE)
-        qhs <- quantile(object@gatk[resampled.training.site == TRUE & muttype == mt]$hs.score,
-            prob=sfp$cg.hs.q, na.rm=TRUE)
-
         object@gatk[muttype == mt, c('cigar.id.test', 'cigar.hs.test', 'lowmq.test',
                 'dp.test', 'abc.test', 'min.sc.alt.test', 'max.bulk.alt.test',
                 'dbsnp.test', 'csf.test') :=
-                    list(id.score > qid,
-                        hs.score > qhs,
+                    list(id.score > object@excess.cigar.scores[[mt]]$id.score.q,
+                        hs.score > object@excess.cigar.scores[[mt]]$hs.score.q,
                         is.na(balt.lowmq) | balt.lowmq <= sfp$max.bulk.alt,
                         dp >= sfp$min.sc.dp & bulk.dp >= sfp$min.bulk.dp,
                         abc.pv > 0.05,
