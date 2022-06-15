@@ -184,26 +184,28 @@ test.output <- function(pipeline.output,
         # produces different CIGAR counts than the new script (which uses pysam).
         # the counts generally trend together very well, but they would have to be
         # exact for these tests to work out.
-        if (!is.null(old.files) & old.files) {
-            test.tol(l$id.score.y, p$id.score.y, "id.score.y")
-            test.tol(l$id.score.x, p$id.score.x, "id.score.x")
-            test.tol(l$id.score, p$id.score, "id.score")
-            test.tol(l$hs.score.y, p$hs.score.y, "hs.score.y")
-            test.tol(l$hs.score.x, p$hs.score.x, "hs.score.x")
-            test.tol(l$hs.score, p$hs.score, "hs.score")
-            test.tol(l$cigar.id.test, p$cigar.id.test, "cigar.id.test")
-            test.tol(l$cigar.hs.test, p$cigar.hs.test, "cigar.hs.test")
+        if (!is.null(old.files)) {
+            if (old.files) {
+                test.tol(l$id.score.y, p$id.score.y, "id.score.y")
+                test.tol(l$id.score.x, p$id.score.x, "id.score.x")
+                test.tol(l$id.score, p$id.score, "id.score")
+                test.tol(l$hs.score.y, p$hs.score.y, "hs.score.y")
+                test.tol(l$hs.score.x, p$hs.score.x, "hs.score.x")
+                test.tol(l$hs.score, p$hs.score, "hs.score")
+                test.tol(l$cigar.id.test, p$cigar.id.test, "cigar.id.test")
+                test.tol(l$cigar.hs.test, p$cigar.hs.test, "cigar.hs.test")
         
-            test.equal(l$M.cigars, p$M.cigars, "M.cigars")
-            test.equal(l$ID.cigars, p$ID.cigars, "ID.cigars")
-            test.equal(l$HS.cigars, p$HS.cigars, "HS.cigars")
-            test.equal(l$other.cigars, p$other.cigars, "other.cigars")
-            test.equal(l$dp.cigars, p$dp.cigars, "dp.cigars")
-            test.equal(l$M.cigars.bulk, p$M.cigars.bulk, "M.cigars.bulk")
-            test.equal(l$ID.cigars.bulk, p$ID.cigars.bulk, "ID.cigars.bulk")
-            test.equal(l$HS.cigars.bulk, p$HS.cigars.bulk, "HS.cigars.bulk")
-            test.equal(l$other.cigars.bulk, p$other.cigars.bulk, "other.cigars.bulk")
-            test.equal(l$dp.cigars.bulk, p$dp.cigars.bulk, "dp.cigars.bulk")
+                test.equal(l$M.cigars, p$M.cigars, "M.cigars")
+                test.equal(l$ID.cigars, p$ID.cigars, "ID.cigars")
+                test.equal(l$HS.cigars, p$HS.cigars, "HS.cigars")
+                test.equal(l$other.cigars, p$other.cigars, "other.cigars")
+                test.equal(l$dp.cigars, p$dp.cigars, "dp.cigars")
+                test.equal(l$M.cigars.bulk, p$M.cigars.bulk, "M.cigars.bulk")
+                test.equal(l$ID.cigars.bulk, p$ID.cigars.bulk, "ID.cigars.bulk")
+                test.equal(l$HS.cigars.bulk, p$HS.cigars.bulk, "HS.cigars.bulk")
+                test.equal(l$other.cigars.bulk, p$other.cigars.bulk, "other.cigars.bulk")
+                test.equal(l$dp.cigars.bulk, p$dp.cigars.bulk, "dp.cigars.bulk")
+            }
         }
         test.equal(l$lowmq.test, p$lowmq.test, "lowmq.test")
         test.equal(l$dp.test, p$dp.test, "dp.test")
