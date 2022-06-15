@@ -126,8 +126,9 @@ test.output <- function(pipeline.output,
         # was applied after processing, so the lower DP sites will be present.
         l <- l[l$bulk.dp >= 11 & (is.na(l$alt.1.lowmq) | l$alt.1.lowmq == 0) & l$dp >= 6,]
     
-        # always use snv filters here: legacy code did not apply DP >= 10 (the
-        # only difference between SNV and indel hard filters) until after analysis.
+        # always use snv filters here: legacy code did not apply DP >= 10.
+        # indels additionally differed from SNVs by panel sites (nalleles) and
+        # the CIGAR test cutoff values (which isn't used to subset here).
         sfp <- pipeline.output@static.filter.params[['snv']]
         p <- pipeline.output@gatk[
                 muttype == mt &

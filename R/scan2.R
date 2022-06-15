@@ -786,17 +786,22 @@ cigar.emp.score <- function (training, test, which = c("id", "hs"), legacy=FALSE
 
     dp <- test$dp.cigars
     bulkdp <- test$dp.cigars.bulk
-    # in legacy mode, dp=0 or bulkdp=0 (which results in division by 0)
-    # caused NaN scores. new mode instead sets this to 0.
-    fill <- ifelse(legacy, NaN, 0)
 
     progressr::with_progress({
         if (!quiet) p <- progressr::progressor(along=1:(length(x)/100))
-        ret <- future.apply::future_mapply(function(dp, bulkdp, x, y, i) {
-            if (!quiet & i %% 100 == 1) p()
-            ifelse(dp == 0 | bulkdp == 0, fill,
-                mean(xt >= x & yt >= y, na.rm = T))
-        }, test$dp.cigars, test$dp.cigars.bulk, x, y, 1:length(x))
+        # in legacy mode, NA and NaN values in x or y weren't caught
+        if (legacy) {
+            ret <- future.apply::future_mapply(function(dp, bulkdp, x, y, i) {
+                if (!quiet & i %% 100 == 1) p()
+                mean(xt >= x & yt >= y, na.rm = T)
+            }, test$dp.cigars, test$dp.cigars.bulk, x, y, 1:length(x))
+        } else {
+            ret <- future.apply::future_mapply(function(dp, bulkdp, x, y, i) {
+                if (!quiet & i %% 100 == 1) p()
+                ifelse(dp == 0 | bulkdp == 0, 0,
+                    mean(xt >= x & yt >= y, na.rm = T))
+            }, test$dp.cigars, test$dp.cigars.bulk, x, y, 1:length(x))
+        }
     }, enable=!quiet)
 
     # future_mapply returns list() when x is length 0. make this a 0-length
@@ -881,7 +886,6 @@ setMethod("compute.excess.cigar.scores", "SCAN2", function(object, path=NULL, le
     }
     muttypes <- c('snv', 'indel')
     object@excess.cigar.scores <- setNames(lapply(muttypes, function(mt) {
-        sfp <- object@static.filter.params[[mt]]
         null.sites.mt <- null.sites[muttype == mt]
         pc <- perfcheck("excess CIGAR ops",
             object@gatk[muttype == mt, c('id.score', 'hs.score') := list(
@@ -897,6 +901,7 @@ setMethod("compute.excess.cigar.scores", "SCAN2", function(object, path=NULL, le
             cigar.emp.score(training=null.sites.mt, test=null.sites.mt, which='id', quiet=quiet, legacy=legacy),
             cigar.emp.score(training=null.sites.mt, test=null.sites.mt, which='hs', quiet=quiet, legacy=legacy)
         )]
+        sfp <- object@static.filter.params[[mt]]
         data.frame(sites=nrow(object@gatk[muttype==mt]),
             null.sites=nrow(null.sites.mt),
             # These must not be calculated on chunked objects; the full
