@@ -86,6 +86,9 @@ testpipe <- function(test.data=c('legacy_tiny', 'legacy_chr22', 'legacy_custom')
         trainingcigars=trainingcigars, dptab=dptab,
         legacy=legacy, genome='hs37d5', grs=grs, verbose=FALSE)
 
+    # Using old files (particularly CIGAR op count tables) allows comparison
+    # of some columns that no longer make sense to compare.
+    attr(ret, 'testpipe.oldfiles') <- TRUE
     attr(ret, 'testpipe.legacy') <- legacy
     attr(ret, 'testpipe.test.data') <- test.data
     attr(ret, 'testpipe.custom') <- custom
@@ -97,7 +100,8 @@ testpipe <- function(test.data=c('legacy_tiny', 'legacy_chr22', 'legacy_custom')
 test.output <- function(pipeline.output,
     test.data=attr(pipeline.output, 'testpipe.test.data'),
     custom=attr(pipeline.output, 'testpipe.custom'),
-    legacy=attr(pipeline.output, 'legacy'))
+    legacy=attr(pipeline.output, 'testpipe.legacy'),
+    old.files=attr(pipeline.output, 'testpipe.oldfiles'))
 {
     for (mt in c('snv', 'indel')) {
         if (test.data != 'legacy_custom') {
@@ -173,12 +177,13 @@ test.output <- function(pipeline.output,
             test.equal(l$sum.out, p$sum.out, 'panel: sum.out')
             test.equal(l$sum.bulk, p$sum.bulk, 'panel: sum.bulk')
         }
+
         # CIGARs are necessarily different because the legacy script (which used
         # samtools view at every candidate site and was too slow for all-sites mode)
         # produces different CIGAR counts than the new script (which uses pysam).
         # the counts generally trend together very well, but they would have to be
         # exact for these tests to work out.
-        if (FALSE) {
+        if (old.files) {
             test.tol(l$id.score.y, p$id.score.y, "id.score.y")
             test.tol(l$id.score.x, p$id.score.x, "id.score.x")
             test.tol(l$id.score, p$id.score, "id.score")

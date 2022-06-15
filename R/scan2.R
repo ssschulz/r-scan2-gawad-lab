@@ -847,22 +847,11 @@ setMethod("add.cigar.data", "SCAN2", function(object, sc.cigars.path, bulk.cigar
 
 cigar.get.null.sites <- function(object, path=NULL, legacy=TRUE, quiet=FALSE) {
     if (is.null(path)) {
-        check.chunked(object,
-            'excess cigar scores should be computed on full chr1-chr22 data, not chunked data')
-
+        check.slots(object, c('gatk', 'cigar.data'))
         if (legacy) {
-            check.slots(object, c('gatk', 'cigar.data'))
             null.sites <- object@gatk[resampled.training.site==TRUE]
-            if (!quiet) cat(sprintf('LEGACY: computing CIGAR op rates only at resampled training sites (n=%d)..\n',
-                nrow(null.sites)))
         } else {
-            check.slots(object, c('gatk', 'cigar.data'))
             null.sites <- object@gatk[training.site==TRUE]
-            if (!quiet) {
-                cat(sprintf('computing CIGAR op rates for all training sites (n=%d)..\n',
-                    nrow(null.sites)))
-                cat('WARNING: using the full set of hSNPs may be prohibitively slow\n')
-            }
         }
     } else {
         null.sites <- data.table::fread(path)
@@ -876,6 +865,16 @@ setGeneric("compute.excess.cigar.scores", function(object, path=NULL, legacy=TRU
     standardGeneric("compute.excess.cigar.scores"))
 setMethod("compute.excess.cigar.scores", "SCAN2", function(object, path=NULL, legacy=TRUE, quiet=FALSE) {
     null.sites <- cigar.get.null.sites(object, path, legacy, quiet)
+    compute.cigar.scores(null.sites)
+    if (!quiet) {
+        if (legacy) {
+            cat(sprintf('LEGACY: computing CIGAR op rates only at resampled training sites (n=%d)..\n',
+                nrow(null.sites)))
+        } else {
+            cat(sprintf('WARNING: using the full set of training het germline sites (n=%d) for CIGAR op calculations may be prohibitively slow\n',
+                nrow(null.sites)))
+        }
+    }
     muttypes <- c('snv', 'indel')
     object@excess.cigar.scores <- setNames(lapply(muttypes, function(mt) {
         null.sites.mt <- null.sites[muttype == mt]
