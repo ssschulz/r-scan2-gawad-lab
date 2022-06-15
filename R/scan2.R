@@ -894,8 +894,8 @@ setMethod("compute.excess.cigar.scores", "SCAN2", function(object, path=NULL, le
         # it is only necessary to score training sites to get the
         # quantiles for test cutoff.
         null.sites.mt[, c('id.score', 'hs.score') := list(
-            cigar.emp.score(training=null.sites.mt, test=null.sites, which='id', quiet=quiet, legacy=legacy),
-            cigar.emp.score(training=null.sites.mt, test=null.sites, which='hs', quiet=quiet, legacy=legacy)
+            cigar.emp.score(training=null.sites.mt, test=null.sites.mt, which='id', quiet=quiet, legacy=legacy),
+            cigar.emp.score(training=null.sites.mt, test=null.sites.mt, which='hs', quiet=quiet, legacy=legacy)
         )]
         data.frame(sites=nrow(object@gatk[muttype==mt]),
             null.sites=nrow(null.sites.mt),
