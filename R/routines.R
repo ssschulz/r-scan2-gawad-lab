@@ -11,68 +11,6 @@ rescore <- function(df, target.fdr, use.pon=FALSE, min.pon.dp=10, quiet=TRUE) {
 }
 
 
-# Read in number of callable basepairs per sample
-get.callable <- function(ss.dir, verbose=TRUE) {
-    ss.config <- file.path(ss.dir, "scan.yaml")
-    if (!file.exists(ss.config))
-        stop(sprintf("expected SCAN-SNV config file does not exist: %s\n",
-            ss.config))
-
-    yaml <- yaml::read_yaml(ss.config)
-    sc.samples <- names(yaml$sc_bams)
-
-    sapply(sc.samples, function(sn) {
-        f <- sprintf('%s/callable_regions/%s/callable_regions.bed', ss.dir, sn)
-        if (verbose)
-            print(f)
-        bed <- read.table(f, sep='\t', header=F)
-        sum(as.numeric(bed[,3]-bed[,2]))
-    })
-}
-
-
-
-# Read in all genotype data frames
-get.scansnv <- function(ss.dir, type='somatic', muttype='snv', verbose=TRUE) {
-    if (!(type %in% c('somatic', 'mosaic', 'hsnp_spikein')))
-        stop(sprintf("type must be either somatic, mosaic or hsnp_spikein, not '%s'", type))
-
-    if (!(muttype %in% c('snv', 'indel')))
-        stop(spritnf("muttype must be either 'snv' or 'indel', not %s", muttype))
-
-    ss.config <- file.path(ss.dir, "scan.yaml")
-    if (!file.exists(ss.config))
-        stop(sprintf("expected SCAN-SNV config file does not exist: %s\n",
-            ss.config))
-
-    yaml <- yaml::read_yaml(ss.config)
-    sc.samples <- names(yaml$sc_bams)
-    min.sc.alt <- yaml$min_sc_alt
-
-    ret <- lapply(sc.samples, function(s) {
-        path.fmt <- "%s_genotypes.rda"
-        if (muttype == 'indel' & type == 'somatic')
-            path.fmt <- "%s_genotypes.pon_filter.rda"
-        f <- file.path(ss.dir, muttype, s, sprintf(path.fmt, type))
-        if (verbose)
-            print(f)
-        load(f)
-        # we assume the loaded variable is called 'somatic' below
-        # but the mosaic results are called 'mosaic'.
-        # just stick it in a variable named somatic anyway. it doesn't matter.
-        somatic <- get(ifelse(type == 'hsnp_spikein', 'spikeins', type))
-
-        scalt <- which(colnames(somatic) == make.names(s))+2
-        somatic$id <- paste(somatic$chr, somatic$pos, somatic$refnt, somatic$altnt)
-        somatic
-    })
-    names(ret) <- sc.samples
-
-    ret 
-}
-
-
-
 # given two data frames of somatic and germline locations, annotate
 # the somatic data frame with the position of the nearest germline entry.
 find.nearest.germline <- function (som, germ, chrs = c(1:22, "X")) {
@@ -159,8 +97,7 @@ get.3mer <- function(df, chr, pos, refnt, altnt,
 #
 # 'pht' is a data.table that is modified by reference.
 adjust.phase <- function(pht, dist.cutoff=1e4, quiet=FALSE) {
-    if (!quiet)
-    cat("WARNING: adjust.phase is EXPERIMENTAL!\n")
+    if (!quiet) cat("WARNING: adjust.phase is EXPERIMENTAL!\n")
 
     pos <- pht$pos
     dp <- pht$phased.hap1 + pht$phased.hap2
