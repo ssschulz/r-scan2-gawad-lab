@@ -1,5 +1,5 @@
 setClassUnion('null.or.df', c('NULL', 'data.frame'))
-setClassUnion('null.or.BSgenome', c('NULL', 'BSgenome'))
+setClassUnion('null.or.Seqinfo', c('NULL', 'Seqinfo'))
 setClassUnion('null.or.GRanges', c('NULL', 'GRanges'))
 setClassUnion('null.or.list', c('NULL', 'list'))
 setClassUnion('null.or.logical', c('NULL', 'logical'))
@@ -10,7 +10,7 @@ setClassUnion('null.or.character', c('NULL', 'character'))
 setClass("SCAN2", slots=c(
     region='null.or.GRanges',
     genome.string='character',
-    genome.object='null.or.BSgenome',
+    genome.seqinfo='null.or.Seqinfo',
     single.cell='character',
     bulk='character',
     gatk="null.or.df",
@@ -43,7 +43,20 @@ check.chunked <- function(object, message) {
         warning(message)
 }
 
+genome.string.to.seqinfo.object <- function(genome=c('hs37d5', 'hg38', 'mm10')) {
+    genome <- match.arg(genome)
+    if (genome == 'hs37d5') {
+        return(GenomeInfoDb::Seqinfo(genome='GRCh37.p13'))
+    } else if (genome == 'hg38') {
+        return(GenomeInfoDb::Seqinfo(genome='hg38'))
+    } else if (genome == 'mm10') {
+        return(GenomeInfoDb::Seqinfo(genome='mm10'))
+    }
+}
+
 genome.string.to.bsgenome.object <- function(genome=c('hs37d5', 'hg38', 'mm10')) {
+    genome <- match.arg(genome)
+
     if (genome == 'hs37d5') {
         require(BSgenome.Hsapiens.1000genomes.hs37d5)
         genome <- BSgenome.Hsapiens.1000genomes.hs37d5
@@ -53,8 +66,6 @@ genome.string.to.bsgenome.object <- function(genome=c('hs37d5', 'hg38', 'mm10'))
     } else if (genome == 'mm9') {
         require(BSgenome.Mmusculus.UCSC.mm10)
         genome <- BSgenome.Mmusculus.UCSC.mm10
-    } else {
-        stop(paste('genome string', genome, 'is not supported'))
     }
     genome
 }
@@ -64,7 +75,7 @@ make.scan <- function(single.cell, bulk, genome=c('hs37d5', 'hg38', 'mm10'), reg
     genome <- match.arg(genome)
     new("SCAN2", single.cell=single.cell, bulk=bulk,
         genome.string=genome,
-        genome.object=genome.string.to.bsgenome.object(genome),
+        genome.seqinfo=genome.string.to.seqinfo.object(genome),
         region=region,
         gatk=NULL,
         ab.fits=NULL,
@@ -86,9 +97,9 @@ setValidity("SCAN2", function(object) {
     if (length(object@genome.string) != 1)
         return("must provide exactly one genome name")
 
-    if (!is.null(object@genome.object)) {
-        if (class(object@genome.object) != 'BSgenome')
-            stop('@genome.object must be of class BSgenome')
+    if (!is.null(object@genome.seqinfo)) {
+        if (class(object@genome.seqinfo) != 'Seqinfo')
+            stop('@genome.seqinfo must be of class Seqinfo')
     }
 
     if (length(object@single.cell) != 1)
@@ -529,18 +540,18 @@ setMethod("compute.ab.fits", "SCAN2", function(object, path, chroms=1:22,
     # Just for convenience. Allow "chroms=1:22" to work for autosomes
     # Check all chroms up front so the loop doesn't die after a significant amount of work
     chroms <- as.character(chroms)
-    not.in <- chroms[!(chroms %in% seqnames(object@genome.object))]
+    not.in <- chroms[!(chroms %in% seqnames(object@genome.seqinfo))]
     if (length(not.in) > 0) {
         cat("the following chromosomes are not recognized:\n")
         print(not.in)
         cat("valid chromosomes names for genome", object@genome.string, 'are:\n')
-        print(seqnames(object@genome.object))
+        print(seqnames(object@genome.seqinfo))
         stop('invalid chromosomes, see above for details')
     }
 
     chrom.refine.records <- setNames(lapply(chroms, abmodel.fit.one.chrom,
         path=path, sc.sample=object@single.cell,
-        genome.object=object@genome.object,
+        genome.seqinfo=object@genome.seqinfo,
         hsnp.tilesize=hsnp.tilesize, n.tiles=n.tiles,
         refine.n.steps=refine.n.steps, n.chunks=n.chunks,
         n.logp.samples.per.chunk=samples.per.chunk), chroms)
@@ -582,7 +593,7 @@ setMethod("compute.ab.estimates", "SCAN2", function(object, n.cores=1, quiet=FAL
         # I wish I could disable it, but can't find a way.
         extended.range <- trim(GRanges(seqnames=seqnames(object@region)[1],
             ranges=IRanges(start=start(object@region)-flank, end=end(object@region)+flank),
-            seqinfo=seqinfo(object@genome.object)))
+            seqinfo=object@genome.seqinfo))
         extended.training.hsnps <- read.training.hsnps(path, sample.id=object@single.cell, region=extended.range, quiet=quiet)
         if (!quiet)
             cat(sprintf("hSNP training sites: %d, extended training sites: %d\n",

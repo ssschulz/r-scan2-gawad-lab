@@ -68,7 +68,7 @@ testpipe <- function(test.data=c('legacy_tiny', 'legacy_chr22', 'legacy_custom')
             end=c(30999999, 31999999)))
     } else if (test.data == 'legacy_chr22') {
         # Cover chr22 with 1mb tiles
-        grs <- tileGenome(seqlengths=seqinfo(genome.string.to.bsgenome.object('hs37d5'))[as.character(22)], tilewidth=1e6, cut.last.tile.in.chrom=TRUE)
+        grs <- tileGenome(seqlengths=genome.string.to.seqinfo.object('hs37d5')[as.character(22)], tilewidth=1e6, cut.last.tile.in.chrom=TRUE)
     } else if (test.data == 'legacy_custom') {
         grs <- custom$grs
     }

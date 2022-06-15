@@ -32,8 +32,9 @@ run.pipeline <- function(
     sccigars, bulkcigars, trainingcigars,
     dptab,
     genome,
+    genome.seqinfo=genome.string.to.seqinfo.object(genome),
     config.yaml=NULL,
-    grs=tileGenome(seqlengths=seqinfo(genome.string.to.bsgenome.object(genome))[as.character(1:22)], tilewidth=10e6, cut.last.tile.in.chrom=TRUE),
+    grs=tileGenome(seqlengths=genome.seqinfo[as.character(1:22)], tilewidth=10e6, cut.last.tile.in.chrom=TRUE),
     legacy=FALSE, report.mem=TRUE, verbose=TRUE)
 {
     cat('Starting chunked SCAN2 pipeline on', length(grs), 'chunks\n')
@@ -124,9 +125,8 @@ run.pipeline <- function(
 # contains many site-specific annotations and the full matrix of alt and ref
 # read counts for all single cells and bulks.
 make.integrated.table <- function(mmq60.tab, mmq1.tab, phased.vcf,
-    bulk.sample, genome,
-    panel=NULL, genome.object=genome.string.to.bsgenome.object(genome),
-    grs=tileGenome(seqlengths=seqinfo(genome.object)[as.character(1:22)], tilewidth=10e6, cut.last.tile.in.chrom=TRUE),
+    bulk.sample, genome, genome.seqinfo=genome.string.to.seqinfo.object(genome), panel=NULL,
+    grs=tileGenome(seqlengths=genome.seqinfo[as.character(1:22)], tilewidth=10e6, cut.last.tile.in.chrom=TRUE),
     quiet=TRUE, report.mem=FALSE)
 {
     cat('Starting integrated table pipeline on', length(grs), 'chunks.\n')
@@ -149,7 +149,7 @@ make.integrated.table <- function(mmq60.tab, mmq1.tab, phased.vcf,
                 samplespecific <- gatk[,-(1:7)]
 
                 annotate.gatk.bulk(sitewide, samplespecific, bulk.sample, quiet=quiet)
-                annotate.gatk(gatk=sitewide, gatk.counts=samplespecific, genome.string=genome, genome.object=genome.object, add.mutsig=TRUE)
+                annotate.gatk(gatk=sitewide, gatk.counts=samplespecific, genome.string=genome, add.mutsig=TRUE)
                 annotate.gatk.lowmq(sitewide, path=mmq1.tab, bulk=bulk.sample, region=gr, quiet=quiet)
                 annotate.gatk.phasing(sitewide, phasing.path=phased.vcf, region=gr, quiet=quiet)
                 annotate.gatk.panel(sitewide, panel.path=panel, region=gr, quiet=quiet)
@@ -167,10 +167,9 @@ make.integrated.table <- function(mmq60.tab, mmq1.tab, phased.vcf,
 
 
 digest.depth.profile <- function(path, sc.sample, bulk.sample,
-    genome,
+    genome, genome.seqinfo=genome.string.to.seqinfo.object(genome),
     clamp.dp=500,
-    genome.object=genome.string.to.bsgenome.object(genome),
-    grs=tileGenome(seqlengths=seqinfo(genome.object)[as.character(1:22)], tilewidth=10e6, cut.last.tile.in.chrom=TRUE),
+    grs=tileGenome(seqlengths=genome.seqinfo[as.character(1:22)], tilewidth=10e6, cut.last.tile.in.chrom=TRUE),
     quiet=TRUE, report.mem=TRUE)
 {
     cat('Digesting depth profile using', length(grs), 'chunks.\n')

@@ -91,7 +91,7 @@ annotate.gatk.bulk <- function(gatk.meta, gatk, bulk.sample, quiet=FALSE) {
 #
 # This can be slow with add.mutsig, particularly for indels. Best used
 # on chunked data.
-annotate.gatk <- function(gatk, gatk.counts, genome.string, genome.object, add.mutsig=TRUE) {
+annotate.gatk <- function(gatk, gatk.counts, genome.string, add.mutsig=TRUE) {
     data.table::setkey(gatk, chr, pos, refnt, altnt)
 
     # Determine SNV/indel status and then annotate mutation signature channels
@@ -100,8 +100,20 @@ annotate.gatk <- function(gatk, gatk.counts, genome.string, genome.object, add.m
     setindex(gatk, muttype)
 
     if (add.mutsig) {
+        # This is the only place in scan2 where BSgenome is necessary.
+        # This is important because BSgenome has several dependencies (in
+        # particular, rtracklayer) that uses ~350 MB of RAM over the other
+        # scan2 dependencies. This mem usage is multiplied when using
+        # library(future), plan(multicore) for parallelization so is quite
+        # significant.
+        #
+        # N.B. using the integrated table workflow, we should only ever
+        # have to annotate these values once.
+        require(BSgenome)
+        
         gatk[muttype == 'snv',
-            mutsig := get.3mer(chr=chr, pos=pos, refnt=refnt, altnt=altnt, genome=genome.object)]
+            mutsig := get.3mer(chr=chr, pos=pos, refnt=refnt, altnt=altnt,
+                               genome=genome.string.to.bsgenome.object(genome.string))]
         chs <- classify.indels(gatk[muttype == 'indel'], genome.string=genome.string)
         gatk[muttype == 'indel', mutsig := chs]
     }

@@ -113,28 +113,9 @@ muttype.map <- c(
     'T>G'='T>G'
 )
 
-old.get.3mer <- function (df, genome = BSgenome.Hsapiens.1000genomes.hs37d5) 
+get.3mer <- function(df, chr, pos, refnt, altnt,
+    genome=BSgenome.Hsapiens.1000genomes.hs37d5, verbose=FALSE)
 {
-    if ("type.and.ctx" %in% colnames(df)) 
-        return(df)
-    require(BSgenome)
-    x <- df
-    if (!("muttype" %in% colnames(x))) {
-        cat("adding mutation types..\n")
-        x$muttype <- muttype.map[paste(x$refnt, x$altnt, sep = ">")]
-    }
-    tmp <- getSeq(genome, GRanges(seqnames = x$chr, ranges = IRanges(start = x$pos - 
-        1, end = x$pos + 1)))
-    x$ctx <- as.character(tmp)
-    x$ctx.rc <- as.character(reverseComplement(tmp))
-    x$type.and.ctx <- ifelse(x$refnt == "C" | x$refnt == "T", 
-        paste0(x$ctx, ":", x$muttype), paste0(x$ctx.rc, ":", 
-            x$muttype))
-    x
-}
-
-
-get.3mer <- function(df, chr, pos, refnt, altnt, genome=BSgenome.Hsapiens.1000genomes.hs37d5,verbose=FALSE) {
     if (!missing(df)) {
         chr <- df$chr
         pos <- df$pos
@@ -147,8 +128,8 @@ get.3mer <- function(df, chr, pos, refnt, altnt, genome=BSgenome.Hsapiens.1000ge
     
     muttype <- muttype.map[paste0(refnt, '>', altnt)]
 
-    tmp <- getSeq(genome, GRanges(seqnames=chr,
-                    ranges=IRanges(start=pos-1, end=pos+1)))
+    tmp <- Biostrings::getSeq(genome, GRanges(seqnames=chr,
+                              ranges=IRanges(start=pos-1, end=pos+1)))
 
     ctx <- as.character(tmp)
     ctx.rc <- as.character(reverseComplement(tmp))

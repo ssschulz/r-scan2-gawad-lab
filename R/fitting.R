@@ -1,6 +1,6 @@
 # n.tiles - if NULL, then downsampling is not performed (uses full set of
 #           hSNP training sites).
-abmodel.fit.one.chrom <- function(path, sc.sample, chrom, genome.object,
+abmodel.fit.one.chrom <- function(path, sc.sample, chrom, genome.seqinfo,
     n.chunks=1, n.logp.samples.per.chunk=20000,  # this default implies no parallelization
     hsnp.tilesize=100, n.tiles=250,
     refine.n.steps=4, refine.top.n=50,
@@ -8,7 +8,7 @@ abmodel.fit.one.chrom <- function(path, sc.sample, chrom, genome.object,
     alim=c(-7, 2), blim=c(2, 4), clim=c(-7, 2), dlim=c(2, 6))
 {
     chrom <- as.character(chrom)
-    if (!(chrom %in% seqnames(genome.object))) {
+    if (!(chrom %in% seqnames(genome.seqinfo))) {
         stop(paste0("invalid chromosome name '", chrom, "'\n"))
     }
 
@@ -16,7 +16,7 @@ abmodel.fit.one.chrom <- function(path, sc.sample, chrom, genome.object,
     # good deal of memory in some cases, e.g., crossbred mice with ~10-fold more
     # SNPs than humans.
     # GRanges interval that covers the whole chromosome
-    region <- as(GenomeInfoDb::seqinfo(genome.object), 'GRanges')[chrom,]
+    region <- as(genome.seqinfo, 'GRanges')[chrom,]
     hsnps <- read.training.hsnps(path=path, sample.id=sc.sample, region=region)
     hsnps <- abmodel.downsample.hsnps(hsnps, hsnp.tilesize=hsnp.tilesize, n.tiles=n.tiles, verbose=TRUE)
 
