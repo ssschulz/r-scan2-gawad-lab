@@ -23,8 +23,9 @@ tabix.read.only.cols <- function(path, header, colClasses, region=NULL) {
     # tabix system call method. This is unfortunate since it'd be nice to
     # not have special behavior when region=NULL, but I suppose it can't
     # be avoided.
+    # tail - don't print the header line, ASSUMING it's only 1 line
     if (is.null(region)) {
-        command <- paste('gunzip -c', path)
+        command <- paste('gunzip -c', path, "| grep -v '^#'")
     } else {
         command <- paste('tabix', path)
         if (!is.null(region))
