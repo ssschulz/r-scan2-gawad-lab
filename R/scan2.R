@@ -941,9 +941,9 @@ setMethod("compute.static.filters", "SCAN2", function(object, exclude.dbsnp=TRUE
 
     for (mt in c('snv', 'indel')) {
         sfp <- object@static.filter.params[[mt]]
-        qid <- quantile(object@gatk[training.site == TRUE & muttype == mt]$id.score,
+        qid <- quantile(object@gatk[resampled.training.site == TRUE & muttype == mt]$id.score,
             prob=sfp$cg.id.q, na.rm=TRUE)
-        qhs <- quantile(object@gatk[training.site == TRUE & muttype == mt]$hs.score,
+        qhs <- quantile(object@gatk[resampled.training.site == TRUE & muttype == mt]$hs.score,
             prob=sfp$cg.hs.q, na.rm=TRUE)
 
         object@gatk[muttype == mt, c('cigar.id.test', 'cigar.hs.test', 'lowmq.test',
