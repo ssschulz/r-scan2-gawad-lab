@@ -184,7 +184,7 @@ test.output <- function(pipeline.output,
         # produces different CIGAR counts than the new script (which uses pysam).
         # the counts generally trend together very well, but they would have to be
         # exact for these tests to work out.
-        if (old.files) {
+        if (!is.null(old.files) & old.files) {
             test.tol(l$id.score.y, p$id.score.y, "id.score.y")
             test.tol(l$id.score.x, p$id.score.x, "id.score.x")
             test.tol(l$id.score, p$id.score, "id.score")
