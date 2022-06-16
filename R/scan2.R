@@ -691,6 +691,7 @@ setMethod("compute.fdr.prior.data", "SCAN2", function(object, mode=c('legacy', '
                 (is.na(balt.lowmq) | balt.lowmq <= sfp$max.bulk.alt)]
             hets=object@gatk[muttype == mt & training.site == TRUE & scalt >= sfp$min.sc.alt]
         } else {
+            sfp <- object@static.filter.params[[mt]]
             cand <- object@gatk[muttype == mt & somatic.candidate == TRUE]
             # This is not supposed to be a highly filtered list. The filtering
             # should be somewhat equivalent to the pre-filtering steps on somatic
