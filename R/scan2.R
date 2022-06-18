@@ -1116,6 +1116,7 @@ setMethod("compress", "SCAN2", function(object) {
     } else {
         warning('object already compressed, skipping compression')
     }
+    object
 })
 
 
@@ -1126,4 +1127,5 @@ setMethod("decompress", "SCAN2", function(object) {
     } else {
         warning('object already decompressed, skipping decompression')
     }
+    object
 })
