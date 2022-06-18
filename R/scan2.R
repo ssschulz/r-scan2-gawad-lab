@@ -15,7 +15,6 @@ setClass("SCAN2", slots=c(
     single.cell='character',
     bulk='character',
     gatk="null.or.dt.or.raw",
-    compressed='logical',
     integrated.table.path='null.or.character',
     resampled.training.data="null.or.list",
     ab.fits='null.or.df',
@@ -80,7 +79,6 @@ make.scan <- function(single.cell, bulk, genome=c('hs37d5', 'hg38', 'mm10'), reg
         genome.seqinfo=genome.string.to.seqinfo.object(genome),
         region=region,
         gatk=NULL,
-        compressed=FALSE,
         ab.fits=NULL,
         # these slots used to hold tables; now their data is incorporated into @gatk and
         # they only record analysis parameters, if any apply.
@@ -204,7 +202,7 @@ setMethod("show", "SCAN2", function(object) {
     if (is.null(object@gatk)) {
         cat(" (no data)\n")
     } else {
-        if (object@compressed) {
+        if (is.compressed(object)) {
             cat(' (compressed)\n')
         } else {
             cat('', nrow(object@gatk), "raw sites\n")
@@ -212,7 +210,7 @@ setMethod("show", "SCAN2", function(object) {
     }
 
     cat("#   AB model training hSNPs:")
-    if (object@compressed) {
+    if (is.compressed(object)) {
         cat(' (table compressed)\n')
     } else {
         if (!('training.site' %in% colnames(object@gatk))) {
@@ -251,7 +249,7 @@ setMethod("show", "SCAN2", function(object) {
     }
 
     cat("#   Allele balance:")
-    if (object@compressed) {
+    if (is.compressed(object)) {
         cat(' (table compressed)\n')
     } else { 
         if (is.null(object@ab.estimates)) {
@@ -288,7 +286,7 @@ setMethod("show", "SCAN2", function(object) {
     }
 
     cat("#   Static filters: ")
-    if (object@compressed) {
+    if (is.compressed(object)) {
         cat(' (table compressed)\n')
     } else {
         if (!('static.filter' %in% colnames(object@gatk))) {
@@ -1105,11 +1103,16 @@ setMethod("add.depth.profile", "SCAN2", function(object, depth.path) {
 })
 
 
+setGeneric("is.compressed", function(object) standardGeneric("is.compressed"))
+setMethod("is.compressed", "SCAN2", function(object) {
+    is.raw(object@gatk)
+})
+
+
 setGeneric("compress", function(object) standardGeneric("compress"))
 setMethod("compress", "SCAN2", function(object) {
-    if (object@compressed == FALSE) {
+    if (!is.compressed(object)) {
         object@gatk <- qs::qserialize(object@gatk)
-        object@compressed <- TRUE
     } else {
         warning('object already compressed, skipping compression')
     }
@@ -1118,9 +1121,8 @@ setMethod("compress", "SCAN2", function(object) {
 
 setGeneric("decompress", function(object) standardGeneric("decompress"))
 setMethod("decompress", "SCAN2", function(object) {
-    if (object@compressed == TRUE) {
+    if (is.compressed(object)) {
         object@gatk <- qs::qdeserialize(object@gatk)
-        object@compressed <- FALSE
     } else {
         warning('object already decompressed, skipping decompression')
     }
