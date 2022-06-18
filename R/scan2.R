@@ -1,4 +1,5 @@
 setClassUnion('null.or.df', c('NULL', 'data.frame'))
+setClassUnion('null.or.dt.or.raw', c('NULL', 'data.table', 'raw'))
 setClassUnion('null.or.Seqinfo', c('NULL', 'Seqinfo'))
 setClassUnion('null.or.GRanges', c('NULL', 'GRanges'))
 setClassUnion('null.or.list', c('NULL', 'list'))
@@ -13,7 +14,8 @@ setClass("SCAN2", slots=c(
     genome.seqinfo='null.or.Seqinfo',
     single.cell='character',
     bulk='character',
-    gatk="null.or.df",
+    gatk="null.or.dt.or.raw",
+    compressed='logical',
     integrated.table.path='null.or.character',
     resampled.training.data="null.or.list",
     ab.fits='null.or.df',
@@ -78,6 +80,7 @@ make.scan <- function(single.cell, bulk, genome=c('hs37d5', 'hg38', 'mm10'), reg
         genome.seqinfo=genome.string.to.seqinfo.object(genome),
         region=region,
         gatk=NULL,
+        compressed=FALSE,
         ab.fits=NULL,
         # these slots used to hold tables; now their data is incorporated into @gatk and
         # they only record analysis parameters, if any apply.
@@ -201,33 +204,41 @@ setMethod("show", "SCAN2", function(object) {
     if (is.null(object@gatk)) {
         cat(" (no data)\n")
     } else {
-        cat('', nrow(object@gatk), "raw sites\n")
-    }
-
-    cat("#   AB model training hSNPs:")
-    if (!('training.site' %in% colnames(object@gatk))) {
-        cat(" (no data)\n")
-    } else {
-        # germline indels are not used for AB model training
-        per.hap <- object@gatk[training.site==TRUE, .N, by=phased.gt]
-        tdata <- object@gatk[training.site==TRUE & muttype=='snv']
-        cat('', nrow(tdata),
-            sprintf("phasing: %s=%d, %s=%d\n",
-                per.hap$phased.gt[1], per.hap$N[1],
-                per.hap$phased.gt[2], per.hap$N[2]))
-        neighbor.approx <- approx.abmodel.covariance(object, bin.breaks=10^(0:5))
-        cors <- round(neighbor.approx$y, 3)
-        cat('#       VAF correlation between neighboring hSNPs:\n')
-        cat('#           <10 bp', cors[1], '<100 bp', cors[2],
-            '<1000 bp', cors[3], '<10 kbp', cors[4], '<100 kbp', cors[5], '\n')
-        if ('resampled.training.site' %in% colnames(object@gatk)) {
-            cat('#        ', nrow(object@gatk[resampled.training.site == TRUE & muttype == 'snv']),
-                'resampled hSNPs\n')
-            cat('#        ', nrow(object@gatk[resampled.training.site == TRUE & muttype == 'indel']),
-                'resampled hIndels\n')
+        if (object@compressed) {
+            cat(' (compressed)\n')
+        } else {
+            cat('', nrow(object@gatk), "raw sites\n")
         }
     }
 
+    cat("#   AB model training hSNPs:")
+    if (object@compressed) {
+        cat(' (table compressed)\n')
+    } else {
+        if (!('training.site' %in% colnames(object@gatk))) {
+            cat(" (no data)\n")
+        } else {
+            # germline indels are not used for AB model training
+            per.hap <- object@gatk[training.site==TRUE, .N, by=phased.gt]
+            tdata <- object@gatk[training.site==TRUE & muttype=='snv']
+            cat('', nrow(tdata),
+                sprintf("phasing: %s=%d, %s=%d\n",
+                    per.hap$phased.gt[1], per.hap$N[1],
+                    per.hap$phased.gt[2], per.hap$N[2]))
+            neighbor.approx <- approx.abmodel.covariance(object, bin.breaks=10^(0:5))
+            cors <- round(neighbor.approx$y, 3)
+                cat('#       VAF correlation between neighboring hSNPs:\n')
+            cat('#           <10 bp', cors[1], '<100 bp', cors[2],
+                '<1000 bp', cors[3], '<10 kbp', cors[4], '<100 kbp', cors[5], '\n')
+            if ('resampled.training.site' %in% colnames(object@gatk)) {
+                cat('#        ', nrow(object@gatk[resampled.training.site == TRUE & muttype == 'snv']),
+                    'resampled hSNPs\n')
+                cat('#        ', nrow(object@gatk[resampled.training.site == TRUE & muttype == 'indel']),
+                    'resampled hIndels\n')
+            }
+        }
+    }
+    
     cat("#   AB model parameters:")
     if (is.null(object@ab.fits)) {
         cat(" (no data)\n")
@@ -240,28 +251,27 @@ setMethod("show", "SCAN2", function(object) {
     }
 
     cat("#   Allele balance:")
-    if (is.null(object@ab.estimates)) {
-        cat(" (not computed)\n")
-    } else {
-        s <- summary(object@gatk$gp.sd)
-        cat('\n#       mean (0 is neutral):',
-            round(mean(object@gatk$gp.mu), 3), '\n')
-        cat('#       uncertainty (Q25, median, Q75):',
-            round(s['1st Qu.'], 3),
-            round(s['Median'], 3),
-            round(s['3rd Qu.'], 3), '\n')
-        if ('training.site' %in% colnames(object@gatk)) {
-            xs <- round(object@gatk[training.site==TRUE & muttype == 'snv',
-                .(mean=mean(gp.mu), cor=cor(af, ab, use='complete.obs'))],3)
-            cat('#       mean at training hSNPs:', xs$mean, '\n')
-            # computing correlation doesn't make sense here because AF and AB
-            # do not necessarily refer to the same haplotype: AF is always the
-            # mutated haplotype.
-                #.(mean=mean(gp.mu), cor=cor(af, ab, use='complete.obs'))],3)
-            #cat('#       correlation with VAF at training hSNPs', xs$cor, '\n')
+    if (object@compressed) {
+        cat(' (table compressed)\n')
+    } else { 
+        if (is.null(object@ab.estimates)) {
+            cat(" (not computed)\n")
+        } else {
+            s <- summary(object@gatk$gp.sd)
+            cat('\n#       mean (0 is neutral):',
+                round(mean(object@gatk$gp.mu), 3), '\n')
+            cat('#       uncertainty (Q25, median, Q75):',
+                round(s['1st Qu.'], 3),
+                round(s['Median'], 3),
+                round(s['3rd Qu.'], 3), '\n')
+            if ('training.site' %in% colnames(object@gatk)) {
+                xs <- round(object@gatk[training.site==TRUE & muttype == 'snv',
+                    .(mean=mean(gp.mu), cor=cor(af, ab, use='complete.obs'))],3)
+                cat('#       mean at training hSNPs:', xs$mean, '\n')
+            }
         }
     }
-
+    
     cat("#   Mutation models:")
     if (is.null(object@mut.models)) {
         cat(" (not computed)\n")
@@ -278,15 +288,19 @@ setMethod("show", "SCAN2", function(object) {
     }
 
     cat("#   Static filters: ")
-    if (!('static.filter' %in% colnames(object@gatk))) {
-        cat("(not applied)\n")
+    if (object@compressed) {
+        cat(' (table compressed)\n')
     } else {
-        cat('\n')
-        na.or.val <- function(x, val=0) ifelse(is.na(x), val, x)
-        for (mt in c('snv', 'indel')) {
-            tb <- table(object@gatk[muttype == mt, static.filter], useNA='always')
-            cat(sprintf('#       %6s: %8d retained %8d removed %8d NA\n',
-                mt, na.or.val(tb['TRUE']), na.or.val(tb['FALSE']), na.or.val(tb['NA'])))
+        if (!('static.filter' %in% colnames(object@gatk))) {
+            cat("(not applied)\n")
+        } else {
+            cat('\n')
+            na.or.val <- function(x, val=0) ifelse(is.na(x), val, x)
+            for (mt in c('snv', 'indel')) {
+                tb <- table(object@gatk[muttype == mt, static.filter], useNA='always')
+                cat(sprintf('#       %6s: %8d retained %8d removed %8d NA\n',
+                    mt, na.or.val(tb['TRUE']), na.or.val(tb['FALSE']), na.or.val(tb['NA'])))
+            }
         }
     }
 
@@ -1088,4 +1102,26 @@ setMethod("add.depth.profile", "SCAN2", function(object, depth.path) {
         clamp.dp=clamp.dp
     )
     object
+})
+
+
+setGeneric("compress", function(object) standardGeneric("compress"))
+setMethod("compress", "SCAN2", function(object) {
+    if (object@compressed == FALSE) {
+        object@gatk <- qs::qserialize(object@gatk)
+        object@compressed <- TRUE
+    } else {
+        warning('object already compressed, skipping compression')
+    }
+})
+
+
+setGeneric("decompress", function(object) standardGeneric("decompress"))
+setMethod("decompress", "SCAN2", function(object) {
+    if (object@compressed == TRUE) {
+        object@gatk <- qs::qdeserialize(object@gatk)
+        object@compressed <- FALSE
+    } else {
+        warning('object already decompressed, skipping decompression')
+    }
 })
