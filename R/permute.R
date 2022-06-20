@@ -69,9 +69,9 @@ select.perms <- function(spectrum.to.match, perms, quiet=FALSE)
     if (k < 1)
         stop("n.sample too low: unable to complete any permutations")
     
-    if (any(is.na(perms$pos))) {
-        print(table(is.na(perms$pos)))
-        stop('got NA positions in perms BEFORE sample')
+    if (any(is.na(perms$mutsig))) {
+        print(perms[is.na(perms$mutsig),])
+        stop('got NA mutsigs in perms BEFORE sample')
     }
 
     # just randomly reorder (this isn't necessary, bt.shuffle is already unordered
