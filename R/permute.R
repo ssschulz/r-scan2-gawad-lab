@@ -36,8 +36,8 @@ suppressMessages(library(BSgenome.Hsapiens.1000genomes.hs37d5))
 #          permuted mutations.
 # genome - a BEDtools genome file, which lists one chromosome and its length
 #          per line, separated by a tab.
-bedtools.permute <- function(n.sample, genome, callable, seed) {
-    g <- fread(genome)  # only read this to get a valid chromosome name
+bedtools.permute <- function(n.sample, genome.file, callable, seed) {
+    g <- fread(genome.file)  # only read this to get a valid chromosome name
 
     real.n.sample <- n.sample
     n.sample <- n.sample*1.05 # add 5% to allow removal of positions < 50 bp
@@ -47,7 +47,7 @@ bedtools.permute <- function(n.sample, genome, callable, seed) {
     # dummy data frame of single base positions to shuffle. the positions are ignored.
     tmpmuts <- cbind(rep(g[1], n.sample), 1:n.sample, 2:(n.sample+1))
     
-    perms <- bt.shuffle(i=tmpmuts, g=genome, incl=callable, seed=seed, noOverlapping=TRUE)[,1:2]
+    perms <- bt.shuffle(i=tmpmuts, g=genome.file, incl=callable, seed=seed, noOverlapping=TRUE)[,1:2]
 
     colnames(perms) <- c('chr', 'pos')
     # beds are 0-indexed, getSeq is 1-indexed. this matters in the case where
@@ -66,64 +66,29 @@ bedtools.permute <- function(n.sample, genome, callable, seed) {
 }
 
 
-################################################################################
-# SNV PERMUTATION GENERATOR
-################################################################################
 
-# permute SNVs and preserve the mutation signature
-# n.sample - this is the number of mutations to randomly permute around
-#            the genome PRIOR to downsampling.
-#            this number should be quite high, especially if the mutation
-#            set has many mutated bases at CpGs.
-#            XXX: eventually, it would be nice to use a smaller n.sample
-#                 within a loop that could add more samples as necessary.
-make.snv.perms.helper <- function(muts, genome, callable, seed, n.sample=5e4) {
-    perms <- bedtools.permute(muts, n.sample=n.sample, genome=genome, callable=callable, seed=seed)
-str(perms)
-
-    # Get the reference base at each permutation position. Could save time here
-    # and get the trinucleotide context, but oh well.
-    perms$refnt <- getSeq(BSgenome.Hsapiens.1000genomes.hs37d5,
-        names = perms$chr, start=perms$pos, end=perms$pos, as.character=TRUE)
-
-    # rarely, a locus in the callable region can be an N
-    # this can occur, e.g., if a stray single N is in the sequence or
-    # because the ends of reads near an N gap can cover a few Ns despite
-    # not matching them.
-    # in any case, get rid of these.
-    perms <- perms[perms$refnt != 'N',]
-
-    # corner case:
-    # issue arises when there are no input mutations starting from
-    # a particular refnt. then there is no row in mutprobs for that
-    # refnt and the subsequent subset will fail.  even if that subset
-    # succeeded, there would be 0 probability for all altnts, and
-    # sample will then fail.
-    # if that is the case, just remove those permuted sites ahead of
-    # time. this will only occur for samples with very small numbers
-    # of mutations.
-    perms <- perms[perms$refnt %in% unique(muts$refnt),]
-
-    # get table of refnt > altnt probabilities to make sampling more efficient
-    mat <- table(muts$refnt, muts$altnt)
-    mutprobs <- mat/rowSums(mat)
-
-    # Used to delete this, but it has been helpful to keep for when bugs pop up.
-    print(table(perms$refnt))
-    cat('mutprobs\n')
-    print(mutprobs)
-
-    perms$altnt <- apply(mutprobs[perms$refnt,,drop=FALSE], 1, function(row)
-        sample(x=names(row), size=1, replace=FALSE, prob=row))
-    perms <- get.3mer(perms)
-
-    real.muts <- table(muts$type.and.ctx)
-    perm.muts <- table(perms$type.and.ctx)[names(real.muts)]
+# Select mutations from 'perms' matching the mutation spectrum in 'muts'.
+# Both muts and perms must have a column named 'mutsig' that contains
+# the spectrum channel ID for each mutation and permutation. Further,
+# mutsig must be an ordered factor so that table() properly orders the
+# counts.
+#
+# Creates as many permutation sets as possible. (Each permutation set
+# has the same number of mutations per spectrum channel as the input
+# mutation set 'muts'.)
+select.perms <- function(spectrum.to.match, perms, quiet=FALSE)
+{
+    real.muts <- spectrum.to.match
+    perm.muts <- table(perms$mutsig) #[names(real.muts)]  # no need to reorder anymore because mutsig is an ordered factor
     # how many permutation sets can we get from this sampling?
     limits <- floor(perm.muts/real.muts)
-    print(cbind(real=real.muts, perm=perm.muts, ratio=limits))
-    cat('top limiting factors\n')
-    print(sort(limits))
+
+    if (!quiet) {
+        print(cbind(real=real.muts, perm=perm.muts, ratio=limits))
+        cat('top limiting factors\n')
+        print(sort(limits))
+    }
+
     k <- min(limits)
     if (k < 1)
         stop("n.sample too low: unable to complete any permutations")
@@ -135,126 +100,75 @@ str(perms)
 
     list(k=k, perms=do.call(rbind, lapply(names(real.muts), function(mt) {
         n.real <- real.muts[mt]
-        head(perms[perms$type.and.ctx == mt,], k*n.real)
+        head(perms[perms$mutsig == mt,], k*n.real)
     })))
 }
 
 
-
-
 ################################################################################
-# INDEL PERMUTATION GENERATORS
+# SNV PERMUTATION GENERATOR - uses SBS96 spectrum
 ################################################################################
 
-
-# Updated version of classify.indels/muts to avoid the behavior of
-# SigProfilerMatrixGenerator when there are duplicate indels.
-classify.indels <- function(df, sample.name='dummy', save.plot=F, auto.delete=T, chrs=c(1:22,'X')) {
-    ret <- classify.muts(df=df, spectype='ID', sample.name=sample.name, save.plot=save.plot,
-        auto.delete=auto.delete, chrs=chrs)
-    # remove transcribed strand information
-    ret$muttype <- substr(ret$muttype, 3, 11)
-    ret
-}
-
-
-classify.muts <- function(df, spectype='SNV',
-    sample.name='dummy', save.plot=F, auto.delete=T, chrs=1:22)
+# permute SNVs and preserve the mutation signature
+# n.sample - this is the number of mutations to randomly permute around
+#            the genome PRIOR to downsampling.
+#            this number should be quite high, especially if the mutation
+#            set has many mutated bases at CpGs.
+make.snv.perms.helper <- function(muts, genome.object, genome.file,
+    callable, seed, n.sample=5e4, quiet=FALSE)
 {
-    if (nrow(df) == 0)
-        return(df)
+    perms <- bedtools.permute(n.sample=n.sample, genome.file=genome.file, callable=callable, seed=seed)
 
-    recognized.spectypes <- c('SNV', 'ID')
-    if (!(spectype %in% recognized.spectypes))
-        stop(sprintf("unrecognized spectype '%s', currently only supporting %s",
-            spectype, paste('"', recognized.spectypes, '"', collapse=', ')))
+    # Get the reference base at each permutation position. Could save time here
+    # and get the trinucleotide context, but oh well.
+    perms$refnt <- getSeq(genome.object,
+        names=perms$chr, start=perms$pos, end=perms$pos, as.character=TRUE)
 
-    require(SigProfilerMatrixGeneratorR)
-    td <- paste0(tempdir())
-    spmgd <- paste0(td, "/spmgr/")
-    if (file.exists(spmgd) & auto.delete)
-        unlink(spmgd, recursive=TRUE)
-    dir.create(spmgd, recursive=TRUE)
+    # sometimes the callable regions include Ns.
+    # this can occur, e.g., when a single N is embedded in otherwise normal sequence
+    # or reads extend into an N gap.
+    perms <- perms[perms$refnt != 'N',]
 
-    # convert this to use scansnv.df.to.vcf at some point
-    # Write out the VCF
-    ### From scansnv.to.vcf
-    out.file <- paste0(spmgd, sample.name, '.vcf')
-    f <- file(out.file, "w")
-    vcf.header <- c("##fileformat=VCFv4.0", "##source=scansnv", 
-            "##FORMAT=<ID=GT,Number=1,Type=String,Description=\"Genotype\">", 
-            #sprintf("##contig=<ID=%s,length=%d>", fai[, 1], fai[,2]),
-    paste(c("#CHROM", "POS", "ID", "REF", "ALT", 
-            "QUAL", "FILTER", "INFO", "FORMAT", sample.name), collapse = "\t"))
-    writeLines(vcf.header, con = f)
-    s <- df[!is.na(df$chr),]
-    s <- do.call(rbind, lapply(chrs, function(chr) {
-        ss <- s[s$chr == chr, ]
-        ss[order(ss$pos), ]
-    }))
+    # corner case:
+    # issue arises when there are no input mutations starting from
+    # a particular refnt. then there is no row in mutprobs for that
+    # refnt and the subsequent subset will fail.  even if that subset
+    # succeeded, there would be 0 probability for all altnts, and
+    # sample will then fail.
+    # if that is the case, just remove those permuted sites ahead of
+    # time. this will only occur when 'muts' is small.
+    perms <- perms[perms$refnt %in% unique(muts$refnt),]
 
-    # SigProfilerMatrixGenerator doesn't classify duplicated mutations
-    # from the same sample, it throws errors instead. It also will not
-    # detect duplicates if they are not adjacent in the file.  If the
-    # duplicate is not detected in this way, it causes the bug where
-    # the final newdf dataframe does not match the input df.
-    # To circumvent all these headaches: just remove duplicates up front.
-    mutid <- paste(s$chr, s$pos, s$refnt, s$altnt)
-    dupmut <- duplicated(mutid)
-    cat("Removing", sum(dupmut), "/", nrow(s), "duplicated mutations before annotating\n")
-    s <- s[!dupmut,]
+    # get table of refnt > altnt probabilities to make sampling more efficient
+    mat <- table(muts$refnt, muts$altnt)
+    mutprobs <- mat/rowSums(mat)
 
-    # will write, eg., position=7000000 as 7e6, which will
-    # confuse sigprofilermatrixgenerator
-    old.opt <- options('scipen')$scipen
-    options(scipen=10000)
-    writeLines(paste(s$chr, s$pos, s$dbsnp, s$refnt, s$altnt, 
-        ".", "PASS", ".", "GT", "0/1", sep = "\t"), con = f)
-    close(f)
-    options(scipen=old.opt)
-
-    mat <- SigProfilerMatrixGeneratorR(sample.name, 'GRCh37', spmgd, seqInfo=TRUE, plot=TRUE)
-
-    # Read in the types
-    annot.files <- paste0(spmgd, '/output/vcf_files/', spectype, '/', c(1:22,'X','Y'), "_seqinfo.txt")
-    if (spectype == 'ID') {
-        colclasses <- c(V2='character', V5='character', V6='character')
-    } else if (spectype == 'SNV') {
-        colclasses <- c(V2='character')
-    }
-    annots <- do.call(rbind, lapply(annot.files, function(f) {
-        tryCatch(x <- read.table(f, header=F, stringsAsFactors=FALSE,
-                colClasses=colclasses),
-            error=function(e) NULL)
-    }))
-    if (spectype == 'ID') {
-        colnames(annots) <- c('sample', 'chr', 'pos', 'iclass', 'refnt', 'altnt', 'unknown')
-        newdf <- plyr::join(df, annots[2:6], by = colnames(annots)[-c(1, 4, 7)])
-    } else if (spectype == 'SNV') {
-        colnames(annots) <- c('sample', 'chr', 'pos', 'iclass', 'unknown')
-        newdf <- plyr::join(df, annots[2:4], by = colnames(annots)[-c(1, 4, 5)])
+    if (!quiet) {
+        print(table(perms$refnt))
+        cat('mutprobs\n')
+        print(mutprobs)
     }
 
-    if (save.plot) {
-        plotfiles <- list.files(paste0(spmgd, '/output/plots/'), full.names=T)
-        file.copy(plotfiles, '.')
-    }
+    perms$altnt <- apply(mutprobs[perms$refnt,,drop=FALSE], 1, function(row)
+        sample(x=names(row), size=1, replace=FALSE, prob=row))
+    perms$mutsig <- get.3mer(perms, genome=genome.object)
 
-    if (!all(df$chr == newdf$chr))
-        stop('df and newdf do not perfectly correspond: df$chr != newdf$chr')
-    if (!all(df$pos == newdf$pos))
-        stop('df and newdf do not perfectly correspond: df$pos != newdf$pos')
-
-    if (auto.delete)
-        unlink(spmgd, recursive=TRUE)
-    df$muttype <- newdf$iclass
-    df
+    select.perms(spectrum.to.match=table(muts$mutsig), perms=perms, quiet=quiet)
 }
+
+
+
+
+################################################################################
+# INDEL PERMUTATION GENERATOR - uses ID83 spectrum
+################################################################################
 
 
 # For k=3, got ~100 of the rarest indel classes after removing
 # sites in blacklist or within 200 bp of each other.
-make.indel.perms.helper <- function(muts, spectrum, genome, callable, seed, k=1/10) {
+make.indel.perms.helper <- function(muts, spectrum,
+    genome.object, genome.file, callable, seed, k=1/10, quiet=FALSE)
+{
     # The values below are sufficient to get about 100 of each indel type
     # however, getting the rare indel types is not as important for permutations
     # as it was for the original sensitivity testing. this is because we are
@@ -269,44 +183,50 @@ make.indel.perms.helper <- function(muts, spectrum, genome, callable, seed, k=1/
     nrins=5000000*k
 
     n.sample <- ndels+nins+nrins
-    cat('generating', n.sample, 'candidates at a time\n')
-    perms <- bedtools.permute(muts, n.sample=n.sample, genome=genome, callable=callable, seed=seed)
-    cat('memory after generating permutations:\n')
-    print(gc())
+    if (!quiet) cat('generating', n.sample, 'candidates at a time\n')
+    perms <- bedtools.permute(n.sample=n.sample, genome.file=genome.file, callable=callable, seed=seed)
+    if (!quiet) {
+        cat('memory after generating permutations:\n')
+        print(gc())
+    }
 
 
     # For DELETIONS
-    cat('generating random deletions..\n')
+    if (!quiet) cat('generating random deletions..\n')
     del.chrs <- perms$chr[1:ndels]
     del.locs <- perms$pos[1:ndels]
     del.lens <- 1+rnbinom(length(del.locs), mu=3, size=100)
     # XXX: AUTO del.lens <- sample(1:100, size=ndels, prob=del.ldist, replace=TRUE)
-    del.refnts <- getSeq(BSgenome.Hsapiens.1000genomes.hs37d5,
+    del.refnts <- getSeq(genome.object,
         names=del.chrs, start=del.locs-1, end=del.locs+del.lens-1, as.character=TRUE)
     deld <- data.frame(chr=del.chrs, pos=del.locs-1, refnt=del.refnts, altnt=substr(del.refnts,1,1),
         stringsAsFactors=FALSE)
-    cat('memory after generating deletions:\n')
-    print(gc())
-str(deld)
+    if (!quiet) {
+        cat('memory after generating deletions:\n')
+        print(gc())
+        str(deld)
+    }
 
 
     # For INSERTIONS
-    cat('generating random insertions..\n')
+    if (!quiet) cat('generating random insertions..\n')
     bases <- c('A','C','G','T')
     ins.chrs <- perms$chr[ndels + (1:nins)]
     ins.locs <- perms$pos[ndels + (1:nins)]
     ins.lens <- 1+rnbinom(length(ins.locs), mu=3, size=100)
     # XXX: AUTO ins.lens <- sample(1:100, size=ndels, prob=ins.ldist+rins.ldist, replace=TRUE)
-    ins.refnts <- getSeq(BSgenome.Hsapiens.1000genomes.hs37d5,
+    ins.refnts <- getSeq(genome.object,
         names=ins.chrs, start=ins.locs, end=ins.locs, as.character=TRUE)
     ins.altnts <- sapply(ins.lens, function(l)
         paste0(sample(bases, l, replace=T), collapse=''))
     ind <- data.frame(chr=ins.chrs, pos=ins.locs, refnt=ins.refnts,
         altnt=paste0(ins.refnts, ins.altnts),
         stringsAsFactors=FALSE)
-    cat('memory after generating insertions:\n')
-    print(gc())
-str(ind)
+    if (!quiet) {
+        cat('memory after generating insertions:\n')
+        print(gc())
+        str(ind)
+    }
 
     # Repetitive INSERTIONS
     # no point in trying to generate repetitive elements perfectly.
@@ -316,7 +236,7 @@ str(ind)
     #  choose a position, unit size and #units
     #  extract 'unit' reference bases *after* the base at the chosen
     #  position, repeat those bases #units times
-    cat('generating random insertions in repetitive sites..\n')
+    if (!quiet) cat('generating random insertions in repetitive sites..\n')
     rins.chrs <- perms$chr[ndels+nins + (1:nrins)]
     rins.locs <- perms$pos[ndels+nins + (1:nrins)]
     unit <- sample(5, size=length(rins.locs), replace=T)  # uniform on 1..5
@@ -326,7 +246,7 @@ str(ind)
     #           ^^^^^^^^^^^^----- replicate this stretch nunits times
     # ..do this enough times that the replicated unit will intersect a
     # repetitive region of the same size.
-    nts <- getSeq(BSgenome.Hsapiens.1000genomes.hs37d5,
+    nts <- getSeq(genome.object,
         names=rins.chrs, start=rins.locs, end=rins.locs+unit, as.character=TRUE)
     repli <- substr(nts,2,nchar(nts))
     refnts <- substr(nts, 1, 1)
@@ -335,61 +255,38 @@ str(ind)
     rind <- data.frame(chr=rins.chrs, pos=rins.locs, refnt=refnts,
         altnt=paste0(refnts, extension),
         stringsAsFactors=FALSE)
-    cat('memory after generating repetitive insertions:\n')
-    print(gc())
-str(rind)
+    if (!quiet) {
+        cat('memory after generating repetitive insertions:\n')
+        print(gc())
+        str(rind)
+    }
 
 
-    cat('combining all random mutations..\n')
+    if (!quiet) cat('combining all random mutations..\n')
     d <- rbind(ind, deld, rind)
     # Don't allow any Ns in the reference or alternate sequence
     d <- d[!grepl('N', d$refnt) & !grepl('N', d$altnt),]
-    d <- classify.indels(d)
-cat(nrow(ind), '\n')
-cat(nrow(deld), '\n')
-cat(nrow(rind), '\n')
-print(table(is.na(d$muttype)))
-print(d[is.na(d$muttype),])
-    cat('memory after classify.indels:\n')
-    print(gc())
+    d$mutsig <- classify.indels(d)
+    if (!quiet) {
+        cat(nrow(ind), '\n')
+        cat(nrow(deld), '\n')
+        cat(nrow(rind), '\n')
+        print(table(is.na(d$mutsig)))
+        print(d[is.na(d$mutsig),])
+        cat('memory after classify.indels:\n')
+        print(gc())
+    }
 
-
-    # now that we have a table of random indels, figure out how
-    # many permutation sets that match the provided spectrum can
-    # be taken from the table.
-    real.muts <- spectrum
-    perm.muts <- table(d$muttype)[names(real.muts)]
-    # how many permutation sets can we get from this sampling?
-    limits <- floor(perm.muts/real.muts)
-    print(cbind(real=real.muts, perm=perm.muts, ratio=limits))
-    cat('top limiting factors\n')
-    print(sort(limits))
-    k <- min(limits)
-    if (k < 1)
-        stop("k is too low: unable to complete any permutations")
-    
-    # just randomly reorder (this isn't necessary, bt.shuffle is already unordered
-    d <- d[sample(nrow(d), size=nrow(d), replace=FALSE),]
-    cat('memory after resampling d:\n')
-    print(gc())
-
-    # take the first N of each type and ctx. since order is random, this is equivalent
-    # to selecting a random subset of each SBS channel.
-    # these will be chopped up and turned into valid permutation sets by the caller.
-    return(
-        list(k=k, perms=do.call(rbind, lapply(names(real.muts), function(mt) {
-            n.real <- real.muts[mt]
-            head(d[d$muttype == mt,], k*n.real)
-        })))
-    )
+    select.perms(spectrum.to.match=spectrum, perms=perms, quiet=quiet)
 }
     
 
 
 # basic idea: each call to make.perms.helper creates a large random
-# sample of SNVs, typically enough to create several permutation sets.
-# just continue to call the helper function until all desired perms
-# are created.
+# sample of mutations, typically enough to create several permutation sets.
+# just continue to call the helper function until the number of requested
+# permutation sets are created.
+#
 # this allows us to bypass the small, constant overhead of bt.shuffle,
 # which is 5-10 seconds even when the BED file to be shuffled has as
 # few as 10 lines.
@@ -511,8 +408,3 @@ if (mutclass == 'snv') {
         # smaller for testing
         #k=1/100))
 }
-
-cat('final memory usage:\n')
-print(gc())
-
-save(sample, inrda, permdata, genome.file, callable.file, seed.base, file=outfile, compress=FALSE)
