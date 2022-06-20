@@ -85,7 +85,7 @@ select.perms <- function(spectrum.to.match, perms, quiet=FALSE)
 #            the genome PRIOR to downsampling.
 #            this number should be quite high, especially if the mutation
 #            set has many mutated bases at CpGs.
-make.snv.perms.helper <- function(muts, genome.object, genome.file,
+make.snv.perms.helper <- function(muts, spectrum, genome.object, genome.file,
     callable, seed, n.sample=5e4, quiet=FALSE)
 {
     perms <- bedtools.permute(n.sample=n.sample, genome.file=genome.file, callable=callable, seed=seed)
@@ -124,7 +124,7 @@ make.snv.perms.helper <- function(muts, genome.object, genome.file,
         sample(x=names(row), size=1, replace=FALSE, prob=row))
     perms$mutsig <- get.3mer(perms, genome=genome.object)
 
-    select.perms(spectrum.to.match=table(muts$mutsig), perms=perms, quiet=quiet)
+    select.perms(spectrum.to.match=spectrum, perms=perms, quiet=quiet)
 }
 
 
@@ -268,12 +268,12 @@ make.indel.perms.helper <- function(spectrum,
 #   can be solved per call. (8 minute runtime)
 #
 # max RAM usage is ~4GB for n.samples=10 million or k=1/5
-make.perms <- function(muts, genome, callable, muttype=c('snv','indel'), desired.perms=1000, quiet=FALSE, ...) {
+make.perms <- function(muts, genome.file, callable, muttype=c('snv','indel'), desired.perms=1000, quiet=FALSE, ...) {
     muttype <- match.arg(muttype)
     if (!all(muts$muttype == muttype))
         stop(paste0("all mutations in 'muts' must be of muttype=", muttype))
 
-    if (!quiet) cat(paste('Making', muttype, 'permutations'))
+    if (!quiet) cat(paste('Making', muttype, 'permutations\n'))
 
     permuted.muts <- NULL
     i <- 1
@@ -289,21 +289,15 @@ make.perms <- function(muts, genome, callable, muttype=c('snv','indel'), desired
         ))
     }
 
-    # SNV generator does this internally, though has an ignored 'spectrum' argument
-    # for compatible calling.
-    if (muttype == 'indel') {
-        spectrum.to.match <- table(muts$mutsig)
-    }
-
     while (desired.perms - total.solved > 0) {
         # runif() will be controlled by future.apply
         this.seed <- as.integer(runif(n=1, min=0, max=1e8))
         cat('iteration', i, 'remaining to solve', desired.perms - total.solved, 'seed', this.seed, '\n')
         if (muttype== 'indel') {
-            ret <- make.indel.perms.helper(spectrum=table(muts$mutsig),
+            ret <- make.indel.perms.helper(spectrum=table(id83(muts$mutsig)),
                 genome.file=genome.file, callable=callable, seed=this.seed, ...)
         } else {
-            ret <- make.snv.perms.helper(muts=muts,
+            ret <- make.snv.perms.helper(muts=muts, spectrum=table(sbs96(muts$mutsig)),
                 genome.file=genome.file, callable=callable, seed=this.seed, ...)
         }
         i <- i+1
