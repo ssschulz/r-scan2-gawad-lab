@@ -69,8 +69,18 @@ select.perms <- function(spectrum.to.match, perms, quiet=FALSE)
     if (k < 1)
         stop("n.sample too low: unable to complete any permutations")
     
+    if (any(is.na(perms$pos))) {
+        print(table(is.na(perms$pos)))
+        stop('got NA positions in perms BEFORE sample')
+    }
+
     # just randomly reorder (this isn't necessary, bt.shuffle is already unordered
     perms <- perms[sample(nrow(perms), size=nrow(perms), replace=FALSE),]
+
+    if (any(is.na(perms$pos))) {
+        print(table(is.na(perms$pos)))
+        stop('got NA positions in perms AFTER sample')
+    }
 
     # select the first k of each type and ctx. since order is random, this is equivalent
     # to selecting a random subset of each SBS channel.
