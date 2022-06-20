@@ -237,7 +237,7 @@ make.callable.regions <- function(path, sc.sample, bulk.sample,
 # snv.N - number of random SNVs to make before each downsampling. Lower values
 #         will spend more time waiting on the overhead of calls to bedtools shuffle.
 # indel.K - reduces the number of random indels generated per iteration.
-make.permuted.mutations <- function(muts, callable.bed, genome.file, muttype=c('snv', 'indel'),
+make.permuted.mutations <- function(muts, callable.bed, genome, genome.file, muttype=c('snv', 'indel'),
     n.permutations=10000, snv.N=1e5, indel.K=1/20, n.chunks=100, quiet=TRUE, report.mem=TRUE)
 {
     muttype <- match.arg(muttype)
@@ -250,17 +250,24 @@ make.permuted.mutations <- function(muts, callable.bed, genome.file, muttype=c('
     # to solve roughly equally across chunks.
     desired.perms <- unname(table(cut(1:n.permutations, breaks=n.chunks)))
 
+    # unfortunately, this costs several hundred MB of RAM per thread
+    genome.object <- genome.string.to.bsgenome.object(genome)
+
     progressr::with_progress({
         p <- progressr::progressor(along=1:n.chunks)
         p(amount=0, class='sticky', perfcheck(print.header=TRUE))
         xs <- future.apply::future_lapply(1:n.chunks, function(i) {
             pc <- perfcheck(paste('make.perms',i), {
                     if (muttype == 'snv') {
-                        perms <- make.perms(muts=muts, callable=callable.bed, genome.file=genome.file,
-                            muttype=muttype, desired.perms=desired.perms[i], quiet=quiet, n.sample=snv.N)
+                        perms <- make.perms(muts=muts, callable=callable.bed,
+                            genome.object=genome.object, genome.file=genome.file,
+                            muttype=muttype, desired.perms=desired.perms[i],
+                            quiet=quiet, n.sample=snv.N)
                     } else if (muttype == 'indel') {
-                        perms <- make.perms(muts=muts, callable=callable.bed, genome.file=genome.file,
-                            muttype=muttype, desired.perms=desired.perms[i], quiet=quiet, k=indel.K)
+                        perms <- make.perms(muts=muts, callable=callable.bed,
+                            genome.object=genome.object, genome.file=genome.file,
+                            muttype=muttype, desired.perms=desired.perms[i],
+                            quiet=quiet, k=indel.K)
                     }
                 },
                 report.mem=report.mem)
