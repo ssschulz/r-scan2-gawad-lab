@@ -16,9 +16,13 @@ bedtools.permute <- function(n.sample, genome.file, callable, seed) {
         stop(paste('n.sample cannot exceed', g[1,2][[1]], 'due to current code limitations. '))
 
     # dummy data frame of single base positions to shuffle. the positions are ignored.
-    tmpmuts <- cbind(rep(g[1], n.sample), 1:n.sample, 2:(n.sample+1))
-    
-    perms <- bt.shuffle(i=tmpmuts, g=genome.file, incl=callable, seed=seed, noOverlapping=TRUE)[,1:2]
+    tmpmuts <- cbind(rep(g[1,1][[1]], n.sample), 1:n.sample, 2:(n.sample+1))
+
+    # Don't allow bt.shuffle to make its own file for tmpmuts. it does not make a threadsafe file name.
+    tmpmuts.file <- tempfile(pattern='tmpmuts')
+    utils::write.table(tmpmuts, file=tmpmuts.file, row.names=F, col.names=F, quote=F, sep='\t')
+    perms <- bedtoolsr::bt.shuffle(i=tmpmuts.file, g=genome.file, incl=callable, seed=seed, noOverlapping=TRUE)[,1:2]
+    unlink(tmpmuts.file)
 
     colnames(perms) <- c('chr', 'pos')
     # beds are 0-indexed, getSeq is 1-indexed. this matters in the case where
@@ -296,11 +300,11 @@ make.perms <- function(muts, genome.file, genome.object, callable, muttype=c('sn
         if (muttype== 'indel') {
             ret <- make.indel.perms.helper(spectrum=table(id83(muts$mutsig)),
                 genome.object=genome.object, genome.file=genome.file,
-                callable=callable, seed=this.seed, ...)
+                callable=callable, seed=this.seed, quiet=quiet, ...)
         } else {
             ret <- make.snv.perms.helper(muts=muts, spectrum=table(sbs96(muts$mutsig)),
                 genome.object=genome.object, genome.file=genome.file,
-                callable=callable, seed=this.seed, ...)
+                callable=callable, seed=this.seed, quiet=quiet, ...)
         }
         i <- i+1
         seeds.used <- c(seeds.used, this.seed)
