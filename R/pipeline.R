@@ -248,7 +248,7 @@ make.permuted.mutations <- function(muts, callable.bed, genome.file, muttype=c('
     # just bins the numbers 1..n.permutations into 'n.chunks' bins, where
     # the bin size is close to equal. i.e., divvy up the number of permutations
     # to solve roughly equally across chunks.
-    desired.perms <- unname(table(cutf(1:n.permutations, breaks=n.chunks)))
+    desired.perms <- unname(table(cut(1:n.permutations, breaks=n.chunks)))
 
     progressr::with_progress({
         p <- progressr::progressor(along=1:n.chunks)

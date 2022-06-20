@@ -27,7 +27,7 @@ bedtools.permute <- function(n.sample, genome.file, callable, seed) {
     perms <- perms[perms$pos >= 50,]
     perms$chr <- as.character(perms$chr)
     perms <- head(perms, real.n.sample)
-    if (nrow(perms) < n.sample)
+    if (nrow(perms) < real.n.sample)
         stop(paste('failed to generate enough sites. requested', n.sample, 'got', nrow(perms)))
 
     if (any(duplicated(paste(perms$chr, perms$pos))))
