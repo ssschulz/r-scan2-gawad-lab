@@ -268,7 +268,7 @@ make.indel.perms.helper <- function(spectrum,
 #   can be solved per call. (8 minute runtime)
 #
 # max RAM usage is ~4GB for n.samples=10 million or k=1/5
-make.perms <- function(muts, genome.file, callable, muttype=c('snv','indel'), desired.perms=1000, quiet=FALSE, ...) {
+make.perms <- function(muts, genome.file, genome.object, callable, muttype=c('snv','indel'), desired.perms=1000, quiet=FALSE, ...) {
     muttype <- match.arg(muttype)
     if (!all(muts$muttype == muttype))
         stop(paste0("all mutations in 'muts' must be of muttype=", muttype))
@@ -295,10 +295,12 @@ make.perms <- function(muts, genome.file, callable, muttype=c('snv','indel'), de
         cat('iteration', i, 'remaining to solve', desired.perms - total.solved, 'seed', this.seed, '\n')
         if (muttype== 'indel') {
             ret <- make.indel.perms.helper(spectrum=table(id83(muts$mutsig)),
-                genome.file=genome.file, callable=callable, seed=this.seed, ...)
+                genome.object=genome.object, genome.file=genome.file,
+                callable=callable, seed=this.seed, ...)
         } else {
             ret <- make.snv.perms.helper(muts=muts, spectrum=table(sbs96(muts$mutsig)),
-                genome.file=genome.file, callable=callable, seed=this.seed, ...)
+                genome.object=genome.object, genome.file=genome.file,
+                callable=callable, seed=this.seed, ...)
         }
         i <- i+1
         seeds.used <- c(seeds.used, this.seed)
