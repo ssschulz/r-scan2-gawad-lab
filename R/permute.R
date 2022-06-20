@@ -1,33 +1,3 @@
-desired.perms <- as.integer(args[1])
-sample <- args[2]
-inrda <- args[3]
-outfile <- args[4]
-mutclass <- args[5]
-callable.file <- args[6]
-genome.file <- args[7]
-seed.base <- as.integer(args[8])*1e6
-
-if (!(mutclass %in% c('snv','indel')))
-    stop('argument 5 must be either "snv" or "indel"')
-
-if (file.exists(outfile))
-    stop(paste('output file', outfile, 'already exists, please delete it first'))
-
-if (!file.exists(callable.file))
-    stop("BED file containing callable regions does not exist")
-
-if (!file.exists(genome.file))
-    stop("genome file containing genome coordinates does not exist")
-
-cat('got seed.base and multiplied by 1e6', seed.base/1e6, '->', seed.base, '\n')
-
-
-suppressMessages(library(bedtoolsr))
-suppressMessages(library(scan2))
-suppressMessages(library(BSgenome))
-suppressMessages(library(BSgenome.Hsapiens.1000genomes.hs37d5))
-
-
 # This function uses bedtools to randomly select positions (bedtools shuffle)
 # within the region defined by 'callable'.
 #
@@ -37,6 +7,7 @@ suppressMessages(library(BSgenome.Hsapiens.1000genomes.hs37d5))
 # genome - a BEDtools genome file, which lists one chromosome and its length
 #          per line, separated by a tab.
 bedtools.permute <- function(n.sample, genome.file, callable, seed) {
+    require(bedtoolsr)
     g <- fread(genome.file)  # only read this to get a valid chromosome name
 
     real.n.sample <- n.sample
@@ -166,7 +137,7 @@ make.snv.perms.helper <- function(muts, genome.object, genome.file,
 
 # For k=3, got ~100 of the rarest indel classes after removing
 # sites in blacklist or within 200 bp of each other.
-make.indel.perms.helper <- function(muts, spectrum,
+make.indel.perms.helper <- function(spectrum,
     genome.object, genome.file, callable, seed, k=1/10, quiet=FALSE)
 {
     # The values below are sufficient to get about 100 of each indel type
@@ -297,8 +268,13 @@ make.indel.perms.helper <- function(muts, spectrum,
 #   can be solved per call. (8 minute runtime)
 #
 # max RAM usage is ~4GB for n.samples=10 million or k=1/5
-make.perms <- function(muts, genome, callable, mutclass=c('snv','indel'), desired.perms=10000, ...) {
-    mutclass <- match.arg(mutclass)
+make.perms <- function(muts, genome, callable, muttype=c('snv','indel'), desired.perms=1000, quiet=FALSE, ...) {
+    muttype <- match.arg(muttype)
+    if (!all(muts$muttype == muttype))
+        stop(paste0("all mutations in 'muts' must be of muttype=", muttype))
+
+    if (!quiet) cat(paste('Making', muttype, 'permutations'))
+
     permuted.muts <- NULL
     i <- 1
     total.solved <- 0
@@ -307,7 +283,7 @@ make.perms <- function(muts, genome, callable, mutclass=c('snv','indel'), desire
     # drop out early if there are no mutations
     if (nrow(muts) == 0) {
         return(list(total.solved=desired.perms,
-            seeds.used=seed.base+1,                         # whatever
+            seeds.used=NA,
             muts=muts, raw.perms=NULL,
             perms=lapply(1:desired.perms, function(i) NULL) # list of NULLs
         ))
@@ -315,33 +291,21 @@ make.perms <- function(muts, genome, callable, mutclass=c('snv','indel'), desire
 
     # SNV generator does this internally, though has an ignored 'spectrum' argument
     # for compatible calling.
-    if (mutclass == 'indel') {
-        cat('Making INDEL permutations\n')
-        spectrum.to.duplicate <- plot.indel(iclass=muts$muttype, make.plot=FALSE, reduce.to.id83=FALSE)
-    } else {
-        cat('Making SNV permutations\n')
+    if (muttype == 'indel') {
+        spectrum.to.match <- table(muts$mutsig)
     }
 
     while (desired.perms - total.solved > 0) {
-        this.seed <- seed.base+i
-        # list of seeds that, for some reason, cause a floating point exception
-        # in bedtools shuffle. this only happened for one seed at depths 25 and 30.
-        if (this.seed %in% c(329000001))
-            this.seed <- this.seed+1
+        # runif() will be controlled by future.apply
+        this.seed <- as.integer(runif(n=1, min=0, max=1e8))
         cat('iteration', i, 'remaining to solve', desired.perms - total.solved, 'seed', this.seed, '\n')
-        if (mutclass == 'indel') {
-            print(system.time(
-                ret <- make.indel.perms.helper(muts=muts, spectrum=spectrum.to.duplicate,
-                    genome=genome, callable=callable, seed=this.seed, ...)
-            ))
+        if (muttype== 'indel') {
+            ret <- make.indel.perms.helper(spectrum=table(muts$mutsig),
+                genome.file=genome.file, callable=callable, seed=this.seed, ...)
         } else {
-            print(system.time(
-                ret <- make.snv.perms.helper(muts=muts,
-                    genome=genome, callable=callable, seed=this.seed, ...)
-            ))
+            ret <- make.snv.perms.helper(muts=muts,
+                genome.file=genome.file, callable=callable, seed=this.seed, ...)
         }
-        cat('memory after make.XXX.perms.helper:\n')
-        print(gc())
         i <- i+1
         seeds.used <- c(seeds.used, this.seed)
         total.solved <- total.solved + ret$k
@@ -350,61 +314,17 @@ make.perms <- function(muts, genome, callable, mutclass=c('snv','indel'), desire
     }
 
     # chop up the mutations into individual permutation sets
-    # sadly, SNVs and indels save signature components in different columns
-    if (mutclass == 'snv') {
-        muttype.counts <- table(muts$type.and.ctx)
-        muts.by.muttype <- split(permuted.muts, permuted.muts$type.and.ctx)
-    } else if (mutclass == 'indel') {
-        muttype.counts <- table(muts$muttype)
-        muts.by.muttype <- split(permuted.muts, permuted.muts$muttype)
-    }
+    muttype.counts <- table(muts$mutsig)
+    muts.by.muttype <- split(permuted.muts, permuted.muts$mutsig)
     all.muttypes <- names(muttype.counts)
-    str(muts.by.muttype)
-    print(all.muttypes)
-    print(muttype.counts)
+    if (!quiet) {
+        str(muts.by.muttype)
+        print(all.muttypes)
+        print(muttype.counts)
+    }
     perms <- lapply(1:desired.perms, function(i) {
         do.call(rbind, lapply(all.muttypes, function(mt)
             muts.by.muttype[[mt]][(1 + (i-1)*muttype.counts[mt]):(i*muttype.counts[mt]),]))
     })
     list(total.solved=total.solved, seeds.used=seeds.used, muts=muts, raw.perms=permuted.muts, perms=perms)
-}
-
-
-
-
-
-muts <- get(load(inrda))
-muts <- muts[muts$sample == sample,]
-cat("Found", nrow(muts), "mutations of type", mutclass, "for sample", sample, '\n')
-
-if (mutclass == 'snv') {
-    system.time(permdata <- make.perms(
-        muts=muts,
-        mutclass=mutclass,
-        genome=genome.file,
-        callable=callable.file,
-        desired.perms=desired.perms, n.sample=1e6))
-        # real usage
-        #n.sample=1e6))
-        # smaller for testing
-        #n.sample=1e4))
-} else { 
-    system.time(permdata <- make.perms(
-        muts=muts,
-        mutclass=mutclass,
-        genome=genome.file,
-        callable=callable.file,
-        desired.perms=desired.perms, k=1/5))
-        # real usage
-        # N.B.: potential duplicate positions are removed on each loop, the number of
-        # which depends on k. higher values of k mean fewer loops and thus lower likelihood
-        # of duplicate positions, which may be undesirable.
-        # duplicate rates are generally low and it is debatable whether they should be
-        # removed at all--they tend to represent regions with local sequence contexts
-        # amenable to creating certain types of indels and thus may also be where
-        # mutations of the same type are also more frequent. Note there is no removal of
-        # duplicate permuted indels across samples.
-        #k=1/5))
-        # smaller for testing
-        #k=1/100))
 }
