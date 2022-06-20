@@ -5,7 +5,11 @@
 # region can be a GRanges object with a single interval to read only
 # a subset of the GATK table. The table is tabix indexed, so this can
 # be done quickly.
-digest.depth.2sample <- function(path, sc.sample, bulk.sample, clamp.dp=500, region=NULL, quiet=FALSE) {
+#
+# keep.coords - whether to keep the chrom/pos columns. these files are
+#    basepair resolution, so doubling the memory required for reading
+#    can have a large impact on RAM needed.
+read.depth.2sample <- function(path, sc.sample, bulk.sample, keep.coords=TRUE, region=NULL, quiet=FALSE) {
     tf <- Rsamtools::TabixFile(path)
     open(tf)
     header <- read.tabix.header(tf)
@@ -34,16 +38,37 @@ digest.depth.2sample <- function(path, sc.sample, bulk.sample, clamp.dp=500, reg
     }
     
     cols.to.read <- rep("NULL", length(col.strings))
-    # We don't care about chromosome/position here, only depth counts
     cols.to.read[c(sc.sample.idx, bulk.sample.idx)] <- c('integer', 'integer')
+
+    # Do we need chromosome/position?
+    if (keep.coords)
+        cols.to.read[1:2] <- c('character', 'integer')
 
     # Reading in a somewhat preparsed GATK DepthOfCoverage table
     gatk.doc <- read.tabix.data(path=path, region=region, header=header, quiet=quiet, colClasses=cols.to.read)
 
-    if (nrow(gatk.doc) > 0) {
-        # Standardize on 1st column: single cell, 2nd column: bulk
-        setcolorder(gatk.doc, c(sc.sample, bulk.sample))
+    colorder <- c(sc.sample, bulk.sample)
+    if (keep.coords)
+        colorder <- c('chr', 'pos', colorder)
+    setcolorder(gatk.doc, colorder)
 
+    gatk.doc
+}
+
+
+# Some extra work to make sure we only read in the part of the
+# table relevant to one sample. Otherwise, memory can become
+# an issue for projects with 10s-100s of cells.
+#
+# region can be a GRanges object with a single interval to read only
+# a subset of the GATK table. The table is tabix indexed, so this can
+# be done quickly.
+digest.depth.2sample <- function(path, sc.sample, bulk.sample, clamp.dp=500, region=NULL, quiet=FALSE) {
+    gatk.doc <- read.depth.2sample(path=path,
+        sc.sample=sc.sample, bulk.sample=bulk.sample,
+        keep.coords=FALSE, region=region, quiet=quiet)
+
+    if (nrow(gatk.doc) > 0) {
         # Set maximum depth to clamp.dp
         gatk.doc <- gatk.doc[, lapply(.SD, pmin, clamp.dp)]
 
@@ -57,6 +82,22 @@ digest.depth.2sample <- function(path, sc.sample, bulk.sample, clamp.dp=500, reg
     }
 
     dptab <- table(gatk.doc) - diag(clamp.dp+1)
-
     dptab
+}
+
+
+# Returns a GRanges object of all ranges passing the minimum depth cutoffs
+# given in min.sc.dp and min.bulk.dp.
+compute.callable.region <- function(path, sc.sample, bulk.sample, min.sc.dp, min.bulk.dp, region=NULL, quiet=FALSE)
+{
+    gatk.doc <- read.depth.2sample(path=path,
+        sc.sample=sc.sample, bulk.sample=bulk.sample,
+        keep.coords=TRUE, region=region, quiet=quiet)
+
+    colnames(gatk.doc)[3:4] <- c('sc.dp', 'bulk.dp')
+    gatk.doc <- gatk.doc[sc.dp >= min.sc.dp & bulk.dp >= min.bulk.dp]
+    # GPos() doesn't support reduce() so sadly it seems we don't have the
+    # option to use it for more memory efficiency.
+    g <- reduce(GRanges(seqnames=gatk.doc$chr, ranges=IRanges(start=gatk.doc$pos, end=gatk.doc$pos)))
+    g
 }
