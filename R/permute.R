@@ -92,7 +92,7 @@ make.snv.perms.helper <- function(muts, spectrum, genome.object, genome.file,
 
     # Get the reference base at each permutation position. Could save time here
     # and get the trinucleotide context, but oh well.
-    perms$refnt <- getSeq(genome.object,
+    perms$refnt <- Biostrings::getSeq(genome.object,
         names=perms$chr, start=perms$pos, end=perms$pos, as.character=TRUE)
 
     # sometimes the callable regions include Ns.
@@ -168,7 +168,7 @@ make.indel.perms.helper <- function(spectrum,
     del.locs <- perms$pos[1:ndels]
     del.lens <- 1+rnbinom(length(del.locs), mu=3, size=100)
     # XXX: AUTO del.lens <- sample(1:100, size=ndels, prob=del.ldist, replace=TRUE)
-    del.refnts <- getSeq(genome.object,
+    del.refnts <- Biostrings::getSeq(genome.object,
         names=del.chrs, start=del.locs-1, end=del.locs+del.lens-1, as.character=TRUE)
     deld <- data.frame(chr=del.chrs, pos=del.locs-1, refnt=del.refnts, altnt=substr(del.refnts,1,1),
         stringsAsFactors=FALSE)
@@ -186,7 +186,7 @@ make.indel.perms.helper <- function(spectrum,
     ins.locs <- perms$pos[ndels + (1:nins)]
     ins.lens <- 1+rnbinom(length(ins.locs), mu=3, size=100)
     # XXX: AUTO ins.lens <- sample(1:100, size=ndels, prob=ins.ldist+rins.ldist, replace=TRUE)
-    ins.refnts <- getSeq(genome.object,
+    ins.refnts <- Biostrings::getSeq(genome.object,
         names=ins.chrs, start=ins.locs, end=ins.locs, as.character=TRUE)
     ins.altnts <- sapply(ins.lens, function(l)
         paste0(sample(bases, l, replace=T), collapse=''))
@@ -217,7 +217,7 @@ make.indel.perms.helper <- function(spectrum,
     #           ^^^^^^^^^^^^----- replicate this stretch nunits times
     # ..do this enough times that the replicated unit will intersect a
     # repetitive region of the same size.
-    nts <- getSeq(genome.object,
+    nts <- Biostrings::getSeq(genome.object,
         names=rins.chrs, start=rins.locs, end=rins.locs+unit, as.character=TRUE)
     repli <- substr(nts,2,nchar(nts))
     refnts <- substr(nts, 1, 1)
