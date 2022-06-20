@@ -229,3 +229,46 @@ make.callable.regions <- function(path, sc.sample, bulk.sample,
     gr <- do.call(c, xs)
     list(regions=gr, sc.sample=sc.sample, bulk.sample=bulk.sample, min.sc.dp=min.sc.dp, min.bulk.dp=min.bulk.dp)
 }
+
+
+# Recommended to use smaller tiles than the usual 10 MB. The files processed
+# here are basepair resolution and cover essentially the entire genome.
+#
+# snv.N - number of random SNVs to make before each downsampling. Lower values
+#         will spend more time waiting on the overhead of calls to bedtools shuffle.
+# indel.K - reduces the number of random indels generated per iteration.
+make.permuted.mutations <- function(path, callable.bed, genome, muttype=c('snv', 'indel'),
+    n.permutations=10000, snv.N=1e5, indel.K=1/10, n.chunks=100, quiet=TRUE, report.mem=TRUE)
+{
+    muttype <- match.arg(muttype)
+
+    cat('Permuting mutations using', n.chunks, 'chunks.\n')
+    cat('Parallelizing with', future::nbrOfWorkers(), 'cores.\n')
+
+    # just bins the numbers 1..n.permutations into 'n.chunks' bins, where
+    # the bin size is close to equal. i.e., divvy up the number of permutations
+    # to solve roughly equally across chunks.
+    desired.perms <- unname(table(1:n.permutations, breaks=n.chunks))
+
+    progressr::with_progress({
+        p <- progressr::progressor(along=1:n.chunks)
+        p(amount=0, class='sticky', perfcheck(print.header=TRUE))
+        xs <- future.apply::future_lapply(1:n.chunks, function(i) {
+            pc <- perfcheck(paste('make.perms',i), {
+                    if (muttype == 'snv') {
+                        perms <- make.perms(muts=muts, callable=callable.bed, genome.file=genome.file,
+                            muttype=muttype, desired.perms=desired.perms[i], quiet=quiet, n.sample=snv.N)
+                    } else if (muttype == 'indel') {
+                        perms <- make.perms(muts=muts, callable=callable.bed, genome.file=genome.file,
+                            muttype=muttype, desired.perms=desired.perms[i], quiet=quiet, k=indel.K)
+                    }
+                },
+                report.mem=report.mem)
+            p(class='sticky', amount=1, pc)
+
+            perms
+        }, future.seed=0)  # this is REQUIRED for make.perms()
+    }, enable=TRUE)
+
+    perms <- concat.perms(xs)
+}
