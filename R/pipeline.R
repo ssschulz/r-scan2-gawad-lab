@@ -196,3 +196,36 @@ digest.depth.profile <- function(path, sc.sample, bulk.sample,
 
     list(dptab=dptab, clamp.dp=clamp.dp)
 }
+
+
+# Recommended to use smaller tiles than the usual 10 MB. The files processed
+# here are basepair resolution and cover essentially the entire genome.
+make.callable.regions <- function(path, sc.sample, bulk.sample,
+    genome, min.sc.dp, min.bulk.dp,
+    genome.seqinfo=genome.string.to.seqinfo.object(genome),
+    grs=tileGenome(seqlengths=genome.seqinfo[as.character(1:22)], tilewidth=5e6, cut.last.tile.in.chrom=TRUE),
+    quiet=TRUE, report.mem=TRUE)
+{
+    cat('Getting callable regions using', length(grs), 'chunks.\n')
+    cat('Parallelizing with', future::nbrOfWorkers(), 'cores.\n')
+
+    progressr::with_progress({
+        p <- progressr::progressor(along=1:length(grs))
+        p(amount=0, class='sticky', perfcheck(print.header=TRUE))
+        xs <- future.apply::future_lapply(1:length(grs), function(i) {
+            gr <- grs[i,]
+
+            pc <- perfcheck(paste('compute.callable.region',i),
+                g <- compute.callable.region(path=path, sc.sample=sc.sample,
+                    bulk.sample=bulk.sample, min.sc.dp=min.sc.dp, min.bulk.dp=min.bulk.dp,
+                    region=gr, quiet=quiet),
+                report.mem=report.mem)
+            p(class='sticky', amount=1, pc)
+
+            g
+        })
+    }, enable=TRUE)
+
+    gr <- do.call(c, xs)
+    list(regions=gr, sc.sample=sc.sample, bulk.sample=bulk.sample, min.sc.dp=min.sc.dp, min.bulk.dp=min.bulk.dp)
+}
