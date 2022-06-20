@@ -54,7 +54,8 @@ bedtools.permute <- function(n.sample, genome.file, callable, seed) {
 select.perms <- function(spectrum.to.match, perms, quiet=FALSE)
 {
     real.muts <- spectrum.to.match
-    perm.muts <- table(perms$mutsig) #[names(real.muts)]  # no need to reorder anymore because mutsig is an ordered factor
+    perm.muts <- table(perms$mutsig)
+
     # how many permutation sets can we get from this sampling?
     limits <- floor(perm.muts/real.muts)
 
@@ -70,13 +71,22 @@ select.perms <- function(spectrum.to.match, perms, quiet=FALSE)
     
     # just randomly reorder (this isn't necessary, bt.shuffle is already unordered
     perms <- perms[sample(nrow(perms), size=nrow(perms), replace=FALSE),]
-    # take the first N of each type and ctx. since order is random, this is equivalent
-    # to selecting a random subset of each SBS channel.
 
+    # select the first k of each type and ctx. since order is random, this is equivalent
+    # to selecting a random subset of each SBS channel.
     list(k=k, perms=do.call(rbind, lapply(names(real.muts), function(mt) {
         n.real <- real.muts[mt]
-        head(perms[perms$mutsig == mt,], k*n.real)
+        ret <- head(perms[perms$mutsig == mt,], k*n.real)
+        if (any(is.na(ret$pos))) {
+            cat('k=', k, '\n')
+            cat('n.real=', n.real, '\n')
+            cat('mt=', mt, '\n')
+            cat('nrow(perms)=', nrow(perms), '\n')
+            cat('nrow(perms[perms$mutsig==mt,])=', nrow(perms[perms$mutsig==mt,]), '\n')
+            stop('generated NA positions')
+        }
     })))
+        
 }
 
 
