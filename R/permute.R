@@ -85,6 +85,7 @@ select.perms <- function(spectrum.to.match, perms, quiet=FALSE)
             cat('nrow(perms[perms$mutsig==mt,])=', nrow(perms[perms$mutsig==mt,]), '\n')
             stop('generated NA positions')
         }
+        ret
     })))
         
 }
