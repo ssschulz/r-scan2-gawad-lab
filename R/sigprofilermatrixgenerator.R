@@ -50,7 +50,7 @@ classify.muts <- function(df, genome.string, spectype='SNV',
     # confuse sigprofilermatrixgenerator
     old.opt <- options('scipen')$scipen
     options(scipen=10000)
-    writeLines(paste(s$chr, s$pos, s$dbsnp, s$refnt, s$altnt, 
+    writeLines(paste(s$chr, s$pos, '.', s$refnt, s$altnt, 
         ".", "PASS", ".", "GT", "0/1", sep = "\t"), con = f)
     close(f)
     options(scipen=old.opt)
