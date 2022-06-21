@@ -56,7 +56,7 @@ classify.muts <- function(df, genome.string, spectype='SNV',
     options(scipen=old.opt)
 
     if (verbose) {
-        mat <- SigProfilerMatrixGeneratorR::SigProfilerMatrixGeneratorR(sample.name, genome.string, spmgd, seqInfo=TRUE, plot=save.plot))
+        mat <- SigProfilerMatrixGeneratorR::SigProfilerMatrixGeneratorR(sample.name, genome.string, spmgd, seqInfo=TRUE, plot=save.plot)
     } else {
         # Prevent sigprofilermatrixgenerator's output from being printed
         # XXX: should probably do some error handling here
