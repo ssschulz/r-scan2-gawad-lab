@@ -55,10 +55,14 @@ classify.muts <- function(df, genome.string, spectype='SNV',
     close(f)
     options(scipen=old.opt)
 
-    # Prevent sigprofilermatrixgenerator's output from being printed
-    # XXX: should probably do some error handling here
-    reticulate::py_capture_output(
+    if (verbose) {
         mat <- SigProfilerMatrixGeneratorR::SigProfilerMatrixGeneratorR(sample.name, genome.string, spmgd, seqInfo=TRUE, plot=save.plot))
+    } else {
+        # Prevent sigprofilermatrixgenerator's output from being printed
+        # XXX: should probably do some error handling here
+        reticulate::py_capture_output(
+            mat <- SigProfilerMatrixGeneratorR::SigProfilerMatrixGeneratorR(sample.name, genome.string, spmgd, seqInfo=TRUE, plot=save.plot))
+    }
 
     # Read in the types
     annot.files <- paste0(spmgd, '/output/vcf_files/', spectype, '/', c(1:22,'X','Y'), "_seqinfo.txt")
@@ -96,28 +100,22 @@ classify.muts <- function(df, genome.string, spectype='SNV',
     df
 }
 
-
-# annotates and returns a data.frame
-old.classify.indels <- function(df, sample.name='dummy', save.plot=F, auto.delete=T, chrs=1:22) {
-    classify.muts(df=df, spectype='ID', sample.name=sample.name, save.plot=save.plot,
-        auto.delete=auto.delete, chrs=chrs)
-}
-
-genome.to.spgmr.format <- c(
+genome.to.spmgr.format <- c(
     hs37d5='GRCh37',
     hg38='GRCh38',
     mm9='GRCm37')
 
 # new version: just returns the vector of indel classes
 # FORCES ID83 FOR NOW
-classify.indels <- function(df, genome.string='GRCh37', sample.name='dummy', save.plot=F, auto.delete=T, chrs=1:22) {
+# N.B.: don't provide a default genome.string; it's dangerous.
+classify.indels <- function(df, genome.string, sample.name='dummy', save.plot=F, auto.delete=T, chrs=1:22, verbose=FALSE) {
     # SigProfilerMatrixGenerator returns ID415 by default, which is ID83 plus one of
     # 5 transcription strand states: B, N, Q, T, U. The format of the string is, e.g.,
     #    U:1:Del:T:1
     # Removing the first two characters "U:" leaves an ID83 type.
-    id415 <- classify.muts(df=df, genome.string=genome.to.spgmr.format[genome.string],
+    id415 <- classify.muts(df=df, genome.string=genome.to.spmgr.format[genome.string],
         spectype='ID', sample.name=sample.name, save.plot=save.plot,
-        auto.delete=auto.delete, chrs=chrs)$muttype
+        auto.delete=auto.delete, chrs=chrs, verbose=verbose)$muttype
     # id83() converts strings into a factor
     id83(substr(id415, 3, nchar(id415[1])))
 }
