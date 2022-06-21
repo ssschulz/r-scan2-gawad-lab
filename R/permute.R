@@ -279,6 +279,7 @@ make.indel.perms.helper <- function(spectrum,
     }))
     d$mutsig <- classify.indels(d, genome.string=genome.string, verbose=!quiet)
     if (!quiet) {
+        print(head(d))
         cat(nrow(ind), '\n')
         cat(nrow(deld), '\n')
         cat(nrow(rind), '\n')
@@ -289,8 +290,8 @@ make.indel.perms.helper <- function(spectrum,
     }
 
     # NAs can pop up here if any Ns are in the nucleotides near pos
-    perms <- perms[!is.na(perms$mutsig),]
-    select.perms(spectrum.to.match=spectrum, perms=perms, quiet=quiet)
+    d <- d[!is.na(d$mutsig),]
+    select.perms(spectrum.to.match=spectrum, perms=d, quiet=quiet)
 }
     
 
