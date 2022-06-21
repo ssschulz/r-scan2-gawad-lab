@@ -306,7 +306,7 @@ make.indel.perms.helper <- function(spectrum,
 # max RAM usage is ~4GB for n.samples=10 million or k=1/5
 make.perms <- function(muts, genome.file, genome.string,
     callable, seed.base, muttype=c('snv','indel'), desired.perms=1000,
-    genome.object=genome.string.to.bsgenome(object),
+    genome.object=genome.string.to.bsgenome.object(object),
     quiet=FALSE, ...)
 {
     muttype <- match.arg(muttype)
