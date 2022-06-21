@@ -263,6 +263,13 @@ make.indel.perms.helper <- function(spectrum,
     d <- rbind(ind, deld, rind)
     # Don't allow any Ns in the reference or alternate sequence
     d <- d[!grepl('N', d$refnt) & !grepl('N', d$altnt),]
+
+    # d needs to be sorted before classify.indels. use genome.object
+    # to keep chroms in expected order.
+    d <- do.call(rbind, lapply(seqnames(genome.object), function(chr) {
+        dd <- d[d$chr == chr, ]
+        dd[order(dd$pos), ]
+    }))
     d$mutsig <- classify.indels(d)
     if (!quiet) {
         cat(nrow(ind), '\n')
