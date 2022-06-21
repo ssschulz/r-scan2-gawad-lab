@@ -55,6 +55,12 @@ select.perms <- function(spectrum.to.match, perms, quiet=FALSE)
 {
     real.muts <- spectrum.to.match
     perm.muts <- table(perms$mutsig)
+    if (!quiet) {
+        cat('real.muts ----- \n')
+        print(real.muts)
+        cat('perm.muts -------\n')
+        print(perm.muts)
+    }
 
     # how many permutation sets can we get from this sampling?
     limits <- floor(perm.muts/real.muts)
