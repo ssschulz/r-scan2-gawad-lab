@@ -148,6 +148,7 @@ make.snv.perms.helper <- function(muts, spectrum, genome.object, genome.file,
     perms$altnt <- apply(mutprobs[perms$refnt,,drop=FALSE], 1, function(row)
         sample(x=names(row), size=1, replace=FALSE, prob=row))
     perms$mutsig <- get.3mer(perms, genome=genome.object)
+    perms <- perms[!is.na(perms$mutsig),]  # NAs can pop up here if there's an N in the trinucleotide context
 
     select.perms(spectrum.to.match=spectrum, perms=perms, quiet=quiet)
 }
@@ -273,6 +274,8 @@ make.indel.perms.helper <- function(spectrum,
         print(gc())
     }
 
+    # NAs can pop up here if there's an N in the surrounding nucleotides
+    perms <- perms[!is.na(perms$mutsig),]
     select.perms(spectrum.to.match=spectrum, perms=perms, quiet=quiet)
 }
     
