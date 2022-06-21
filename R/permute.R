@@ -324,7 +324,9 @@ make.perms <- function(muts, genome.file, genome.object, callable, seed.base, mu
         # permuted sites across a batch of samples aren't the same.
         # extra arithmetic here just ensures we remain in 32-bit integer space
         this.seed <- as.integer((seed.base + as.integer(runif(n=1, min=0, max=1e8))) %% (2^31-1))
-        cat('iteration', i, 'remaining to solve', desired.perms - total.solved, 'seed', this.seed, '\n')
+        if (!quiet) {
+            cat('iteration', i, 'remaining to solve', desired.perms - total.solved, 'seed', this.seed, '\n')
+        }
         if (muttype== 'indel') {
             ret <- make.indel.perms.helper(spectrum=table(id83(muts$mutsig)),
                 genome.object=genome.object, genome.file=genome.file,
