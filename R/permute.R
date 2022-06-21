@@ -164,7 +164,8 @@ make.snv.perms.helper <- function(muts, spectrum, genome.object, genome.file,
 # For k=3, got ~100 of the rarest indel classes after removing
 # sites in blacklist or within 200 bp of each other.
 make.indel.perms.helper <- function(spectrum,
-    genome.object, genome.file, callable, seed, k=1/10, quiet=FALSE)
+    genome.object, genome.file, genome.string,
+    callable, seed, k=1/10, quiet=FALSE)
 {
     # The values below are sufficient to get about 100 of each indel type
     # however, getting the rare indel types is not as important for permutations
@@ -270,7 +271,7 @@ make.indel.perms.helper <- function(spectrum,
         dd <- d[d$chr == chr, ]
         dd[order(dd$pos), ]
     }))
-    d$mutsig <- classify.indels(d)
+    d$mutsig <- classify.indels(d, genome.string=genome.string, verbose=!quiet)
     if (!quiet) {
         cat(nrow(ind), '\n')
         cat(nrow(deld), '\n')
@@ -303,7 +304,11 @@ make.indel.perms.helper <- function(spectrum,
 #   can be solved per call. (8 minute runtime)
 #
 # max RAM usage is ~4GB for n.samples=10 million or k=1/5
-make.perms <- function(muts, genome.file, genome.object, callable, seed.base, muttype=c('snv','indel'), desired.perms=1000, quiet=FALSE, ...) {
+make.perms <- function(muts, genome.file, genome.string,
+    callable, seed.base, muttype=c('snv','indel'), desired.perms=1000,
+    genome.object=genome.string.to.bsgenome(object),
+    quiet=FALSE, ...)
+{
     muttype <- match.arg(muttype)
     if (!all(muts$muttype == muttype))
         stop(paste0("all mutations in 'muts' must be of muttype=", muttype))
@@ -336,7 +341,7 @@ make.perms <- function(muts, genome.file, genome.object, callable, seed.base, mu
         }
         if (muttype== 'indel') {
             ret <- make.indel.perms.helper(spectrum=table(id83(muts$mutsig)),
-                genome.object=genome.object, genome.file=genome.file,
+                genome.object=genome.object, genome.file=genome.file, genome.string=genome.string,
                 callable=callable, seed=this.seed, quiet=quiet, ...)
         } else {
             ret <- make.snv.perms.helper(muts=muts, spectrum=table(sbs96(muts$mutsig)),
