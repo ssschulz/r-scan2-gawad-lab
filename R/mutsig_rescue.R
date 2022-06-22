@@ -17,11 +17,13 @@ prepare.object <- function(object, quiet=FALSE) {
 
 
 get.objects.for.sig.rescue <- function(object.paths, quiet=FALSE) {
-    setNames(lapply(object.paths, function(path) {
+    os <- lapply(object.paths, function(path) {
         if (!quiet) print(path)
         x <- get(load(path))
         prepare.object(x)
-    }), sapply(os, function(o) o@single.cell))
+    })
+    names(os) <- sapply(os, function(o) o@single.cell)
+    os
 }
 
 
