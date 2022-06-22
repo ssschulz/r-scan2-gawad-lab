@@ -60,11 +60,13 @@ mutsig.rescue <- function(object.paths, add.muts, rescue.target.fdr=0.01, object
     if (!missing(object.paths) & !is.null(objects))
         stop('exactly one of object.paths or objects may be specified')
 
+    use.add.muts <- FALSE
     if (!missing(add.muts)) {
         if (!('data.table' %in% class(add.muts)) |
             !('muttype' %in% colnames(add.muts)) |
             !('mutsig' %in% colnames(add.muts)))
             stop('add.muts must be a data.table with "muttype" and "mutsig" columns')
+        use.add.muts <- TRUE
     }
 
     # Both of these code paths create copies of the SCAN2 objects with a
@@ -87,7 +89,7 @@ mutsig.rescue <- function(object.paths, add.muts, rescue.target.fdr=0.01, object
         if (is.null(true.sig)) {
             mutsigs <- do.call(c, lapply(objects, function(o) o@gatk[muttype == mt & pass == TRUE]$mutsig))
 
-            if (!missing(add.muts)) {
+            if (use.add.muts) {
                 extra <- add.muts[muttype == mt]$mutsig
                 if (!quiet)
                     cat(mt, ': %d mutations taken from outside sources for true signature creation (add.muts)\n', length(extra))
