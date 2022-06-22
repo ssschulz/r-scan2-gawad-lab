@@ -8,7 +8,7 @@ prepare.object <- function(object, quiet=FALSE) {
     newgatk <- object@gatk[static.filter & lysis.fdr <= 0.5 & mda.fdr <= 0.5]
     if (!quiet) {
         cat(sprintf("%s: considering %d candidates (%d high quality passing calls)\n",
-            object@single.cell, nrow(newgatk), nrow(object@gatk[pass])))
+            object@single.cell, nrow(newgatk), nrow(object@gatk[pass == TRUE])))
     }
     object@gatk <- newgatk  # XXX: likely need a formal way of replacing this table with a subset..
     compute.filter.reasons(object)
@@ -39,8 +39,8 @@ get.objects.for.sig.rescue <- function(object.paths, quiet=FALSE) {
 #     containing the signatures such that they can be accessed by get().
 # true.sig - the spectrum of VAF-based mutation calls in the SCAN2 objects in object.paths.
 #     Can also be overridden if desired.
-sig.rescue <- function(object.paths, rescue.target.fdr=0.01, objects=NULL,
-    artifact.sigs=list(snv='snv.artifact.signature.v3', indel='indel.artifact.signature.v1'),
+mutsig.rescue <- function(object.paths, rescue.target.fdr=0.01, objects=NULL,
+    artifact.sigs=list(snv=data(snv.artifact.signature.v3), indel=data(indel.artifact.signature.v1)),
     true.sig=NULL, quiet=FALSE)
 {
     if (!missing(object.paths) & !is.null(objects))
@@ -76,7 +76,7 @@ sig.rescue <- function(object.paths, rescue.target.fdr=0.01, objects=NULL,
 
         ret <- setNames(lapply(objects, function(o) {
             cat('', o@single.cell)
-            mutsig.rescue(o, muttype=mt,
+            mutsig.rescue.one(o, muttype=mt,
                 artifact.sig=artifact.sig, true.sig=true.sig, rescue.target.fdr=rescue.target.fdr)
         }), sapply(objects, function(o) o@single.cell))
         cat('.\n')
@@ -124,8 +124,8 @@ compute.filter.reasons <- function(o, target.fdr=o@call.mutations$target.fdr) {
 # the true mutation signature.  Storing these all in memory for later isn't
 # possible and re-reading them all can take an hour, so for now mutation
 # rescue ifno just isn't stored in the object.
-setGeneric("mutsig.rescue", function(object, artifact.sig, true.sig, rescue.target.fdr=0.01, muttype=c('snv', 'indel'), ...)
-    standardGeneric("mutsig.rescue"))
+setGeneric("mutsig.rescue.one", function(object, artifact.sig, true.sig, rescue.target.fdr=0.01, muttype=c('snv', 'indel'), ...)
+    standardGeneric("mutsig.rescue.one"))
 setMethod("mutsig.rescue", "SCAN2", function(object, artifact.sig, true.sig, rescue.target.fdr=0.01, muttype=c('snv', 'indel'), ...) {
     mt <- match.arg(muttype)
 
