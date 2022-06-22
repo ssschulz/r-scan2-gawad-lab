@@ -97,6 +97,10 @@ make.scan <- function(single.cell, bulk, genome=c('hs37d5', 'hg38', 'mm10'), reg
 
 
 setValidity("SCAN2", function(object) {
+    # handle older objects - remove this later
+    if (!.hasSlot(object, 'mutsig.rescue'))
+        object@mutsig.rescue <- NULL
+
     if (length(object@genome.string) != 1)
         return("must provide exactly one genome name")
 
