@@ -92,7 +92,7 @@ mutsig.rescue <- function(object.paths, add.muts, rescue.target.fdr=0.01, object
             if (use.add.muts) {
                 extra <- add.muts[muttype == mt]$mutsig
                 if (!quiet)
-                    cat(mt, ': %d mutations taken from outside sources for true signature creation (add.muts)\n', length(extra))
+                    cat(mt, ':', length(extra), '%d mutations taken from outside sources for true signature creation (add.muts)\n')
                 mutsigs <- c(mutsigs, extra)
             }
 
