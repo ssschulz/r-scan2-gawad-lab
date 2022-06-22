@@ -146,6 +146,9 @@ setMethod("mutsig.rescue.one", "SCAN2", function(object, artifact.sig, true.sig,
     # would also meet these criteria.
     object@gatk[muttype == mt & filter.reasons == 'lysis.test', rescue := 
         !pass & rescue.fdr <= rescue.target.fdr]
+    # avoid NAs in rescue. if we really care to know that a site was also not
+    # considered for rescue, we can test rescue.fdr or rweight for NA.
+    object@gatk[is.na(rescue), rescue := FALSE]
 
     # no need to return object since all changes were made by reference
     list(rescue.target.fdr=rescue.target.fdr,
