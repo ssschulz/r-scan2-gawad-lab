@@ -234,11 +234,15 @@ make.callable.regions <- function(path, sc.sample, bulk.sample,
 # Recommended to use smaller tiles than the usual 10 MB. The files processed
 # here are basepair resolution and cover essentially the entire genome.
 #
+# the values for the 2 following parameters are decently well tuned for the
+# default n.chunks(=100) and n.permutations(=10,000).  if the ratio of
+# n.permutations/n.chunks is decreased, then so should these tuning
+# parameters.
 # snv.N - number of random SNVs to make before each downsampling. Lower values
 #         will spend more time waiting on the overhead of calls to bedtools shuffle.
 # indel.K - reduces the number of random indels generated per iteration.
 make.permuted.mutations <- function(sc.sample, muts, callable.bed, genome.string, genome.file, muttype=c('snv', 'indel'),
-    n.permutations=10000, snv.N=1e5, indel.K=1/20, n.chunks=100, quiet=TRUE, report.mem=TRUE)
+    n.permutations=10000, snv.N=1e5, indel.K=1/50, n.chunks=100, quiet=TRUE, report.mem=TRUE)
 {
     muttype <- match.arg(muttype)
 
