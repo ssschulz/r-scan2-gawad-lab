@@ -126,7 +126,7 @@ compute.filter.reasons <- function(o, target.fdr=o@call.mutations$target.fdr) {
 # rescue ifno just isn't stored in the object.
 setGeneric("mutsig.rescue.one", function(object, artifact.sig, true.sig, rescue.target.fdr=0.01, muttype=c('snv', 'indel'), ...)
     standardGeneric("mutsig.rescue.one"))
-setMethod("mutsig.rescue", "SCAN2", function(object, artifact.sig, true.sig, rescue.target.fdr=0.01, muttype=c('snv', 'indel'), ...) {
+setMethod("mutsig.rescue.one", "SCAN2", function(object, artifact.sig, true.sig, rescue.target.fdr=0.01, muttype=c('snv', 'indel'), ...) {
     mt <- match.arg(muttype)
 
     sigtype <- if (mt == 'snv') sbs96 else id83
