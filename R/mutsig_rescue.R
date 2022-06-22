@@ -61,7 +61,7 @@ mutsig.rescue <- function(object.paths, add.muts, rescue.target.fdr=0.01, object
         stop('exactly one of object.paths or objects may be specified')
 
     if (!missing(add.muts)) {
-        if (!('data.table' %in% typeof(add.muts)) |
+        if (!('data.table' %in% class(add.muts)) |
             !('muttype' %in% colnames(add.muts)) |
             !('mutsig' %in% colnames(add.muts)))
             stop('add.muts must be a data.table with "muttype" and "mutsig" columns')
