@@ -31,6 +31,18 @@ get.objects.for.sig.rescue <- function(object.paths, quiet=FALSE) {
 # objects - list of SCAN2 objects produced by get.objects.for.sig.rescue(). This
 #     can take a long time to load, so users may wish to call get.objects.for.sig.rescue()
 #     on their own.
+# add.muts - a data.table of additional somatic mutations for creating the true somatic
+#     mutation signature.  This allows the possibility of including muts from other PTA single
+#     cell projects, or even different technologies (e.g., NanoSeq, META-CS), so long as the
+#     added mutations are expected to share the same mutational process as the mutations
+#     analyzed here.  When combining other SCAN2 runs: only "pass" mutations (i.e., VAF-based)
+#     should be used; NOT SCAN2 signature-rescued mutations.
+#
+#     Use add.muts with care - even if the same mutational processes are active in other
+#     experiments, differing technological biases or artifact processes may skew the
+#     signatures.
+#
+#     the mutation table must contain "muttype" and "mutsig" columns.
 # rescue.target.fdr - similar to the main pipeline's target.fdr. The cutoff used to rescue
 #     mutations after their {lysis,mda}.fdr values have been adjusted due by mutation
 #     signature rescue.
@@ -41,12 +53,19 @@ get.objects.for.sig.rescue <- function(object.paths, quiet=FALSE) {
 #     containing the signatures such that they can be accessed by get().
 # true.sig - the spectrum of VAF-based mutation calls in the SCAN2 objects in object.paths.
 #     Can also be overridden if desired.
-mutsig.rescue <- function(object.paths, rescue.target.fdr=0.01, objects=NULL,
+mutsig.rescue <- function(object.paths, add.muts, rescue.target.fdr=0.01, objects=NULL,
     artifact.sigs=list(snv=data(snv.artifact.signature.v3), indel=data(indel.artifact.signature.v1)),
     true.sig=NULL, quiet=FALSE)
 {
     if (!missing(object.paths) & !is.null(objects))
         stop('exactly one of object.paths or objects may be specified')
+
+    if (!missing(add.muts)) {
+        if (!('data.table' %in% typeof(add.muts)) |
+            !('muttype' %in% colnames(add.muts)) |
+            !('mutsig' %in% colnames(add.muts)))
+            stop('add.muts must be a data.table with "muttype" and "mutsig" columns')
+    }
 
     # Both of these code paths create copies of the SCAN2 objects with a
     # very small subset of the @gatk table selected.
@@ -67,6 +86,14 @@ mutsig.rescue <- function(object.paths, rescue.target.fdr=0.01, objects=NULL,
         # unless user specifies it, just the raw spectrum of calls
         if (is.null(true.sig)) {
             mutsigs <- do.call(c, lapply(objects, function(o) o@gatk[muttype == mt & pass == TRUE]$mutsig))
+
+            if (!missing(add.muts)) {
+                extra <- add.muts[muttype == mt]$mutsig
+                if (!quiet)
+                    cat(mt, ': %d mutations taken from outside sources for true signature creation (add.muts)\n', length(extra))
+                mutsigs <- c(mutsigs, extra)
+            }
+
             if (mt == 'snv') true.sig <- as.spectrum(sbs96(mutsigs))
             if (mt == 'indel') true.sig <- as.spectrum(id83(mutsigs))
 
