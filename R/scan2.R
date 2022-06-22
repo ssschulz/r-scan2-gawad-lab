@@ -27,7 +27,8 @@ setClass("SCAN2", slots=c(
     fdr='null.or.list',
     call.mutations='null.or.list',
     depth.profile='null.or.list',
-    mutburden='null.or.list'))
+    mutburden='null.or.list',
+    mutsig.rescue='null.or.list'))
 
 
 # "flip" the GP mu around 0 to best match the AF of each candidate mutation. 
@@ -90,7 +91,8 @@ make.scan <- function(single.cell, bulk, genome=c('hs37d5', 'hg38', 'mm10'), reg
         fdr.prior.data=NULL,
         fdr=NULL,
         call.mutations=NULL,
-        mutburden=NULL)
+        mutburden=NULL,
+        mutsig.rescue=NULL)
 }
 
 
