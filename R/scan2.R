@@ -367,8 +367,9 @@ setMethod("show", "SCAN2", function(object) {
         cat('\n')
         for (mt in c('snv', 'indel')) {
             msr <- object@mutsig.rescue[[mt]]
-            cat(sprintf("#       %6s: %6d resc. candidates,   %0.1f%% rel. error,   sig. weights:  %0.3f true,   %0.3f artifact\n",
-                mt, msr$nmuts, 100*msr$relative.error, msr$weight.true, msr$weight.artifact))
+            cat(sprintf("#       %6s: %6d/%d candidates rescued,   %0.1f%% rel. error,   sig. weights:  %0.3f true,   %0.3f artifact\n",
+                mt, nrow(object@gatk[muttype == mt & rescue]), msr$nmuts,
+                100*msr$relative.error, msr$weight.true, msr$weight.artifact))
         }
     }
 })
