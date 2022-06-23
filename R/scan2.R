@@ -365,7 +365,7 @@ setMethod("show", "SCAN2", function(object) {
         cat("(not computed)\n")
     } else {
         # XXX: assumes SNV and indel use the same FDR.  currently correct, may break later
-        cat(sprintf('rescue.target.fdr=0.3f\n',
+        cat(sprintf('rescue.target.fdr=%0.3f\n',
             object@mutsig.rescue[['snv']]$rescue.target.fdr))
         for (mt in c('snv', 'indel')) {
             msr <- object@mutsig.rescue[[mt]]
