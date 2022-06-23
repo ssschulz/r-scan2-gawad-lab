@@ -392,6 +392,7 @@ mutsig.rescue <- function(object.paths, add.muts, rescue.target.fdr=0.01,
 
     cat('Rescuing mutations by signature.\n')
     cat('Parallelizing with', future::nbrOfWorkers(), 'cores.\n')
+    cat('WARNING: this pipeline requires ~6 GB of RAM per core due to data.table behavior that does not allow assignment by reference without first copying the entire table.\n')
 
     cat('Step 1. Getting high confidence mutations from', length(object.paths), 'SCAN2 objects.\n')
     progressr::with_progress({
@@ -460,30 +461,29 @@ mutsig.rescue <- function(object.paths, add.muts, rescue.target.fdr=0.01,
                 # there is some very odd data.table behavior that causes data.tables
                 # loaded from disk to not be editable by reference.  data.table
                 # recommends running setDT(), but this doesn't work for object@gatk.
-                # the work-around I've found is to just create and delete a dummy
-                # column.  The result is attr(results@gatk, '.internal.selfref') becomes
-                # non-nil and is therefore editable in mutsig.rescue.one.
+                # attr(results@gatk, '.internal.selfref') is nil and it seems no
+                # amount of messing with it will allow me to edit it.
+                # I have also tried setalloccol() with no luck; changing mutsig.rescue.one() to
+                # return a small data.table which is then joined onto x@gatk in this function
+                # to avoid issues with function scope; etc.  Nothing worked except the below
+                # (which is VERY bad): using <- assignment (an equivalent := assignment by
+                # reference does NOT work).
+                x@gatk$rescue <- FALSE   # this will be updated by mutsig.rescue.one where appropriate
+                # Why is this bad? it copies the data.table, doubling the memory use
+                # of a 2.5-3.0 GB object. This simply won't be usable on something like
+                # a mouse SCAN2 object with full SNP table.
+                #
+                # The unfortunate result of all this is we need ~6 GB per core to
+                # comfortably run this pipeline for human cells.
                 #
                 # use options(datatable.verbose = TRUE) for debugging
-                options(datatable.verbose = TRUE)
     
-                x@gatk$rescue <- FALSE   # this will be updated by mutsig.rescue.one where appropriate
                 for (mt in muttypes) {
                     x@mutsig.rescue[[mt]] <- mutsig.rescue.one(x,
-                    #results <- mutsig.rescue.one(x,
                         muttype=mt,
                         artifact.sig=get(artifact.sigs[[mt]]),
                         true.sig=true.sigs[[mt]],
-                        #target.fdr=x@call.mutations$target.fdr,
                         rescue.target.fdr=rescue.target.fdr)
-                    #x@mutsig.rescue[[mt]] <- results$summary
-                    #x@gatk[results$tmpgatk, on=.(chr, pos, refnt, altnt),
-                        #c('rweight', 'rescue.fdr', 'rescue') :=
-                            #list(i.rweight, i.rescue.fdr, i.rescue)]
-                    #str(x@gatk)
-                    # avoid NAs in rescue. if we really care to know that a site was also not
-                    # considered for rescue, we can test rescue.fdr or rweight for NA.
-                    #x@gatk[is.na(rescue), rescue := FALSE]
                 }
             }, report.mem=report.mem)
             p(class='sticky', amount=1, pc)
