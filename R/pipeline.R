@@ -467,8 +467,10 @@ mutsig.rescue <- function(object.paths, add.muts, rescue.target.fdr=0.01,
                 # use options(datatable.verbose = TRUE) for debugging
                 #x@gatk$longdummynamethatshouldnevercollide <- 1
                 #x@gatk$longdummynamethatshouldnevercollide <- NULL
+                gatk <- x@gatk
+                setDT(gatk)
                 for (mt in muttypes) {
-                    x@mutsig.rescue[[mt]] <- mutsig.rescue.one(x@gatk,
+                    x@mutsig.rescue[[mt]] <- mutsig.rescue.one(gatk,
                         muttype=mt,
                         artifact.sig=get(artifact.sigs[[mt]]),
                         true.sig=true.sigs[[mt]],
