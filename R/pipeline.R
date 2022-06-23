@@ -465,8 +465,9 @@ mutsig.rescue <- function(object.paths, add.muts, rescue.target.fdr=0.01,
                 # non-nil and is therefore editable in mutsig.rescue.one.
                 #
                 # use options(datatable.verbose = TRUE) for debugging
-                #x@gatk$longdummynamethatshouldnevercollide <- 1
-                #x@gatk$longdummynamethatshouldnevercollide <- NULL
+                options(datatable.verbose = TRUE)
+                x@gatk[, longdummynamethatshouldnevercollide := 1]
+                x@gatk[, longdummynamethatshouldnevercollide := NULL]
                 gatk <- x@gatk
                 setDT(gatk)
                 for (mt in muttypes) {
