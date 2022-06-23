@@ -85,7 +85,7 @@ setMethod("mutsig.rescue.one", "SCAN2", function(object, artifact.sig, true.sig,
 
     # Now join the results back to the main (much larger) object.
     # This modifies object by reference, no need to return it.
-    object@gatk[tmpo, on=.(chr, pos, refnt, altnt),
+    object@gatk[tmpo@gatk, on=.(chr, pos, refnt, altnt),
         c('rweight', 'rescue.fdr', 'rescue') := list(i.rweight, i.rescue.fdr, i.rescue)]
 
     # Summary info to store in the SCAN2 object's @mutsig.rescue slot.
