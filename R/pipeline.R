@@ -481,6 +481,7 @@ cat('d2\n')
 cat('e\n')
                 x@gatk[, longdummynamethatshouldnevercollide := NULL]
 cat('f\n')
+                x@gatk$rescue <- FALSE   # this will be updated by mutsig.rescue.one where appropriate
                 for (mt in muttypes) {
 cat('g\n')
                     results <- mutsig.rescue.one(x,
