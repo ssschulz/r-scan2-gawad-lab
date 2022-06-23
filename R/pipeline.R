@@ -457,6 +457,14 @@ mutsig.rescue <- function(object.paths, add.muts, rescue.target.fdr=0.01,
                     x <- decompress(x)
                 # some old objects don't have this slot; making it doesn't change the correctness of the code
                 x@mutsig.rescue <- NULL   
+                # there is some very odd data.table behavior that causes data.tables
+                # loaded from disk to not be editable by reference.  data.table
+                # recommends running setDT(), but this doesn't work for object@gatk.
+                # the work-around I've found is to just create and delete a dummy
+                # column.  The result is attr(results@gatk, '.internal.selfref') becomes
+                # non-nil and is therefore editable in mutsig.rescue.one.
+                x@gatk$longdummynamethatshouldnevercollide <- 1
+                x@gatk$longdummynamethatshouldnevercollide <- NULL
                 for (mt in muttypes) {
                     x@mutsig.rescue[[mt]] <- mutsig.rescue.one(x, muttype=mt,
                         artifact.sig=get(artifact.sigs[[mt]]),
