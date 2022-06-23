@@ -286,3 +286,174 @@ make.permuted.mutations <- function(sc.sample, muts, callable.bed, genome.string
 
     perms <- concat.perms(xs)
 }
+
+
+mutsig.rescue.batch <- function(sc.sample, muts, callable.bed, genome.string, genome.file, muttype=c('snv', 'indel'),
+    n.permutations=10000, snv.N=1e5, indel.K=1/50, n.chunks=100, quiet=TRUE, report.mem=TRUE)
+{
+    muttype <- match.arg(muttype)
+
+
+    # just bins the numbers 1..n.permutations into 'n.chunks' bins, where
+    # the bin size is close to equal. i.e., divvy up the number of permutations
+    # to solve roughly equally across chunks.
+    desired.perms <- unname(table(cut(1:n.permutations, breaks=n.chunks)))
+
+    # Simple, not great, method for generating a sample-unique value for
+    # seed construction.
+    seed.base <- strtoi(paste0('0x', substr(digest::sha1(sc.sample), 1, 7)))
+
+    progressr::with_progress({
+        p <- progressr::progressor(along=1:n.chunks)
+        p(amount=0, class='sticky', perfcheck(print.header=TRUE))
+        xs <- future.apply::future_lapply(1:n.chunks, function(i) {
+            pc <- perfcheck(paste('make.perms',i), {
+                    if (muttype == 'snv') {
+                        perms <- make.perms(muts=muts, callable=callable.bed,
+                            genome.string=genome.string, genome.file=genome.file,
+                            seed.base=seed.base,
+                            muttype=muttype, desired.perms=desired.perms[i],
+                            quiet=quiet, n.sample=snv.N)
+                    } else if (muttype == 'indel') {
+                        perms <- make.perms(muts=muts, callable=callable.bed,
+                            genome.string=genome.string, genome.file=genome.file,
+                            seed.base=seed.base,
+                            muttype=muttype, desired.perms=desired.perms[i],
+                            quiet=quiet, k=indel.K)
+                    }
+                },
+                report.mem=report.mem)
+            p(class='sticky', amount=1, pc)
+
+            perms
+        }, future.seed=0)  # this is REQUIRED for make.perms()
+    }, enable=TRUE)
+
+    perms <- concat.perms(xs)
+}
+
+
+# Multicore mutation signature rescue.
+#
+# object.paths - character vector of paths to SCAN2 object files (.rda). IMPORTANT:
+#     object.paths must be a NAMED VECTOR for which the element names point to the
+#     desired OUTPUT .RDA FILES and the elements themselves are the inputs.
+# add.muts - a data.table of additional somatic mutations for creating the true somatic
+#     mutation signature.  This allows the possibility of including muts from other PTA single
+#     cell projects, or even different technologies (e.g., NanoSeq, META-CS), so long as the
+#     added mutations are expected to share the same mutational process as the mutations
+#     analyzed here.  When combining other SCAN2 runs: only "pass" mutations (i.e., VAF-based)
+#     should be used; NOT SCAN2 signature-rescued mutations.
+#
+#     Use add.muts with care - even if the same mutational processes are active in other
+#     experiments, differing technological biases or artifact processes may skew the
+#     signatures.
+#
+#     the mutation table must contain "muttype" and "mutsig" columns.
+# rescue.target.fdr - similar to the main pipeline's target.fdr. The cutoff used to rescue
+#     mutations after their {lysis,mda}.fdr values have been adjusted due by mutation
+#     signature rescue.
+# artifact.sigs - names of signatures derived from 52
+#     human neurons in Luquette et al. 2022.  Users can supply other artifact signatures
+#     by providing them in the proper format (as.spectrum({sbs96,id83}(x))) in a list
+#     with 'snv' and 'indel' entries.  The list elements must be the _names_ of variables
+#     containing the signatures such that they can be accessed by get().
+# true.sig - same format as artifact.sigs, but for the spectrum of true mutations.  Should
+#     normally not be specified by the user--these are calculated from the high confidence
+#     mutation calls in the objects and add.muts.
+mutsig.rescue <- function(object.paths, add.muts, rescue.target.fdr=0.01,
+    artifact.sigs=list(snv=data(snv.artifact.signature.v3), indel=data(indel.artifact.signature.v1)),
+    true.sig=NULL, quiet=FALSE)
+{
+    # Ensure that the user did set names for outputs
+    if (is.null(names(object.paths)))
+        stop('output RDAs must be specified in the `names()` of `object.paths`')
+
+    # Ensure none of the output RDAs exist
+    already.exists <- sapply(names(object.paths), file.exists)
+    if (any(already.exists))
+        stop(paste('these files specified in `names()` of `object.paths` already exist, please delete them and rerun this pipeline:', paste(names(object.paths)[already.exists], collapse=' ')))
+
+    # Sanity check the add.muts table before doing any work
+    use.add.muts <- FALSE
+    if (!missing(add.muts)) {
+        if (!('data.table' %in% class(add.muts)) |
+            !('muttype' %in% colnames(add.muts)) |
+            !('mutsig' %in% colnames(add.muts)))
+            stop('add.muts must be a data.table with "muttype" and "mutsig" columns')
+        use.add.muts <- TRUE
+    }
+
+    cat('Rescuing mutations by signature.\n')
+    cat('Parallelizing with', future::nbrOfWorkers(), 'cores.\n')
+
+    cat('Step 1. Getting high confidence mutations from', length(object.paths), 'SCAN2 objects.\n')
+    progressr::with_progress({
+        p <- progressr::progressor(along=1:length(object.paths))
+        p(amount=0, class='sticky', perfcheck(print.header=TRUE))
+        gatks <- future.apply::future_lapply(1:length(object.paths), function(i) {
+            pc <- perfcheck(paste('prepare.object',i), {
+                x <- decompress(get(load(object.paths[i])))
+                x <- prepare.object(x, quiet=quiet)
+            }, report.mem=report.mem)
+            p(class='sticky', amount=1, pc)
+
+            # Do not return anything large (like the 1-3 GB complete SCAN2 object).
+            # The main R process must keep memory use low so that future.apply()
+            # forked children do not accidentally copy a process with very high
+            # RAM usage.
+            #
+            # The @gatk table is small here because prepare.object takes a small
+            # subset (~1000 entries out of ~1-10 million).
+            x@gatk
+        })
+    }, enable=TRUE)
+
+
+    cat('Step 2. Building true mutation spectra.\n')
+    muttypes <- c('snv', 'indel')
+    true.sigs <- setNames(lapply(muttypes, function(mt) {
+        artifact.sig <- get(artifact.sigs[[mt]])
+
+        # unless user specifies it, just the raw spectrum of calls
+        if (!is.null(true.sig)) {
+            return(true.sig[[mt]])
+        } else {
+            mutsigs <- do.call(c, lapply(gatks, function(gatk) gatk[muttype == mt & pass == TRUE]$mutsig))
+
+            if (use.add.muts) {
+                extra <- add.muts[muttype == mt]$mutsig
+                cat(mt, ':', length(extra), 'mutations taken from outside sources for true signature creation (add.muts)\n')
+                mutsigs <- c(mutsigs, extra)
+            }
+
+            if (mt == 'snv') true.sig <- as.spectrum(sbs96(mutsigs))
+            if (mt == 'indel') true.sig <- as.spectrum(id83(mutsigs))
+
+            cat(mt, ': created true signature from', length(mutsigs), 'high confidence mutations.\n')
+            return(true.sig)
+        }
+    }), muttypes)
+
+
+    cat('Step3. Rescuing mutations and writing out new SCAN2 object RDA files.\n')
+    progressr::with_progress({
+        p <- progressr::progressor(along=1:length(object.paths))
+        p(amount=0, class='sticky', perfcheck(print.header=TRUE))
+        future.apply::future_lapply(1:length(object.paths), function(i) {
+            pc <- perfcheck(paste('prepare.object',i), {
+                x <- decompress(get(load(object.paths[i])))
+                for (mt in muttypes) {
+                    x@mutsig.rescue[[mt]] <- mutsig.rescue.one(x, muttype=mt,
+                        artifact.sig=artifact.sigs[[mt]], true.sig=true.sigs[[mt]],
+                        rescue.target.fdr=rescue.target.fdr)
+                }
+            }, report.mem=report.mem)
+            p(class='sticky', amount=1, pc)
+
+            results <- x
+            save(results, file=names(object.paths)[i], compress=FALSE)
+        })
+    }, enable=TRUE)
+}
+

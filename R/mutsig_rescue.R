@@ -27,100 +27,6 @@ get.objects.for.sig.rescue <- function(object.paths, quiet=FALSE) {
 }
 
 
-# object.paths - character vector of paths to SCAN2 object files (.rda)
-# objects - list of SCAN2 objects produced by get.objects.for.sig.rescue(). This
-#     can take a long time to load, so users may wish to call get.objects.for.sig.rescue()
-#     on their own.
-# add.muts - a data.table of additional somatic mutations for creating the true somatic
-#     mutation signature.  This allows the possibility of including muts from other PTA single
-#     cell projects, or even different technologies (e.g., NanoSeq, META-CS), so long as the
-#     added mutations are expected to share the same mutational process as the mutations
-#     analyzed here.  When combining other SCAN2 runs: only "pass" mutations (i.e., VAF-based)
-#     should be used; NOT SCAN2 signature-rescued mutations.
-#
-#     Use add.muts with care - even if the same mutational processes are active in other
-#     experiments, differing technological biases or artifact processes may skew the
-#     signatures.
-#
-#     the mutation table must contain "muttype" and "mutsig" columns.
-# rescue.target.fdr - similar to the main pipeline's target.fdr. The cutoff used to rescue
-#     mutations after their {lysis,mda}.fdr values have been adjusted due by mutation
-#     signature rescue.
-# artifact.sigs - names of signatures derived from 52
-#     human neurons in Luquette et al. 2022.  Users can supply other artifact signatures
-#     by providing them in the proper format (as.spectrum({sbs96,id83}(x))) in a list
-#     with 'snv' and 'indel' entries.  The list elements must be the _names_ of variables
-#     containing the signatures such that they can be accessed by get().
-# true.sig - the spectrum of VAF-based mutation calls in the SCAN2 objects in object.paths.
-#     Can also be overridden if desired.
-mutsig.rescue <- function(object.paths, add.muts, rescue.target.fdr=0.01, objects=NULL,
-    artifact.sigs=list(snv=data(snv.artifact.signature.v3), indel=data(indel.artifact.signature.v1)),
-    true.sig=NULL, quiet=FALSE)
-{
-    if (!missing(object.paths) & !is.null(objects))
-        stop('exactly one of object.paths or objects may be specified')
-
-    use.add.muts <- FALSE
-    if (!missing(add.muts)) {
-        if (!('data.table' %in% class(add.muts)) |
-            !('muttype' %in% colnames(add.muts)) |
-            !('mutsig' %in% colnames(add.muts)))
-            stop('add.muts must be a data.table with "muttype" and "mutsig" columns')
-        use.add.muts <- TRUE
-    }
-
-    # Both of these code paths create copies of the SCAN2 objects with a
-    # very small subset of the @gatk table selected.
-    if (is.null(objects)) {
-        objects <- get.objects.for.sig.rescue(object.paths, quiet=quiet)
-    } else {
-        objects <- setNames(lapply(objects, prepare.object, quiet=quiet),
-            sapply(objects, function(o) o@single.cell))
-    }
-
-    if (!quiet)
-        cat(sprintf('SCAN2 signature-based rescue on %d samples\n', length(objects)))
-
-    muttypes <- c('snv', 'indel')
-    summaries <- setNames(lapply(muttypes, function(mt) {
-        artifact.sig <- get(artifact.sigs[[mt]])
-
-        # unless user specifies it, just the raw spectrum of calls
-        if (is.null(true.sig)) {
-            mutsigs <- do.call(c, lapply(objects, function(o) o@gatk[muttype == mt & pass == TRUE]$mutsig))
-
-            if (use.add.muts) {
-                extra <- add.muts[muttype == mt]$mutsig
-                if (!quiet)
-                    cat(mt, ':', length(extra), 'mutations taken from outside sources for true signature creation (add.muts)\n')
-                mutsigs <- c(mutsigs, extra)
-            }
-
-            if (mt == 'snv') true.sig <- as.spectrum(sbs96(mutsigs))
-            if (mt == 'indel') true.sig <- as.spectrum(id83(mutsigs))
-
-            cat(mt, ': created true signature from', length(mutsigs), 'high confidence mutations.\n')
-        }
-
-        cat(sprintf('%s : adjusting FDR for lysis artifacts using new FDR target=%0.4f..\n',
-            mt, rescue.target.fdr))
-
-        ret <- setNames(lapply(objects, function(o) {
-            cat('', o@single.cell)
-            mutsig.rescue.one(o, muttype=mt,
-                artifact.sig=artifact.sig, true.sig=true.sig, rescue.target.fdr=rescue.target.fdr)
-        }), sapply(objects, function(o) o@single.cell))
-        cat('.\n')
-        ret
-    }), muttypes)
-
-    # All work done above modified objects by reference, now recollating summary data
-    # This will be added as a SCAN2 slot one day.
-    lapply(objects, function(o) { list(object=o, snv=summaries[['snv']][[o@single.cell]], indel=summaries[['indel']][[o@single.cell]]) })
-}
-
-
-
 # Modifies 'o' by reference. The returned o is not a particularly valid
 # SCAN2 object.
 #
@@ -146,22 +52,17 @@ compute.filter.reasons <- function(o, target.fdr=o@call.mutations$target.fdr) {
 }
 
 
-
-
-# XXX: in the future it'd be nice to record mutation signature rescue and
-# summaries in a new SCAN2 object slot, but the issue is RAM.  SCAN2
-# objects (for humans) are large (2.5-3 GB) and we need to read through
-# a good number of them (i.e., 30-100 for various projects) to construct
-# the true mutation signature.  Storing these all in memory for later isn't
-# possible and re-reading them all can take an hour, so for now mutation
-# rescue ifno just isn't stored in the object.
-setGeneric("mutsig.rescue.one", function(object, artifact.sig, true.sig, rescue.target.fdr=0.01, muttype=c('snv', 'indel'), ...)
+setGeneric("mutsig.rescue.one", function(object, artifact.sig, true.sig, rescue.target.fdr=0.01, muttype=c('snv', 'indel'))
     standardGeneric("mutsig.rescue.one"))
-setMethod("mutsig.rescue.one", "SCAN2", function(object, artifact.sig, true.sig, rescue.target.fdr=0.01, muttype=c('snv', 'indel'), ...) {
+setMethod("mutsig.rescue.one", "SCAN2", function(object, artifact.sig, true.sig, rescue.target.fdr=0.01, muttype=c('snv', 'indel')) {
     mt <- match.arg(muttype)
 
+    # All work in this function will be done on a copy of the object with a much, much
+    # smaller GATK table.  Results will be joined back at the end.
+    tmpo <- prepare.object(object)
+
     sigtype <- if (mt == 'snv') sbs96 else id83
-    mutsigs <- sigtype(object@gatk[muttype == mt & filter.reasons == 'lysis.test']$mutsig)
+    mutsigs <- sigtype(tmpo@gatk[muttype == mt & filter.reasons == 'lysis.test']$mutsig)
 
     sigscores <- get.sig.score(mutsigs=mutsigs,
         artifact.sig=artifact.sig, true.sig=true.sig, ...)
@@ -169,19 +70,25 @@ setMethod("mutsig.rescue.one", "SCAN2", function(object, artifact.sig, true.sig,
     # it doesn't seem to be possible to use a column assigned by := for another
     # assignment in the same data.table statement.  i.e., to combine all of these
     # into a single statement.
-    object@gatk[muttype == mt & filter.reasons == 'lysis.test', rweight := 10^-sigscores$postp[mutsig]]
-    object@gatk[muttype == mt & filter.reasons == 'lysis.test', rescue.fdr := 
+    tmpo@gatk[muttype == mt & filter.reasons == 'lysis.test', rweight := 10^-sigscores$postp[mutsig]]
+    tmpo@gatk[muttype == mt & filter.reasons == 'lysis.test', rescue.fdr := 
         lysis.pv / (lysis.pv + lysis.beta * rweight * nt/na)]
 
     # rescue refers uniquely to rescued sites, even though regularly PASSed sites
     # would also meet these criteria.
-    object@gatk[muttype == mt & filter.reasons == 'lysis.test', rescue := 
+    tmpo@gatk[muttype == mt & filter.reasons == 'lysis.test', rescue := 
         !pass & rescue.fdr <= rescue.target.fdr]
     # avoid NAs in rescue. if we really care to know that a site was also not
     # considered for rescue, we can test rescue.fdr or rweight for NA.
-    object@gatk[is.na(rescue), rescue := FALSE]
+    tmpo@gatk[is.na(rescue), rescue := FALSE]
+    data.table::setkey(tmpo, chr, pos, refnt, altnt)  # probably should already be this way
 
-    # no need to return object since all changes were made by reference
+    # Now join the results back to the main (much larger) object.
+    # This modifies object by reference, no need to return it.
+    object@gatk[tmpo, on=.(chr, pos, refnt, altnt),
+        c('rweight', 'rescue.fdr', 'rescue') := list(i.rweight, i.rescue.fdr, i.rescue)]
+
+    # Summary info to store in the SCAN2 object's @mutsig.rescue slot.
     list(rescue.target.fdr=rescue.target.fdr,
         postp = sigscores$postp,
         test.spectrum=as.spectrum(mutsigs),
