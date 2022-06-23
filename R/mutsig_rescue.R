@@ -76,6 +76,7 @@ mutsig.rescue.one <- function(gatk, artifact.sig, true.sig, target.fdr=0.01, res
     # This modifies object by reference, no need to return it.
     gatk[tmpgatk, on=.(chr, pos, refnt, altnt),
         c('rweight', 'rescue.fdr', 'rescue') := list(i.rweight, i.rescue.fdr, i.rescue)]
+str(gatk)
 
     # avoid NAs in rescue. if we really care to know that a site was also not
     # considered for rescue, we can test rescue.fdr or rweight for NA.
