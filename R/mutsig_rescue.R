@@ -65,7 +65,7 @@ setMethod("mutsig.rescue.one", "SCAN2", function(object, artifact.sig, true.sig,
     mutsigs <- sigtype(tmpo@gatk[muttype == mt & filter.reasons == 'lysis.test']$mutsig)
 
     sigscores <- get.sig.score(mutsigs=mutsigs,
-        artifact.sig=artifact.sig, true.sig=true.sig, ...)
+        artifact.sig=artifact.sig, true.sig=true.sig)
 
     # it doesn't seem to be possible to use a column assigned by := for another
     # assignment in the same data.table statement.  i.e., to combine all of these
