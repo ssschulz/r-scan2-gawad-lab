@@ -443,6 +443,7 @@ mutsig.rescue <- function(object.paths, add.muts, rescue.target.fdr=0.01,
         future.apply::future_lapply(1:length(object.paths), function(i) {
             pc <- perfcheck(paste('prepare.object',i), {
                 x <- decompress(get(load(object.paths[i])))
+                x@mutsig.rescue <- NULL   # some old objects don't have this slot; making it doesn't change the correctness of the code
                 for (mt in muttypes) {
                     x@mutsig.rescue[[mt]] <- mutsig.rescue.one(x, muttype=mt,
                         artifact.sig=artifact.sigs[[mt]], true.sig=true.sigs[[mt]],
