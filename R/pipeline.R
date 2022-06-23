@@ -363,7 +363,7 @@ mutsig.rescue.batch <- function(sc.sample, muts, callable.bed, genome.string, ge
 #     mutation calls in the objects and add.muts.
 mutsig.rescue <- function(object.paths, add.muts, rescue.target.fdr=0.01,
     artifact.sigs=list(snv=data(snv.artifact.signature.v3), indel=data(indel.artifact.signature.v1)),
-    true.sig=NULL, quiet=FALSE)
+    true.sig=NULL, quiet=FALSE, report.mem=TRUE)
 {
     # Ensure that the user did set names for outputs
     if (is.null(names(object.paths)))
