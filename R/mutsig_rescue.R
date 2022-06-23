@@ -45,12 +45,12 @@ compute.filter.reasons <- function(gatk, target.fdr=o@call.mutations$target.fdr)
 }
 
 
-mutsig.rescue.one <- function(gatk, artifact.sig, true.sig, target.fdr=0.01, rescue.target.fdr=0.01, muttype=c('snv', 'indel')) {
+mutsig.rescue.one <- function(object, artifact.sig, true.sig, target.fdr=0.01, rescue.target.fdr=0.01, muttype=c('snv', 'indel')) {
     mt <- match.arg(muttype)
 
     # All work in this function will be done on a copy of the object with a much, much
     # smaller GATK table.  Results will be joined back at the end.
-    tmpgatk <- copy(reduce.table(gatk, target.fdr=target.fdr))
+    tmpgatk <- copy(reduce.table(object@gatk, target.fdr=target.fdr))
 
     sigtype <- if (mt == 'snv') sbs96 else id83
     mutsigs <- sigtype(tmpgatk[muttype == mt & filter.reasons == 'lysis.test']$mutsig)
@@ -74,13 +74,13 @@ mutsig.rescue.one <- function(gatk, artifact.sig, true.sig, target.fdr=0.01, res
 
     # Now join the results back to the main (much larger) table.
     # This modifies object by reference, no need to return it.
-    gatk[tmpgatk, on=.(chr, pos, refnt, altnt),
+    object@gatk[tmpgatk, on=.(chr, pos, refnt, altnt),
         c('rweight', 'rescue.fdr', 'rescue') := list(i.rweight, i.rescue.fdr, i.rescue)]
-str(gatk)
+str(object@gatk)
 
     # avoid NAs in rescue. if we really care to know that a site was also not
     # considered for rescue, we can test rescue.fdr or rweight for NA.
-    gatk[is.na(rescue), rescue := FALSE]
+    object@gatk[is.na(rescue), rescue := FALSE]
 
     # Summary info to store in the SCAN2 object's @mutsig.rescue slot.
     list(rescue.target.fdr=rescue.target.fdr,
