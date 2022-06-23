@@ -477,9 +477,9 @@ cat('c\n')
 cat('d\n')
                 setalloccol(gatk)
 cat('d2\n')
-                gatk[, longdummynamethatshouldnevercollide := 1]
+                x@gatk[, longdummynamethatshouldnevercollide := 1]
 cat('e\n')
-                gatk[, longdummynamethatshouldnevercollide := NULL]
+                x@gatk[, longdummynamethatshouldnevercollide := NULL]
 cat('f\n')
                 for (mt in muttypes) {
 cat('g\n')
