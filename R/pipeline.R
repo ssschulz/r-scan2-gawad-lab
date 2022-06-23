@@ -473,9 +473,9 @@ cat('b\n')
 cat('c\n')
                 setDT(gatk)
 cat('d\n')
-                x@gatk[, longdummynamethatshouldnevercollide := 1]
+                gatk[, longdummynamethatshouldnevercollide := 1]
 cat('e\n')
-                x@gatk[, longdummynamethatshouldnevercollide := NULL]
+                gatk[, longdummynamethatshouldnevercollide := NULL]
 cat('f\n')
                 for (mt in muttypes) {
 cat('g\n')
