@@ -70,7 +70,8 @@ setMethod("mutsig.rescue.one", "SCAN2", function(object, artifact.sig, true.sig,
     # it doesn't seem to be possible to use a column assigned by := for another
     # assignment in the same data.table statement.  i.e., to combine all of these
     # into a single statement.
-    tmpgatk[muttype == mt & filter.reasons == 'lysis.test', rweight := 10^-sigscores$postp[mutsig]]
+    tmpgatk[muttype == mt & filter.reasons == 'lysis.test',
+        rweight := as.numeric(10^-sigscores$postp[mutsig])]  # as.numeric: get rid of table class
     tmpgatk[muttype == mt & filter.reasons == 'lysis.test', rescue.fdr := 
         lysis.pv / (lysis.pv + lysis.beta * rweight * nt/na)]
 
