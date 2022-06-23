@@ -59,10 +59,10 @@ setMethod("mutsig.rescue.one", "SCAN2", function(object, artifact.sig, true.sig,
 
     # All work in this function will be done on a copy of the object with a much, much
     # smaller GATK table.  Results will be joined back at the end.
-    tmpo <- prepare.object(object)
+    tmpgatk <- copy(prepare.object(object)@gatk)
 
     sigtype <- if (mt == 'snv') sbs96 else id83
-    mutsigs <- sigtype(tmpo@gatk[muttype == mt & filter.reasons == 'lysis.test']$mutsig)
+    mutsigs <- sigtype(tmpgatk[muttype == mt & filter.reasons == 'lysis.test']$mutsig)
 
     sigscores <- get.sig.score(mutsigs=mutsigs,
         artifact.sig=artifact.sig, true.sig=true.sig)
@@ -70,23 +70,25 @@ setMethod("mutsig.rescue.one", "SCAN2", function(object, artifact.sig, true.sig,
     # it doesn't seem to be possible to use a column assigned by := for another
     # assignment in the same data.table statement.  i.e., to combine all of these
     # into a single statement.
-    tmpo@gatk[muttype == mt & filter.reasons == 'lysis.test', rweight := 10^-sigscores$postp[mutsig]]
-    tmpo@gatk[muttype == mt & filter.reasons == 'lysis.test', rescue.fdr := 
+    tmpgatk[muttype == mt & filter.reasons == 'lysis.test', rweight := 10^-sigscores$postp[mutsig]]
+    tmpgatk[muttype == mt & filter.reasons == 'lysis.test', rescue.fdr := 
         lysis.pv / (lysis.pv + lysis.beta * rweight * nt/na)]
 
     # rescue refers uniquely to rescued sites, even though regularly PASSed sites
     # would also meet these criteria.
-    tmpo@gatk[muttype == mt & filter.reasons == 'lysis.test', rescue := 
+    tmpgatk[muttype == mt & filter.reasons == 'lysis.test', rescue := 
         !pass & rescue.fdr <= rescue.target.fdr]
     # avoid NAs in rescue. if we really care to know that a site was also not
     # considered for rescue, we can test rescue.fdr or rweight for NA.
-    tmpo@gatk[is.na(rescue), rescue := FALSE]
-    data.table::setkey(tmpo@gatk, chr, pos, refnt, altnt)  # probably should already be this way
+    tmpgatk[is.na(rescue), rescue := FALSE]
+    data.table::setkey(tmpgatk, chr, pos, refnt, altnt)  # probably should already be this way
 
     # Now join the results back to the main (much larger) object.
     # This modifies object by reference, no need to return it.
-    object@gatk[tmpo@gatk, on=.(chr, pos, refnt, altnt),
+    object@gatk[tmpgatk, on=.(chr, pos, refnt, altnt),
         c('rweight', 'rescue.fdr', 'rescue') := list(i.rweight, i.rescue.fdr, i.rescue)]
+str(object@gatk)
+
 
     # Summary info to store in the SCAN2 object's @mutsig.rescue slot.
     list(rescue.target.fdr=rescue.target.fdr,
