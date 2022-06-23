@@ -402,7 +402,7 @@ mutsig.rescue <- function(object.paths, add.muts, rescue.target.fdr=0.01,
                 x <- get(load(object.paths[i]))
                 if (is.compressed(x))
                     x <- decompress(x)
-                x <- prepare.object(x, quiet=quiet)
+                ret <- reduce.table(x@gatk, quiet=quiet)
             }, report.mem=report.mem)
             p(class='sticky', amount=1, pc)
 
@@ -413,7 +413,7 @@ mutsig.rescue <- function(object.paths, add.muts, rescue.target.fdr=0.01,
             #
             # The @gatk table is small here because prepare.object takes a small
             # subset (~1000 entries out of ~1-10 million).
-            x@gatk
+            ret
         })
     }, enable=TRUE)
 
@@ -465,12 +465,14 @@ mutsig.rescue <- function(object.paths, add.muts, rescue.target.fdr=0.01,
                 # non-nil and is therefore editable in mutsig.rescue.one.
                 #
                 # use options(datatable.verbose = TRUE) for debugging
-                x@gatk$longdummynamethatshouldnevercollide <- 1
-                x@gatk$longdummynamethatshouldnevercollide <- NULL
+                #x@gatk$longdummynamethatshouldnevercollide <- 1
+                #x@gatk$longdummynamethatshouldnevercollide <- NULL
                 for (mt in muttypes) {
-                    x@mutsig.rescue[[mt]] <- mutsig.rescue.one(x, muttype=mt,
+                    x@mutsig.rescue[[mt]] <- mutsig.rescue.one(x@gatk,
+                        muttype=mt,
                         artifact.sig=get(artifact.sigs[[mt]]),
                         true.sig=true.sigs[[mt]],
+                        target.fdr=x@call.mutations$target.fdr,
                         rescue.target.fdr=rescue.target.fdr)
                 }
             }, report.mem=report.mem)

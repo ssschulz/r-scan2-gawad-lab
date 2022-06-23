@@ -4,15 +4,8 @@
 # 2-3 GB of RAM per sample.
 #
 # Future optimization of the table might make this feasible.
-prepare.object <- function(object, quiet=FALSE) {
-    newgatk <- object@gatk[static.filter & lysis.fdr <= 0.5 & mda.fdr <= 0.5]
-    if (!quiet) {
-        cat(sprintf("%s: considering %d candidates (%d high quality passing calls)\n",
-            object@single.cell, nrow(newgatk), nrow(object@gatk[pass == TRUE])))
-    }
-    object@gatk <- newgatk  # XXX: likely need a formal way of replacing this table with a subset..
-    compute.filter.reasons(object)
-    object
+reduce.table <- function(gatk, target.fdr) {
+    compute.filter.reasons(gatk[static.filter & lysis.fdr <= 0.5 & mda.fdr <= 0.5], target.fdr=target.fdr)
 }
 
 
@@ -33,8 +26,8 @@ get.objects.for.sig.rescue <- function(object.paths, quiet=FALSE) {
 # N.B. there are currently no reasons to separate SNVs and indels here
 # because the various test columns already incoporate differences in
 # calling parameters.
-compute.filter.reasons <- function(o, target.fdr=o@call.mutations$target.fdr) {
-    m <- o@gatk[, .(pass=!pass, abc.test,
+compute.filter.reasons <- function(gatk, target.fdr=o@call.mutations$target.fdr) {
+    m <- gatk[, .(pass=!pass, abc.test,
         lysis.test=!is.na(lysis.fdr) & lysis.fdr <= target.fdr,
         mda.test=!is.na(mda.fdr) & mda.fdr <= target.fdr,
         cigar.id.test, cigar.hs.test,
@@ -47,19 +40,17 @@ compute.filter.reasons <- function(o, target.fdr=o@call.mutations$target.fdr) {
     m[is.na(m)] <- FALSE
 
     # don't overlook the negation apply(!m, ...
-    o@gatk[, filter.reasons :=
+    gatk[, filter.reasons :=
         apply(!m, 1, function(row) paste(colnames(m)[row], collapse='&'))]
 }
 
 
-setGeneric("mutsig.rescue.one", function(object, artifact.sig, true.sig, rescue.target.fdr=0.01, muttype=c('snv', 'indel'))
-    standardGeneric("mutsig.rescue.one"))
-setMethod("mutsig.rescue.one", "SCAN2", function(object, artifact.sig, true.sig, rescue.target.fdr=0.01, muttype=c('snv', 'indel')) {
+mutsig.rescue.one <- function(gatk, artifact.sig, true.sig, target.fdr=0.01, rescue.target.fdr=0.01, muttype=c('snv', 'indel')) {
     mt <- match.arg(muttype)
 
     # All work in this function will be done on a copy of the object with a much, much
     # smaller GATK table.  Results will be joined back at the end.
-    tmpgatk <- copy(prepare.object(object)@gatk)
+    tmpgatk <- copy(reduce.table(gatk, target.fdr=target.fdr))
 
     sigtype <- if (mt == 'snv') sbs96 else id83
     mutsigs <- sigtype(tmpgatk[muttype == mt & filter.reasons == 'lysis.test']$mutsig)
@@ -81,14 +72,14 @@ setMethod("mutsig.rescue.one", "SCAN2", function(object, artifact.sig, true.sig,
         !pass & rescue.fdr <= rescue.target.fdr]
     data.table::setkey(tmpgatk, chr, pos, refnt, altnt)  # probably should already be this way
 
-    # Now join the results back to the main (much larger) object.
+    # Now join the results back to the main (much larger) table.
     # This modifies object by reference, no need to return it.
-    object@gatk[tmpgatk, on=.(chr, pos, refnt, altnt),
+    gatk[tmpgatk, on=.(chr, pos, refnt, altnt),
         c('rweight', 'rescue.fdr', 'rescue') := list(i.rweight, i.rescue.fdr, i.rescue)]
 
     # avoid NAs in rescue. if we really care to know that a site was also not
     # considered for rescue, we can test rescue.fdr or rweight for NA.
-    object@gatk[is.na(rescue), rescue := FALSE]
+    gatk[is.na(rescue), rescue := FALSE]
 
     # Summary info to store in the SCAN2 object's @mutsig.rescue slot.
     list(rescue.target.fdr=rescue.target.fdr,
@@ -100,7 +91,7 @@ setMethod("mutsig.rescue.one", "SCAN2", function(object, artifact.sig, true.sig,
         weight.true=sigscores$weight.true,
         weight.artifact=sigscores$weight.artifact,
         relative.error=sigscores$rel.error)
-})
+}
 
 
 
