@@ -402,7 +402,7 @@ mutsig.rescue <- function(object.paths, add.muts, rescue.target.fdr=0.01,
                 x <- get(load(object.paths[i]))
                 if (is.compressed(x))
                     x <- decompress(x)
-                ret <- reduce.table(x@gatk, quiet=quiet)
+                ret <- reduce.table(x@gatk, target.fdr=x@call.mutations$target.fdr)
             }, report.mem=report.mem)
             p(class='sticky', amount=1, pc)
 
