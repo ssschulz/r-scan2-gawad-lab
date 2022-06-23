@@ -469,10 +469,14 @@ mutsig.rescue <- function(object.paths, add.muts, rescue.target.fdr=0.01,
 cat('a\n')
                 setDT(x@gatk)
 cat('b\n')
+                setalloccol(x@gatk)
+cat('b2\n')
                 gatk <- x@gatk
 cat('c\n')
                 setDT(gatk)
 cat('d\n')
+                setalloccol(gatk)
+cat('d2\n')
                 gatk[, longdummynamethatshouldnevercollide := 1]
 cat('e\n')
                 gatk[, longdummynamethatshouldnevercollide := NULL]
