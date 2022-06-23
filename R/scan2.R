@@ -364,7 +364,8 @@ setMethod("show", "SCAN2", function(object) {
     if (is.null(object@mutsig.rescue)) {
         cat("(not computed)\n")
     } else {
-        cat('\n')
+        # XXX: assumes SNV and indel use the same FDR.  currently correct, may break later
+        cat(sprintf('rescue.target.fdr=0.3f\n', msr[['snv']]$rescue.target.fdr))
         for (mt in c('snv', 'indel')) {
             msr <- object@mutsig.rescue[[mt]]
             cat(sprintf("#       %6s: %6d/%d candidates rescued,   %0.1f%% rel. error,   sig. weights:  %0.3f true,   %0.3f artifact\n",
