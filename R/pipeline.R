@@ -466,12 +466,19 @@ mutsig.rescue <- function(object.paths, add.muts, rescue.target.fdr=0.01,
                 #
                 # use options(datatable.verbose = TRUE) for debugging
                 options(datatable.verbose = TRUE)
-                x@gatk[, longdummynamethatshouldnevercollide := 1]
-                x@gatk[, longdummynamethatshouldnevercollide := NULL]
-                gatk <- x@gatk
+cat('a\n')
                 setDT(gatk)
+cat('b\n')
                 setDT(x@gatk)
+cat('c\n')
+                x@gatk[, longdummynamethatshouldnevercollide := 1]
+cat('d\n')
+                x@gatk[, longdummynamethatshouldnevercollide := NULL]
+cat('e\n')
+                gatk <- x@gatk
+cat('f\n')
                 for (mt in muttypes) {
+cat('g\n')
                     x@mutsig.rescue[[mt]] <- mutsig.rescue.one(x@gatk,
                         muttype=mt,
                         artifact.sig=get(artifact.sigs[[mt]]),
