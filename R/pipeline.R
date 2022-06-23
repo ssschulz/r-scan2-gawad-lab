@@ -496,7 +496,7 @@ cat('g\n')
                     str(x@gatk)
                     # avoid NAs in rescue. if we really care to know that a site was also not
                     # considered for rescue, we can test rescue.fdr or rweight for NA.
-                    object@gatk[is.na(rescue), rescue := FALSE]
+                    x@gatk[is.na(rescue), rescue := FALSE]
                 }
             }, report.mem=report.mem)
             p(class='sticky', amount=1, pc)
