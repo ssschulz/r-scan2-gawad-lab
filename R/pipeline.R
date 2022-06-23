@@ -466,6 +466,7 @@ mutsig.rescue <- function(object.paths, add.muts, rescue.target.fdr=0.01,
                 #
                 # use options(datatable.verbose = TRUE) for debugging
                 options(datatable.verbose = TRUE)
+if (FALSE) {
 cat('a\n')
                 setDT(x@gatk)
 cat('b\n')
@@ -481,6 +482,7 @@ cat('d2\n')
 cat('e\n')
                 x@gatk[, longdummynamethatshouldnevercollide := NULL]
 cat('f\n')
+}
                 x@gatk$rescue <- FALSE   # this will be updated by mutsig.rescue.one where appropriate
                 for (mt in muttypes) {
 cat('g\n')
