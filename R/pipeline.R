@@ -413,8 +413,6 @@ mutsig.rescue <- function(object.paths, add.muts, rescue.target.fdr=0.01,
     cat('Step 2. Building true mutation spectra.\n')
     muttypes <- c('snv', 'indel')
     true.sigs <- setNames(lapply(muttypes, function(mt) {
-        artifact.sig <- get(artifact.sigs[[mt]])
-
         # unless user specifies it, just the raw spectrum of calls
         if (!is.null(true.sig)) {
             return(true.sig[[mt]])
@@ -446,7 +444,8 @@ mutsig.rescue <- function(object.paths, add.muts, rescue.target.fdr=0.01,
                 x@mutsig.rescue <- NULL   # some old objects don't have this slot; making it doesn't change the correctness of the code
                 for (mt in muttypes) {
                     x@mutsig.rescue[[mt]] <- mutsig.rescue.one(x, muttype=mt,
-                        artifact.sig=artifact.sigs[[mt]], true.sig=true.sigs[[mt]],
+                        artifact.sig=get(artifact.sigs[[mt]]),
+                        true.sig=true.sigs[[mt]],
                         rescue.target.fdr=rescue.target.fdr)
                 }
             }, report.mem=report.mem)
