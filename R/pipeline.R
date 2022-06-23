@@ -466,40 +466,23 @@ mutsig.rescue <- function(object.paths, add.muts, rescue.target.fdr=0.01,
                 #
                 # use options(datatable.verbose = TRUE) for debugging
                 options(datatable.verbose = TRUE)
-if (FALSE) {
-cat('a\n')
-                setDT(x@gatk)
-cat('b\n')
-                setalloccol(x@gatk)
-cat('b2\n')
-                gatk <- x@gatk
-cat('c\n')
-                setDT(gatk)
-cat('d\n')
-                setalloccol(gatk)
-cat('d2\n')
-                x@gatk[, longdummynamethatshouldnevercollide := 1]
-cat('e\n')
-                x@gatk[, longdummynamethatshouldnevercollide := NULL]
-cat('f\n')
-}
+    
                 x@gatk$rescue <- FALSE   # this will be updated by mutsig.rescue.one where appropriate
                 for (mt in muttypes) {
-cat('g\n')
                     results <- mutsig.rescue.one(x,
                         muttype=mt,
                         artifact.sig=get(artifact.sigs[[mt]]),
                         true.sig=true.sigs[[mt]],
                         target.fdr=x@call.mutations$target.fdr,
                         rescue.target.fdr=rescue.target.fdr)
-                    x@mutsig.rescue[[mt]] <- results$summary
-                    x@gatk[results$tmpgatk, on=.(chr, pos, refnt, altnt),
-                        c('rweight', 'rescue.fdr', 'rescue') :=
-                            list(i.rweight, i.rescue.fdr, i.rescue)]
-                    str(x@gatk)
+                    #x@mutsig.rescue[[mt]] <- results$summary
+                    #x@gatk[results$tmpgatk, on=.(chr, pos, refnt, altnt),
+                        #c('rweight', 'rescue.fdr', 'rescue') :=
+                            #list(i.rweight, i.rescue.fdr, i.rescue)]
+                    #str(x@gatk)
                     # avoid NAs in rescue. if we really care to know that a site was also not
                     # considered for rescue, we can test rescue.fdr or rweight for NA.
-                    x@gatk[is.na(rescue), rescue := FALSE]
+                    #x@gatk[is.na(rescue), rescue := FALSE]
                 }
             }, report.mem=report.mem)
             p(class='sticky', amount=1, pc)
