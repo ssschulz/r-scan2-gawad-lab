@@ -469,11 +469,12 @@ mutsig.rescue <- function(object.paths, add.muts, rescue.target.fdr=0.01,
     
                 x@gatk$rescue <- FALSE   # this will be updated by mutsig.rescue.one where appropriate
                 for (mt in muttypes) {
-                    results <- mutsig.rescue.one(x,
+                    x@mutsig.rescue[[mt]] <- mutsig.rescue.one(x,
+                    #results <- mutsig.rescue.one(x,
                         muttype=mt,
                         artifact.sig=get(artifact.sigs[[mt]]),
                         true.sig=true.sigs[[mt]],
-                        target.fdr=x@call.mutations$target.fdr,
+                        #target.fdr=x@call.mutations$target.fdr,
                         rescue.target.fdr=rescue.target.fdr)
                     #x@mutsig.rescue[[mt]] <- results$summary
                     #x@gatk[results$tmpgatk, on=.(chr, pos, refnt, altnt),
