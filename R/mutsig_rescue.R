@@ -81,7 +81,7 @@ setMethod("mutsig.rescue.one", "SCAN2", function(object, artifact.sig, true.sig,
     # avoid NAs in rescue. if we really care to know that a site was also not
     # considered for rescue, we can test rescue.fdr or rweight for NA.
     tmpo@gatk[is.na(rescue), rescue := FALSE]
-    data.table::setkey(tmpo, chr, pos, refnt, altnt)  # probably should already be this way
+    data.table::setkey(tmpo@gatk, chr, pos, refnt, altnt)  # probably should already be this way
 
     # Now join the results back to the main (much larger) object.
     # This modifies object by reference, no need to return it.
