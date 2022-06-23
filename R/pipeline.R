@@ -338,6 +338,12 @@ mutsig.rescue.batch <- function(sc.sample, muts, callable.bed, genome.string, ge
 # object.paths - character vector of paths to SCAN2 object files (.rda). IMPORTANT:
 #     object.paths must be a NAMED VECTOR for which the element names point to the
 #     desired OUTPUT .RDA FILES and the elements themselves are the inputs.
+#
+#     N.B. using compressed objects can be counterproductive. During decompression, peak
+#     memory usage is size(compressed table) + size(decompressed table) + size(object).
+#     Just loading a decompressed object to begin with removes the compress table size at
+#     peak.  Typical values for humans are: compressed table ~ 900 MB, decompressed table ~
+#     2500 MB, rest of object negligible.
 # add.muts - a data.table of additional somatic mutations for creating the true somatic
 #     mutation signature.  This allows the possibility of including muts from other PTA single
 #     cell projects, or even different technologies (e.g., NanoSeq, META-CS), so long as the
@@ -393,7 +399,9 @@ mutsig.rescue <- function(object.paths, add.muts, rescue.target.fdr=0.01,
         p(amount=0, class='sticky', perfcheck(print.header=TRUE))
         gatks <- future.apply::future_lapply(1:length(object.paths), function(i) {
             pc <- perfcheck(paste('prepare.object',i), {
-                x <- decompress(get(load(object.paths[i])))
+                x <- get(load(object.paths[i]))
+                if (is.compressed(x))
+                    x <- decompress(x)
                 x <- prepare.object(x, quiet=quiet)
             }, report.mem=report.mem)
             p(class='sticky', amount=1, pc)
@@ -433,15 +441,22 @@ mutsig.rescue <- function(object.paths, add.muts, rescue.target.fdr=0.01,
         }
     }), muttypes)
 
+    # Slim down memory usage as much as possible before fork()ing.
+    rm(gatks)
+    gc()
+
 
     cat('Step3. Rescuing mutations and writing out new SCAN2 object RDA files.\n')
     progressr::with_progress({
         p <- progressr::progressor(along=1:length(object.paths))
         p(amount=0, class='sticky', perfcheck(print.header=TRUE))
         future.apply::future_lapply(1:length(object.paths), function(i) {
-            pc <- perfcheck(paste('prepare.object',i), {
-                x <- decompress(get(load(object.paths[i])))
-                x@mutsig.rescue <- NULL   # some old objects don't have this slot; making it doesn't change the correctness of the code
+            pc <- perfcheck(paste('mutsig.rescue.one',i), {
+                x <- get(load(object.paths[i]))
+                if (is.compressed(x))
+                    x <- decompress(x)
+                # some old objects don't have this slot; making it doesn't change the correctness of the code
+                x@mutsig.rescue <- NULL   
                 for (mt in muttypes) {
                     x@mutsig.rescue[[mt]] <- mutsig.rescue.one(x, muttype=mt,
                         artifact.sig=get(artifact.sigs[[mt]]),
@@ -456,4 +471,3 @@ mutsig.rescue <- function(object.paths, add.muts, rescue.target.fdr=0.01,
         })
     }, enable=TRUE)
 }
-
