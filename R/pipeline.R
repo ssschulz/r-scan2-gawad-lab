@@ -483,13 +483,20 @@ cat('e\n')
 cat('f\n')
                 for (mt in muttypes) {
 cat('g\n')
-                    #x@mutsig.rescue[[mt]] <- mutsig.rescue.one(gatk,
-                    x@mutsig.rescue[[mt]] <- mutsig.rescue.one(x,
+                    results <- mutsig.rescue.one(x,
                         muttype=mt,
                         artifact.sig=get(artifact.sigs[[mt]]),
                         true.sig=true.sigs[[mt]],
                         target.fdr=x@call.mutations$target.fdr,
                         rescue.target.fdr=rescue.target.fdr)
+                    x@mutsig.rescue[[mt]] <- results$summary
+                    x@gatk[results$tmpgatk, on=.(chr, pos, refnt, altnt),
+                        c('rweight', 'rescue.fdr', 'rescue') :=
+                            list(i.rweight, i.rescue.fdr, i.rescue)]
+                    str(x@gatk)
+                    # avoid NAs in rescue. if we really care to know that a site was also not
+                    # considered for rescue, we can test rescue.fdr or rweight for NA.
+                    object@gatk[is.na(rescue), rescue := FALSE]
                 }
             }, report.mem=report.mem)
             p(class='sticky', amount=1, pc)

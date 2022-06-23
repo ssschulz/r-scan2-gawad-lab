@@ -74,16 +74,17 @@ mutsig.rescue.one <- function(object, artifact.sig, true.sig, target.fdr=0.01, r
 
     # Now join the results back to the main (much larger) table.
     # This modifies object by reference, no need to return it.
-    object@gatk[tmpgatk, on=.(chr, pos, refnt, altnt),
-        c('rweight', 'rescue.fdr', 'rescue') := list(i.rweight, i.rescue.fdr, i.rescue)]
-str(object@gatk)
+    #object@gatk[tmpgatk, on=.(chr, pos, refnt, altnt),
+        #c('rweight', 'rescue.fdr', 'rescue') := list(i.rweight, i.rescue.fdr, i.rescue)]
+#str(object@gatk)
 
     # avoid NAs in rescue. if we really care to know that a site was also not
     # considered for rescue, we can test rescue.fdr or rweight for NA.
-    object@gatk[is.na(rescue), rescue := FALSE]
+    #object@gatk[is.na(rescue), rescue := FALSE]
 
+    list(tmpgatk=tmpgatk,
     # Summary info to store in the SCAN2 object's @mutsig.rescue slot.
-    list(rescue.target.fdr=rescue.target.fdr,
+    summary=list(rescue.target.fdr=rescue.target.fdr,
         postp = sigscores$postp,
         test.spectrum=as.spectrum(mutsigs),
         true.sig=true.sig,
@@ -91,7 +92,7 @@ str(object@gatk)
         nmuts=length(mutsigs),
         weight.true=sigscores$weight.true,
         weight.artifact=sigscores$weight.artifact,
-        relative.error=sigscores$rel.error)
+        relative.error=sigscores$rel.error))
 }
 
 
