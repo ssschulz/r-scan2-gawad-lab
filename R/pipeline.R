@@ -463,6 +463,8 @@ mutsig.rescue <- function(object.paths, add.muts, rescue.target.fdr=0.01,
                 # the work-around I've found is to just create and delete a dummy
                 # column.  The result is attr(results@gatk, '.internal.selfref') becomes
                 # non-nil and is therefore editable in mutsig.rescue.one.
+                #
+                # use options(datatable.verbose = TRUE) for debugging
                 x@gatk$longdummynamethatshouldnevercollide <- 1
                 x@gatk$longdummynamethatshouldnevercollide <- NULL
                 for (mt in muttypes) {
