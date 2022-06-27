@@ -356,6 +356,7 @@ mutsig.rescue.batch <- function(sc.sample, muts, callable.bed, genome.string, ge
 #     signatures.
 #
 #     the mutation table must contain "muttype" and "mutsig" columns.
+#     Ignored if NULL.
 # rescue.target.fdr - similar to the main pipeline's target.fdr. The cutoff used to rescue
 #     mutations after their {lysis,mda}.fdr values have been adjusted due by mutation
 #     signature rescue.
@@ -368,7 +369,8 @@ mutsig.rescue.batch <- function(sc.sample, muts, callable.bed, genome.string, ge
 #     normally not be specified by the user--these are calculated from the high confidence
 #     mutation calls in the objects and add.muts.
 mutsig.rescue <- function(object.paths, add.muts, rescue.target.fdr=0.01,
-    artifact.sigs=list(snv=data(snv.artifact.signature.v3), indel=data(indel.artifact.signature.v1)),
+    artifact.sigs=list(snv=data(snv.artifact.signature.v3),
+                       indel=data(indel.artifact.signature.v1)),
     true.sig=NULL, quiet=FALSE, report.mem=TRUE)
 {
     # Ensure that the user did set names for outputs
@@ -382,7 +384,7 @@ mutsig.rescue <- function(object.paths, add.muts, rescue.target.fdr=0.01,
 
     # Sanity check the add.muts table before doing any work
     use.add.muts <- FALSE
-    if (!missing(add.muts)) {
+    if (!missing(add.muts) & !is.null(add.muts)) {
         if (!('data.table' %in% class(add.muts)) |
             !('muttype' %in% colnames(add.muts)) |
             !('mutsig' %in% colnames(add.muts)))
@@ -451,7 +453,7 @@ mutsig.rescue <- function(object.paths, add.muts, rescue.target.fdr=0.01,
     progressr::with_progress({
         p <- progressr::progressor(along=1:length(object.paths))
         p(amount=0, class='sticky', perfcheck(print.header=TRUE))
-        future.apply::future_lapply(1:length(object.paths), function(i) {
+        muts <- do.call(rbind, future.apply::future_lapply(1:length(object.paths), function(i) {
             pc <- perfcheck(paste('mutsig.rescue.one',i), {
                 x <- get(load(object.paths[i]))
                 if (is.compressed(x))
@@ -490,6 +492,12 @@ mutsig.rescue <- function(object.paths, add.muts, rescue.target.fdr=0.01,
 
             results <- x
             save(results, file=names(object.paths)[i], compress=FALSE)
-        })
+
+            ret <- results@gatk[pass == TRUE | rescue == TRUE]
+            ret$sample <- results@single.cell
+            ret
+        }))
     }, enable=TRUE)
+
+    list(all.muts=muts)
 }
