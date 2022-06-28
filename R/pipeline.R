@@ -428,7 +428,7 @@ mutsig.rescue <- function(object.paths, add.muts, rescue.target.fdr=0.01,
         if (!is.null(true.sig)) {
             return(true.sig[[mt]])
         } else {
-            mutsigs <- do.call(c, lapply(gatks, function(gatk) gatk[muttype == mt & pass == TRUE]$mutsig))
+            mutsigs <- do.call(c, lapply(gatks, function(gatk) get.high.quality.mutations(gatk)$mutsig))
 
             if (use.add.muts) {
                 extra <- add.muts[muttype == mt]$mutsig
@@ -453,7 +453,7 @@ mutsig.rescue <- function(object.paths, add.muts, rescue.target.fdr=0.01,
     progressr::with_progress({
         p <- progressr::progressor(along=1:length(object.paths))
         p(amount=0, class='sticky', perfcheck(print.header=TRUE))
-        muts <- do.call(rbind, future.apply::future_lapply(1:length(object.paths), function(i) {
+        results <- do.call(rbind, future.apply::future_lapply(1:length(object.paths), function(i) {
             pc <- perfcheck(paste('mutsig.rescue.one',i), {
                 x <- get(load(object.paths[i]))
                 if (is.compressed(x))
@@ -493,11 +493,22 @@ mutsig.rescue <- function(object.paths, add.muts, rescue.target.fdr=0.01,
             results <- x
             save(results, file=names(object.paths)[i], compress=FALSE)
 
-            ret <- results@gatk[pass == TRUE | rescue == TRUE]
-            ret$sample <- results@single.cell
+            # add in sample ID and bulk ID in anticipation of the batch-wide
+            # mutation tables.
+            results@gatk$sample <- results@single.cell
+            results@gatk$bulk.sample <- results@bulk
+            ret <- list(
+                sample=results@single.cell,
+                muts=results@gatk[pass == TRUE | rescue == TRUE],
+                # one entry for each mutation type (snv, indel)
+                sig.homogeneity.test=
+                    lapply(results@mutsig.rescue, function(msr) msr$sig.homogeneity.test)
+            )
             ret
         }))
     }, enable=TRUE)
 
-    list(all.muts=muts)
+    list(muts=do.call(rbind, lapply(results, function(r) r$muts)),
+         sig.homogeneity.tests=setNames(lapply(results, function(r) r$sig.homogeneity.test),
+                                        sapply(results, function(r) r$sample)))
 }

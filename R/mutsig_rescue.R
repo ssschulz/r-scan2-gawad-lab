@@ -1,9 +1,16 @@
-# Read in each SCAN2 object and retain sites that would pass if the
-# calling threshold was increased to target.fdr=0.5 (which is very high).
-# The entire object list can't be retained in memory since it requires
-# 2-3 GB of RAM per sample.
-#
-# Future optimization of the table might make this feasible.
+# Retrieve the "high quality" mutations used to build the true mutation
+# signature.  Nothing special here, this function just makes it easier
+# to have a consistent definition for high quality mutations across the
+# package code.
+get.high.quality.mutations <- function(gatk, muttype=c('snv', 'indel')) {
+    mt <- match.arg(muttype)
+    gatk[muttype == mt & pass == TRUE]
+}
+
+
+# SCAN2 mutation signature rescue is only applied to sites that would
+# pass normally if target.fdr=0.5 (i.e., 50% false discovery rate, which
+# is very high; recommended target.fdr is 0.01 (1%)).
 reduce.table <- function(gatk, target.fdr) {
     compute.filter.reasons(gatk[static.filter & lysis.fdr <= 0.5 & mda.fdr <= 0.5], target.fdr=target.fdr)
 }
@@ -80,7 +87,13 @@ mutsig.rescue.one <- function(object, artifact.sig, true.sig,
     object@gatk[tmpgatk, on=.(chr, pos, refnt, altnt),
         c('rweight', 'rescue.fdr', 'rescue') := list(i.rweight, i.rescue.fdr, i.rescue)]
 
+
+    # Compute the signature homogeneity test w.r.t. the true signature provided
+    # to this function.
+    sig.homogeneity.test <- sig.homogeneity.test(object, true.sig, muttype)
+
     list(rescue.target.fdr=rescue.target.fdr,
+        sig.homogeneity.test=sig.homogeneity.test,
         postp = sigscores$postp,
         test.spectrum=as.spectrum(mutsigs),
         true.sig=true.sig,
@@ -90,7 +103,6 @@ mutsig.rescue.one <- function(object, artifact.sig, true.sig,
         weight.artifact=sigscores$weight.artifact,
         relative.error=sigscores$rel.error)
 }
-
 
 
 # Produces a weight vector of the same length as the provided signatures
@@ -123,4 +135,17 @@ get.sig.score <- function(mutsigs, true.sig, artifact.sig, eps=0.001) {
     # the fit to encapsulate all other unknown processes.
     postp <- log10(artifact.sig*weights[2]) - log10(true.sig*weights[1])
     list(postp=postp, weight.true=weights[1], weight.artifact=weights[2], rel.error=rel.error)
+}
+
+
+sig.homogeneity.test <- function(object, true.sig, muttype=c('snv', 'indel')) {
+    muttype <- match.arg(muttype)
+    true.muts <- get.high.quality.mutations(object@gatk, muttype=muttype)
+    sig.homogeneity.test.vs.sig(true.muts, true.sig)
+}
+
+
+sig.homogeneity.test.vs.sig <- function(true.muts, true.sig) {
+    # placeholder for now; replace with old manual script
+    NA
 }
