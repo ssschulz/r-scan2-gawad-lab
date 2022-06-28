@@ -453,7 +453,7 @@ mutsig.rescue <- function(object.paths, add.muts, rescue.target.fdr=0.01,
     progressr::with_progress({
         p <- progressr::progressor(along=1:length(object.paths))
         p(amount=0, class='sticky', perfcheck(print.header=TRUE))
-        results <- do.call(rbind, future.apply::future_lapply(1:length(object.paths), function(i) {
+        results <- future.apply::future_lapply(1:length(object.paths), function(i) {
             pc <- perfcheck(paste('mutsig.rescue.one',i), {
                 x <- get(load(object.paths[i]))
                 if (is.compressed(x))
@@ -505,7 +505,7 @@ mutsig.rescue <- function(object.paths, add.muts, rescue.target.fdr=0.01,
                     lapply(results@mutsig.rescue, function(msr) msr$sig.homogeneity.test)
             )
             ret
-        }))
+        })
     }, enable=TRUE)
 
     list(muts=do.call(rbind, lapply(results, function(r) r$muts)),
