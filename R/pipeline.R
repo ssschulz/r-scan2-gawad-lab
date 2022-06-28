@@ -497,6 +497,8 @@ mutsig.rescue <- function(object.paths, add.muts, rescue.target.fdr=0.01,
             # mutation tables.
             results@gatk$sample <- results@single.cell
             results@gatk$bulk.sample <- results@bulk
+            # can't have sample names in columns - rbind would like uniform column names
+            colnames(results@gatk)[colnames(results@gatk) == results@single.cell] <- 'scgt'
             ret <- list(
                 sample=results@single.cell,
                 muts=results@gatk[pass == TRUE | rescue == TRUE],
