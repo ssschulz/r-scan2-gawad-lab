@@ -429,7 +429,7 @@ mutsig.rescue <- function(object.paths, add.muts, rescue.target.fdr=0.01,
             return(true.sig[[mt]])
         } else {
             mutsigs <- do.call(c, lapply(gatks, function(gatk)
-                get.high.quality.mutations(gatk)$mutsig, muttype=mt))
+                get.high.quality.mutations(gatk, muttype=mt)$mutsig))
 
             if (use.add.muts) {
                 extra <- add.muts[muttype == mt]$mutsig
