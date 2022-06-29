@@ -71,7 +71,7 @@ get.3mer <- function(df, chr, pos, refnt, altnt,
                               ranges=IRanges(start=pos-1, end=pos+1)))
 
     ctx <- as.character(tmp)
-    ctx.rc <- as.character(reverseComplement(tmp))
+    ctx.rc <- as.character(Biostrings::reverseComplement(tmp))
     type.and.ctx <- paste0(ifelse(refnt == 'C' | refnt == 'T', ctx, ctx.rc), ':', muttype)
     # sbs96 converts the string form into a factor to enforce ordering
     sbs96(type.and.ctx)
