@@ -52,7 +52,8 @@ muttype.map <- c(
 )
 
 get.3mer <- function(df, chr, pos, refnt, altnt,
-    genome=BSgenome.Hsapiens.1000genomes.hs37d5, verbose=FALSE)
+    genome=BSgenome.Hsapiens.1000genomes.hs37d5::BSgenome.Hsapiens.1000genomes.hs37d5,
+    verbose=FALSE)
 {
     if (!missing(df)) {
         chr <- df$chr
