@@ -71,7 +71,7 @@ select.perms <- function(spectrum.to.match, perms, quiet=FALSE)
         print(sort(limits))
     }
 
-    k <- min(limits na.rm=T)  # NaNs can occur when there are 0 mutations of an entire class (e.g., T>A)
+    k <- min(limits, na.rm=T)  # NaNs can occur when there are 0 mutations of an entire class (e.g., T>A)
     if (k < 1)
         stop("n.sample too low: unable to complete any permutations")
     
