@@ -99,6 +99,8 @@ select.perms <- function(spectrum.to.match, perms, quiet=FALSE)
     list(k=k, perms=do.call(rbind, lapply(names(real.muts), function(mt) {
         n.real <- real.muts[mt]
         ret <- head(perms[perms$mutsig == mt,], k*n.real)
+        # rownames take up an unbelievably large amount of memory and aren't useful
+        rownames(ret) <- NULL
         if (any(is.na(ret$pos))) {
             cat('k=', k, '\n')
             cat('n.real=', n.real, '\n')
@@ -378,8 +380,11 @@ make.perms <- function(muts, genome.file, genome.string,
         print(muttype.counts)
     }
     perms <- lapply(1:desired.perms, function(i) {
-        do.call(rbind, lapply(all.muttypes, function(mt)
+        ret <- do.call(rbind, lapply(all.muttypes, function(mt)
             muts.by.muttype[[mt]][(1 + (i-1)*muttype.counts[mt]):(i*muttype.counts[mt]),]))
+        # Again ensure no rownames. Massive memory waste.
+        rownames(ret) <- NULL
+        ret
     })
     list(total.solved=total.solved, seed.base=seed.base, seeds.used=seeds.used, muts=muts, perms=perms) #, raw.perms=permuted.muts)
 }
