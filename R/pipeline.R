@@ -485,8 +485,8 @@ combine.permutations <- function(perm.files, genome.string, report.mem=TRUE) {
         data <- future.apply::future_lapply(perm.files, function(f) {
             load(f)  # loads permdata
             list(
-                seeds.info=data.frame(sample=permdata$muts[1,]$sample,
-                           file=f, seed.used=permdata$seeds.used),
+                seed.info=data.frame(sample=permdata$muts[1,]$sample,
+                    file=f, seed.used=permdata$seeds.used),
                 # keep only necessary columns to reduce mem usage
                 perms=lapply(permdata$perms, function(p) p[, c('chr', 'pos', 'mutsig')])
             )
@@ -494,8 +494,9 @@ combine.permutations <- function(perm.files, genome.string, report.mem=TRUE) {
     }, report.mem=report.mem)
     cat(pc, '\n')
     
-    seeds.info <- do.call(rbind, lapply(data, function(d) d$seeds.info))
-    if (sum(duplicated(seeds.used)) != 0)
+    seed.info <- do.call(rbind, lapply(data, function(d) d$seed.info))
+str(seed.info)
+    if (sum(duplicated(seed.info$seeds.used)) != 0)
         warning('detected duplicate seeds, there may be a problem in how you supplied seed.base to permtool.R!')
 
     perml <- lapply(data, function(d) d$perms)
@@ -527,5 +528,5 @@ combine.permutations <- function(perm.files, genome.string, report.mem=TRUE) {
             gz
         }))
     })
-    list(seeds.info=seeds.info, zperml=zperml)
+    list(seed.info=seed.info, zperml=zperml)
 }
