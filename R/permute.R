@@ -1,3 +1,9 @@
+# NOT concat.perms - this function combines permutations across samples, not
+# across parallelized chunks of permutation-generation.
+combine.permutations <- function() {
+}
+
+
 # This function uses bedtools to randomly select positions (bedtools shuffle)
 # within the region defined by 'callable'.
 #
@@ -332,7 +338,7 @@ make.perms <- function(muts, genome.file, genome.string,
         return(list(total.solved=desired.perms,
             seed.base=seed.base,
             seeds.used=NA,
-            muts=muts, raw.perms=NULL,
+            muts=muts, #raw.perms=NULL,
             perms=lapply(1:desired.perms, function(i) NULL) # list of NULLs
         ))
     }
@@ -375,7 +381,7 @@ make.perms <- function(muts, genome.file, genome.string,
         do.call(rbind, lapply(all.muttypes, function(mt)
             muts.by.muttype[[mt]][(1 + (i-1)*muttype.counts[mt]):(i*muttype.counts[mt]),]))
     })
-    list(total.solved=total.solved, seed.base=seed.base, seeds.used=seeds.used, muts=muts, raw.perms=permuted.muts, perms=perms)
+    list(total.solved=total.solved, seed.base=seed.base, seeds.used=seeds.used, muts=muts, perms=perms) #, raw.perms=permuted.muts)
 }
 
 
@@ -392,7 +398,7 @@ concat.perms <- function(permlist) {
         seed.base=permlist[[1]]$seed.base,
         seeds.used=do.call(c, lapply(permlist, function(p) p$seeds.used)),
         muts=permlist[[1]]$muts,  # same across all perms
-        raw.perms=do.call(rbind, lapply(permlist, function(p) p$raw.perms)),
+        #raw.perms=do.call(rbind, lapply(permlist, function(p) p$raw.perms)),
         perms=do.call(c, lapply(permlist, function(p) p$perms))
     )
 }
