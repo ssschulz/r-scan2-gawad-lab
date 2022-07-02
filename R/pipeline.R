@@ -482,11 +482,13 @@ combine.permutations <- function(perm.files, genome.string, report.mem=TRUE) {
     pc <- perfcheck('load permutations', {
         perml <- future.apply::future_lapply(perm.files, function(f) {
             print(f)
-            load(f)  # loads sample, seed, permdata, etc.
+            load(f)  # loads permdata
             cat(length(permdata$perms), 'permutations\n')
             seeds.used <<- rbind(seeds.used,
-                data.frame(sample=sample, file=f, seed.used=permdata$seeds.used))
-            permdata$perms[, c('chr', 'pos', 'mutsig')]
+                data.frame(sample=permdata$muts[1,]$sample,
+                           file=f, seed.used=permdata$seeds.used))
+            # keep only necessary columns to reduce mem usage
+            lapply(permdata$perms, function(p) p[, c('chr', 'pos', 'mutsig')])
         })
         names(perml) <- perm.files
     }, report.mem=report.mem)
