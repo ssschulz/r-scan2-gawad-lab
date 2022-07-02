@@ -504,15 +504,15 @@ combine.permutations <- function(perm.files, genome.string, report.mem=TRUE) {
     progressr::with_progress({
         p <- progressr::progressor(along=1:length(perml[[1]]))
         p(amount=0, class='sticky', perfcheck(print.header=TRUE))
-        zperml <- GRangesList(future.apply::future_lapply(1:length(perml[[1]]), function(i) {
+        zperml <- GenomicRanges::GRangesList(future.apply::future_lapply(1:length(perml[[1]]), function(i) {
             pc <- perfcheck('restructure permutations', {
                 z <- lapply(perml, function(ps) ps[[i]])
                 names(z) <- NULL # GRanges c() won't combine things with different names
                 # the permutations are now dataframes, not GRanges, so rbind and convert
                 z <- do.call(rbind, z)
-                gz <- GRanges(seqnames=z$chr, ranges=IRanges(start=z$pos, width=1),
+                gz <- GenomicRanges::GRanges(seqnames=z$chr, ranges=IRanges(start=z$pos, width=1),
                     seqinfo=genome.seqinfo)
-                gz <- sort(sortSeqLevels(gz))
+                gz <- sort(GenomeInfoDb::sortSeqlevels(gz))
                 gz$mutsig <- z$mutsig
                 gz$perm.id <- i
             }, report.mem=report.mem)
