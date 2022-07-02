@@ -481,9 +481,13 @@ combine.permutations <- function(perm.files, genome.string, report.mem=TRUE) {
     cat('Combining permutations from', length(perm.files), 'samples.\n')
     cat('Parallelizing with', future::nbrOfWorkers(), 'cores.\n')
 
-    pc <- perfcheck('load permutations', {
+    progressr::with_progress({
+        p <- progressr::progressor(along=1:length(perm.files))
+        p(amount=0, class='sticky', perfcheck(print.header=TRUE))
         data <- future.apply::future_lapply(perm.files, function(f) {
-            load(f)  # loads permdata
+            pc <- perfcheck(paste('load', substr(f, max(1, nchar(f)-20), nchar(f))),
+                permdata <- get(load(f)),
+                report.mem=report.mem)
             list(
                 seed.info=data.frame(sample=permdata$muts[1,]$sample,
                     file=f, seed.used=permdata$seeds.used),
@@ -491,8 +495,7 @@ combine.permutations <- function(perm.files, genome.string, report.mem=TRUE) {
                 perms=lapply(permdata$perms, function(p) p[, c('chr', 'pos', 'mutsig')])
             )
         })
-    }, report.mem=report.mem)
-    cat(pc, '\n')
+    })
     
     seed.info <- do.call(rbind, lapply(data, function(d) d$seed.info))
 str(seed.info)
