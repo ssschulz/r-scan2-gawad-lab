@@ -1,9 +1,3 @@
-# NOT concat.perms - this function combines permutations across samples, not
-# across parallelized chunks of permutation-generation.
-combine.permutations <- function() {
-}
-
-
 # This function uses bedtools to randomly select positions (bedtools shuffle)
 # within the region defined by 'callable'.
 #
