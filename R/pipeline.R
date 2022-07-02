@@ -470,3 +470,53 @@ mutsig.rescue <- function(object.paths, add.muts, rescue.target.fdr=0.01,
          sig.homogeneity.tests=setNames(lapply(results, function(r) r$sig.homogeneity.test),
                                         sapply(results, function(r) r$sample)))
 }
+
+
+
+# NOT concat.perms - this function combines permutations across samples, not
+# across parallelized chunks of permutation-generation.
+combine.permutations <- function(perm.files, genome.string, report.mem=TRUE) {
+    genome.seqinfo <- genome.string.to.seqinfo.object(genome.string)
+
+    seeds.used <- NULL
+    pc <- perfcheck('load permutations', {
+        perml <- future.apply::future_lapply(perm.files, function(f) {
+            print(f)
+            load(f)  # loads sample, seed, permdata, etc.
+            cat(length(permdata$perms), 'permutations\n')
+            seeds.used <<- rbind(seeds.used,
+                data.frame(sample=sample, file=f, seed.used=permdata$seeds.used))
+            permdata$perms[, c('chr', 'pos', 'mutsig')]
+        })
+        names(perml) <- perm.files
+    }, report.mem=report.mem)
+    cat(pc, '\n')
+    
+    if (sum(duplicated(seeds.used)) != 0)
+        warning('detected duplicate seeds, there may be a problem in how you supplied seed.base to permtool.R!')
+
+
+    # perml can be very large (~5G for the 52 PTA paper neurons) and needs to
+    # be copied once for every thread. There is probably a better way to divide
+    # this to avoid copies.
+    progressr::with_progress({
+        p <- progressr::progressor(along=1:length(perml[[1]]))
+        zperml <- GRangesList(future.apply::future_lapply(1:length(perml[[1]]), function(i) {
+            pc <- perfcheck('restructure permutations', {
+                z <- lapply(perml, function(ps) ps[[i]])
+                names(z) <- NULL # GRanges c() won't combine things with different names
+                # the permutations are now dataframes, not GRanges, so rbind and convert
+                z <- do.call(rbind, z)
+                gz <- GRanges(seqnames=z$chr, ranges=IRanges(start=z$pos, width=1),
+                    seqinfo=genome.seqinfo)
+                gz <- sort(sortSeqLevels(gz))
+                gz$mutsig <- z$mutsig
+                gz$perm.id <- i
+            }, report.mem=report.mem)
+            p(class='sticky', amount=1, pc)
+
+            gz
+        }))
+    })
+    list(seeds.used=seeds.used, zperml=zperml)
+}
