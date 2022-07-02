@@ -488,6 +488,7 @@ combine.permutations <- function(perm.files, genome.string, report.mem=TRUE) {
             pc <- perfcheck(paste('load', substr(f, max(1, nchar(f)-20), nchar(f))),
                 permdata <- get(load(f)),
                 report.mem=report.mem)
+            p(class='sticky', amount=1, pc)
             list(
                 seed.info=data.frame(sample=permdata$muts[1,]$sample,
                     file=f, seed.used=permdata$seeds.used),
