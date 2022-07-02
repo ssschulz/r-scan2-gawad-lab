@@ -478,25 +478,27 @@ mutsig.rescue <- function(object.paths, add.muts, rescue.target.fdr=0.01,
 combine.permutations <- function(perm.files, genome.string, report.mem=TRUE) {
     genome.seqinfo <- genome.string.to.seqinfo.object(genome.string)
 
-    seeds.used <- NULL
     pc <- perfcheck('load permutations', {
-        perml <- future.apply::future_lapply(perm.files, function(f) {
-            print(f)
+        data <- future.apply::future_lapply(perm.files, function(f) {
             load(f)  # loads permdata
-            cat(length(permdata$perms), 'permutations\n')
-            seeds.used <<- rbind(seeds.used,
-                data.frame(sample=permdata$muts[1,]$sample,
-                           file=f, seed.used=permdata$seeds.used))
-            # keep only necessary columns to reduce mem usage
-            lapply(permdata$perms, function(p) p[, c('chr', 'pos', 'mutsig')])
+            #cat(length(permdata$perms), 'permutations\n')
+            list(
+                seeds.used=data.frame(sample=permdata$muts[1,]$sample,
+                           file=f, seed.used=permdata$seeds.used),
+                # keep only necessary columns to reduce mem usage
+                perms=lapply(permdata$perms, function(p) p[, c('chr', 'pos', 'mutsig')])
+            )
         })
-        names(perml) <- perm.files
     }, report.mem=report.mem)
     cat(pc, '\n')
     
+    seeds.used <- do.call(rbind, lapply(data, function(d) d$seeds.used))
     if (sum(duplicated(seeds.used)) != 0)
         warning('detected duplicate seeds, there may be a problem in how you supplied seed.base to permtool.R!')
 
+    perml <- lapply(data, function(d) d$perms)
+    if (any(sapply(perml, length) != length(perml[[1]])))
+        stop('all permutation files must contain the same number of permutations')
 
     # perml can be very large (~5G for the 52 PTA paper neurons) and needs to
     # be copied once for every thread. There is probably a better way to divide
@@ -505,7 +507,7 @@ combine.permutations <- function(perm.files, genome.string, report.mem=TRUE) {
         p <- progressr::progressor(along=1:length(perml[[1]]))
         p(amount=0, class='sticky', perfcheck(print.header=TRUE))
         zperml <- GenomicRanges::GRangesList(future.apply::future_lapply(1:length(perml[[1]]), function(i) {
-            pc <- perfcheck('restructure permutations', {
+            pc <- perfcheck(paste('restructure permutations', i), {
                 z <- lapply(perml, function(ps) ps[[i]])
                 names(z) <- NULL # GRanges c() won't combine things with different names
                 # the permutations are now dataframes, not GRanges, so rbind and convert
