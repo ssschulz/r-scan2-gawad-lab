@@ -499,7 +499,6 @@ combine.permutations <- function(perm.files, genome.string, report.mem=TRUE) {
     })
     
     seed.info <- do.call(rbind, lapply(data, function(d) d$seed.info))
-str(seed.info)
     if (sum(duplicated(seed.info$seeds.used)) != 0)
         warning('detected duplicate seeds, there may be a problem in how you supplied seed.base to permtool.R!')
 
