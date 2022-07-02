@@ -501,6 +501,7 @@ combine.permutations <- function(perm.files, genome.string, report.mem=TRUE) {
     # this to avoid copies.
     progressr::with_progress({
         p <- progressr::progressor(along=1:length(perml[[1]]))
+        p(amount=0, class='sticky', perfcheck(print.header=TRUE))
         zperml <- GRangesList(future.apply::future_lapply(1:length(perml[[1]]), function(i) {
             pc <- perfcheck('restructure permutations', {
                 z <- lapply(perml, function(ps) ps[[i]])
