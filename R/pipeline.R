@@ -478,6 +478,9 @@ mutsig.rescue <- function(object.paths, add.muts, rescue.target.fdr=0.01,
 combine.permutations <- function(perm.files, genome.string, report.mem=TRUE) {
     genome.seqinfo <- genome.string.to.seqinfo.object(genome.string)
 
+    cat('Combining permutations from', length(perm.files), 'samples.\n')
+    cat('Parallelizing with', future::nbrOfWorkers(), 'cores.\n')
+
     pc <- perfcheck('load permutations', {
         data <- future.apply::future_lapply(perm.files, function(f) {
             load(f)  # loads permdata
