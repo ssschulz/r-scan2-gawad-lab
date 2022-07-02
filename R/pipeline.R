@@ -520,9 +520,10 @@ combine.permutations <- function(perm.files, genome.string, report.mem=TRUE) {
                 gz <- sort(GenomeInfoDb::sortSeqlevels(gz))
                 gz$mutsig <- z$mutsig
                 gz$perm.id <- i
-            }, report.mem=report.mem & i %% 100 == 1)
-            # only report on every 100th to reduce noise
-            if (i %% 100 == 1) p(class='sticky', amount=100, pc)
+            }, report.mem=report.mem & i %% 100 == 0)
+            # only report on every 100th to reduce noise. isn't exactly correct because
+            # indexes aren't handled in order.
+            if (i %% 100 == 0) p(class='sticky', amount=100, pc)
 
             gz
         }))
