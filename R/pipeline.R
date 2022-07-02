@@ -288,51 +288,6 @@ make.permuted.mutations <- function(sc.sample, muts, callable.bed, genome.string
 }
 
 
-mutsig.rescue.batch <- function(sc.sample, muts, callable.bed, genome.string, genome.file, muttype=c('snv', 'indel'),
-    n.permutations=10000, snv.N=1e5, indel.K=1/50, n.chunks=100, quiet=TRUE, report.mem=TRUE)
-{
-    muttype <- match.arg(muttype)
-
-
-    # just bins the numbers 1..n.permutations into 'n.chunks' bins, where
-    # the bin size is close to equal. i.e., divvy up the number of permutations
-    # to solve roughly equally across chunks.
-    desired.perms <- unname(table(cut(1:n.permutations, breaks=n.chunks)))
-
-    # Simple, not great, method for generating a sample-unique value for
-    # seed construction.
-    seed.base <- strtoi(paste0('0x', substr(digest::sha1(sc.sample), 1, 7)))
-
-    progressr::with_progress({
-        p <- progressr::progressor(along=1:n.chunks)
-        p(amount=0, class='sticky', perfcheck(print.header=TRUE))
-        xs <- future.apply::future_lapply(1:n.chunks, function(i) {
-            pc <- perfcheck(paste('make.perms',i), {
-                    if (muttype == 'snv') {
-                        perms <- make.perms(muts=muts, callable=callable.bed,
-                            genome.string=genome.string, genome.file=genome.file,
-                            seed.base=seed.base,
-                            muttype=muttype, desired.perms=desired.perms[i],
-                            quiet=quiet, n.sample=snv.N)
-                    } else if (muttype == 'indel') {
-                        perms <- make.perms(muts=muts, callable=callable.bed,
-                            genome.string=genome.string, genome.file=genome.file,
-                            seed.base=seed.base,
-                            muttype=muttype, desired.perms=desired.perms[i],
-                            quiet=quiet, k=indel.K)
-                    }
-                },
-                report.mem=report.mem)
-            p(class='sticky', amount=1, pc)
-
-            perms
-        }, future.seed=0)  # this is REQUIRED for make.perms()
-    }, enable=TRUE)
-
-    perms <- concat.perms(xs)
-}
-
-
 # Multicore mutation signature rescue.
 #
 # object.paths - character vector of paths to SCAN2 object files (.rda). IMPORTANT:
