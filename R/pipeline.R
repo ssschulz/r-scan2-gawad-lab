@@ -240,7 +240,8 @@ make.callable.regions <- function(path, sc.sample, bulk.sample,
 # parameters.
 # snv.N - number of random SNVs to make before each downsampling. Lower values
 #         will spend more time waiting on the overhead of calls to bedtools shuffle.
-# indel.K - reduces the number of random indels generated per iteration.
+# indel.K - reduces the number of random indels generated per iteration. With k=1/50,
+#           about 10 of the rarest indel types are produced per iteration.
 make.permuted.mutations <- function(sc.sample, muts, callable.bed, genome.string, genome.file, muttype=c('snv', 'indel'),
     n.permutations=10000, snv.N=1e5, indel.K=1/50, n.chunks=100, quiet=TRUE, report.mem=TRUE)
 {
