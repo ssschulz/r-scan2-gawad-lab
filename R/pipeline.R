@@ -252,7 +252,10 @@ make.permuted.mutations <- function(sc.sample, muts, callable.bed, genome.string
     # just bins the numbers 1..n.permutations into 'n.chunks' bins, where
     # the bin size is close to equal. i.e., divvy up the number of permutations
     # to solve roughly equally across chunks.
-    desired.perms <- unname(table(cut(1:n.permutations, breaks=n.chunks)))
+    if (n.chunks > 1)
+        perms.per.chunk <- unname(table(cut(1:n.permutations, breaks=n.chunks)))
+    else
+        perms.per.chunk <- n.permutations
 
     # Simple, not great, method for generating a sample-unique value for
     # seed construction.
@@ -267,13 +270,13 @@ make.permuted.mutations <- function(sc.sample, muts, callable.bed, genome.string
                         perms <- make.perms(muts=muts, callable=callable.bed,
                             genome.string=genome.string, genome.file=genome.file,
                             seed.base=seed.base,
-                            muttype=muttype, desired.perms=desired.perms[i],
+                            muttype=muttype, desired.perms=perms.per.chunk[i],
                             quiet=quiet, n.sample=snv.N)
                     } else if (muttype == 'indel') {
                         perms <- make.perms(muts=muts, callable=callable.bed,
                             genome.string=genome.string, genome.file=genome.file,
                             seed.base=seed.base,
-                            muttype=muttype, desired.perms=desired.perms[i],
+                            muttype=muttype, desired.perms=perms.per.chunk[i],
                             quiet=quiet, k=indel.K)
                     }
                 },
