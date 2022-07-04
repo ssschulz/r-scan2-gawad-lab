@@ -121,6 +121,8 @@ select.perms <- function(spectrum.to.match, perms, quiet=FALSE)
 make.snv.perms.helper <- function(muts, spectrum, genome.object, genome.file,
     callable, seed, n.sample=5e4, quiet=FALSE)
 {
+    if (!quiet) cat('snv generation parameter: n.sample=', n.sample, '\n')
+
     perms <- bedtools.permute(n.sample=n.sample, genome.file=genome.file, callable=callable, seed=seed)
 
     # Get the reference base at each permutation position. Could save time here
@@ -175,6 +177,8 @@ make.indel.perms.helper <- function(spectrum,
     genome.object, genome.file, genome.string,
     callable, seed, k=1/10, quiet=FALSE)
 {
+    if (!quiet) cat('indel generation parameter: k=', k, '\n')
+
     # The values below are sufficient to get about 100 of each indel type
     # however, getting the rare indel types is not as important for permutations
     # as it was for the original sensitivity testing. this is because we are
@@ -321,6 +325,11 @@ make.perms <- function(muts, genome.file, genome.string,
     muttype <- match.arg(muttype)
     if (!all(muts$muttype == muttype))
         stop(paste0("all mutations in 'muts' must be of muttype=", muttype))
+
+    reqcols <- c('chr', 'pos', 'refnt', 'altnt', 'muttype', 'mutsig')
+    not.present <- !(reqcols %in% colnames(muts))
+    if (any(not.present)) {
+        stop(paste('required columns missing from parameter muts:', reqcols[not.present], collapse=' '))
 
     if (!quiet) cat(paste('Making', muttype, 'permutations\n'))
 
