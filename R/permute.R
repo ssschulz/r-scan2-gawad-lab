@@ -330,6 +330,7 @@ make.perms <- function(muts, genome.file, genome.string,
     not.present <- !(reqcols %in% colnames(muts))
     if (any(not.present)) {
         stop(paste('required columns missing from parameter muts:', reqcols[not.present], collapse=' '))
+    }
 
     if (!quiet) cat(paste('Making', muttype, 'permutations\n'))
 
