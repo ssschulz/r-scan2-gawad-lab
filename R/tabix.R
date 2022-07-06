@@ -104,7 +104,8 @@ read.tabix.data <- function(path, header, region=NULL, colClasses=NULL, quiet=TR
     # this function does not fully implement colClasses features as in
     # read.table and fread
     if (!is.null(colClasses)) {
-        header <- paste(strsplit(header, '\t')[[1]][colClasses != 'NULL'], collapse='\t')
+        # support the case where user only specifies a subset of colClasses
+        header <- paste(strsplit(header, '\t')[[1]][1:length(colClasses)][colClasses != 'NULL'], collapse='\t')
         colClasses <- colClasses[colClasses != 'NULL']
         ret <- data.table::fread(text=c(header, data), colClasses=colClasses, ...)
     } else {
