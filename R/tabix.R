@@ -112,6 +112,14 @@ read.tabix.data <- function(path, header, region=NULL, colClasses=NULL, quiet=TR
         ret <- data.table::fread(text=c(header, data), ...)
     }
 
+    # There is a strange special case in data.table::fread where if there is only
+    # a single column and no data (data=''), then instead of resolving to an empty,
+    # one column data.table, it produces a 1 row data.table with NA as the column.
+    # Handle this case by removing the row.
+    if (data == '' & length(strsplit(header, '\t')[[1]]) == 1) {
+        ret <- ret[-1]
+    }
+    
     if (!quiet) cat("Read", nrow(ret), 'lines\n')
 
     ret
