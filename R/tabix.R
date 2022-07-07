@@ -118,9 +118,6 @@ read.tabix.data <- function(path, header, region=NULL, colClasses=NULL, quiet=TR
     # Handle this case by removing the row.
     if (length(data) == 1 & length(strsplit(header, '\t')[[1]]) == 1) {
         if (data == '') {
-print(length(data))
-print(data)
-print(strsplit(header, '\t')[[1]])
             ret <- ret[-1]
         }
     }
