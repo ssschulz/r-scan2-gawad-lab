@@ -524,8 +524,8 @@ combine.permutations <- function(perm.files, genome.string, report.mem=TRUE) {
                 z <- do.call(rbind, z)
                 gz <- GenomicRanges::GRanges(seqnames=z$chr, ranges=IRanges(start=z$pos, width=1),
                     seqinfo=genome.seqinfo)
-                gz <- sort(GenomeInfoDb::sortSeqlevels(gz))
                 gz$mutsig <- z$mutsig
+                gz <- sort(GenomeInfoDb::sortSeqlevels(gz))
                 gz$perm.id <- i
             }, report.mem=report.mem & i %% 100 == 0)
             # only report on every 100th to reduce noise. isn't exactly correct because
