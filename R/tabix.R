@@ -67,7 +67,6 @@ read.tabix.data <- function(path, header, region=NULL, colClasses=NULL, quiet=TR
     }
 
     if (is.null(region)) {
-        #data <- Rsamtools::scanTabix(tf)[[1]]
         data <- tabix.read.only.cols(path=path, header=header, region=NULL, colClasses=colClasses) 
     } else {
         # Important: if a chromosome is requested that isn't in the Tabix file,
@@ -89,12 +88,13 @@ read.tabix.data <- function(path, header, region=NULL, colClasses=NULL, quiet=TR
             }
         } else {
             # otherwise, all regions were in the tabix file. go ahead with reading
-            #data <- Rsamtools::scanTabix(tf, param=region)[[1]]
             data <- tabix.read.only.cols(path=path, header=header, region=region, colClasses=colClasses) 
         }
     }
 
-    # If there are no lines in the tabix file corresponding to region (or jsut
+    if (!quiet) cat("Read", length(data), 'lines\n')
+
+    # If there are no lines in the tabix file corresponding to region (or just
     # no lines at all), then scanTabix returns character(0). fread() doesn't
     # like this, so replace it with an empty string.
     if (length(data) == 0)
@@ -107,9 +107,13 @@ read.tabix.data <- function(path, header, region=NULL, colClasses=NULL, quiet=TR
         # support the case where user only specifies a subset of colClasses
         header <- paste(strsplit(header, '\t')[[1]][1:length(colClasses)][colClasses != 'NULL'], collapse='\t')
         colClasses <- colClasses[colClasses != 'NULL']
-        ret <- data.table::fread(text=c(header, data), colClasses=colClasses, ...)
+        # header=TRUE is critical: if any column names are determined by data.table to not
+        # be of type character, then the first row is NOT considered a header row. E.g.,
+        # if the header contains a column name that is a number (like sample ID=1234), then
+        # fread will reject the entire header line and treat it as a data line.
+        ret <- data.table::fread(text=c(header, data), colClasses=colClasses, header=TRUE, ...)
     } else {
-        ret <- data.table::fread(text=c(header, data), ...)
+        ret <- data.table::fread(text=c(header, data), header=TRUE, ...)
     }
 
     # There is a strange special case in data.table::fread where if there is only
@@ -122,7 +126,5 @@ read.tabix.data <- function(path, header, region=NULL, colClasses=NULL, quiet=TR
         }
     }
     
-    if (!quiet) cat("Read", nrow(ret), 'lines\n')
-
     ret
 }
