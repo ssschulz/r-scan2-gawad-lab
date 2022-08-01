@@ -104,9 +104,11 @@ read.tabix.data <- function(path, header, region=NULL, colClasses=NULL, quiet=TR
     # this function does not fully implement colClasses features as in
     # read.table and fread
     if (!is.null(colClasses)) {
-        # support the case where user only specifies a subset of colClasses
-        header <- paste(strsplit(header, '\t')[[1]][1:length(colClasses)][colClasses != 'NULL'], collapse='\t')
-        colClasses <- colClasses[colClasses != 'NULL']
+        if (!is.list(colClasses)) { # Remember: our list colClasses version does not support NULL skipping
+            # support the case where user only specifies a subset of colClasses
+            header <- paste(strsplit(header, '\t')[[1]][1:length(colClasses)][colClasses != 'NULL'], collapse='\t')
+            colClasses <- colClasses[colClasses != 'NULL']
+        }
         # header=TRUE is critical: if any column names are determined by data.table to not
         # be of type character, then the first row is NOT considered a header row. E.g.,
         # if the header contains a column name that is a number (like sample ID=1234), then
