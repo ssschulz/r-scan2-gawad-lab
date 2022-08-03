@@ -28,6 +28,7 @@ requirements:
     - python=3.8
     - r-base=4.1
     - openblas
+    - htslib
     - sigprofilermatrixgenerator
     - r-sigprofilermatrixgeneratorr
     - r-plyr
@@ -53,6 +54,7 @@ requirements:
     - python=3.8
     - r-base=4.1
     - openblas
+    - htslib
     - sigprofilermatrixgenerator
     - r-sigprofilermatrixgeneratorr
     - r-plyr
