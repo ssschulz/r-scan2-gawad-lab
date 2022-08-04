@@ -141,6 +141,22 @@ test.output <- function(pipeline.output,
                 scalt >= sfp$min.sc.alt &
                 dp >= sfp$min.sc.dp]
 
+        l$id <- paste(l$chr, l$pos, l$refnt, l$altnt)
+        p[, id := paste(chr, pos, refnt, altnt)]
+
+        if (!all(sort(l$id) == sort(p$id))) {
+            ul <- setdiff(l$id, p$id)
+            up <- setdiff(p$id, l$id)
+            ub <- intersect(p$id, l$id)
+            cat('ERROR: data frames contain different sites:', length(ub), 'shared, ', length(ul), 'unique to truth set,', length(up), 'unique to new results\n')
+            cat('reducing to intersection\n')
+            setkey(p, id)
+            p <- p[ub,]
+            rownames(l) <- l$id
+            l <- l[ub,]
+            rownames(l) <- NULL
+        }
+
         test.equal(l$chr, p$chr, "chr")
         test.equal(l$pos, p$pos, "pos")
         test.equal(l$refnt, p$refnt, "refnt")
