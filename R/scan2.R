@@ -567,7 +567,11 @@ setMethod("compute.ab.fits", "SCAN2", function(object, path, chroms=1:22,
     samples.per.chunk <- ceiling(logp.samples.per.step / n.chunks)
 
     # Just for convenience. Allow "chroms=1:22" to work for human autosomes
-    chroms <- seqlevels(object@genome.seqinfo)[chroms]
+    # If the user specifies characters, then we assume those are fully formed
+    # names.
+    if (is.integer(chroms)) {
+        chroms <- seqlevels(object@genome.seqinfo)[chroms]
+    }
 
     # Check all chroms up front so the loop doesn't die after a significant amount of work
     not.in <- chroms[!(chroms %in% seqnames(object@genome.seqinfo))]
