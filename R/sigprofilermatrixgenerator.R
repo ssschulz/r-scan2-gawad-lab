@@ -36,6 +36,7 @@ classify.muts <- function(df, genome.string, spectype='SNV',
     # duplicate is not detected in this way, it causes the bug where
     # the final newdf dataframe does not match the input df.
     # To circumvent all these headaches: just remove duplicates up front.
+    s <- df
     mutid <- paste(s$chr, s$pos, s$refnt, s$altnt)
     dupmut <- duplicated(mutid)
     if (verbose)
