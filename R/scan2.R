@@ -1096,8 +1096,10 @@ setMethod("call.mutations", "SCAN2", function(object, target.fdr=0.01, mode=c('n
     #      few cells present this likely is a decent filter.
     #   2. If there is only one cell from one individual, indel calling should
     #      not be attempted.
-    suppress.shared.indels <- max(object@gatk$unique.donors) == 1
-    suppress.all.indels <- max(object@gatk$unique.cells) == 1
+    suppress.shared.indels <- max(object@gatk$unique.donors, na.rm=TRUE) == 1
+    # <= 2: bulks are actually counted in unique.cells, so the case where
+    # there is only one cell from one individual have cause max(unique.cells)=2
+    suppress.all.indels <- max(object@gatk$unique.cells, na.rm=TRUE) <= 2
 
     # Pass somatic mutations
     object@gatk[, pass := static.filter == TRUE &
