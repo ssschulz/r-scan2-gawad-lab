@@ -3,7 +3,7 @@
 # (e.g., SBS6144 for SNVs and ID415 for indels)
 # mostly useful for indel classification, but also good for doing TSB on SNVs
 classify.muts <- function(df, genome.string, spectype='SNV',
-    sample.name='dummy', save.plot=F, auto.delete=T, chrs=1:22, verbose=FALSE)
+    sample.name='dummy', save.plot=F, auto.delete=T, verbose=FALSE)
 {
     if (nrow(df) == 0)
         return(df)
@@ -21,18 +21,14 @@ classify.muts <- function(df, genome.string, spectype='SNV',
 
     dir.create(spmgd, recursive=TRUE)
 
-    # convert this to use scansnv.df.to.vcf at some point
     # Write out the VCF
-    ### From scansnv.to.vcf
     out.file <- paste0(spmgd, '/', sample.name, '.vcf')
     f <- file(out.file, "w")
-    vcf.header <- c("##fileformat=VCFv4.0", "##source=scansnv", 
+    vcf.header <- c("##fileformat=VCFv4.0", "##source=SCAN2", 
 "##FORMAT=<ID=GT,Number=1,Type=String,Description=\"Genotype\">", 
-            #sprintf("##contig=<ID=%s,length=%d>", fai[, 1], fai[,2]),
-    paste(c("#CHROM", "POS", "ID", "REF", "ALT", 
+        paste(c("#CHROM", "POS", "ID", "REF", "ALT", 
             "QUAL", "FILTER", "INFO", "FORMAT", sample.name), collapse = "\t"))
     writeLines(vcf.header, con = f)
-    s <- df[!is.na(df$chr) & df$chr %in% chrs,]
 
     # SigProfilerMatrixGenerator doesn't classify duplicated mutations
     # from the same sample, it throws errors instead. It also will not
@@ -116,14 +112,14 @@ genome.to.spmgr.format <- c(
 # new version: just returns the vector of indel classes
 # FORCES ID83 FOR NOW
 # N.B.: don't provide a default genome.string; it's dangerous.
-classify.indels <- function(df, genome.string, sample.name='dummy', save.plot=F, auto.delete=T, chrs=1:22, verbose=FALSE) {
+classify.indels <- function(df, genome.string, sample.name='dummy', save.plot=F, auto.delete=T, verbose=FALSE) {
     # SigProfilerMatrixGenerator returns ID415 by default, which is ID83 plus one of
     # 5 transcription strand states: B, N, Q, T, U. The format of the string is, e.g.,
     #    U:1:Del:T:1
     # Removing the first two characters "U:" leaves an ID83 type.
     id415 <- classify.muts(df=df, genome.string=genome.to.spmgr.format[genome.string],
         spectype='ID', sample.name=sample.name, save.plot=save.plot,
-        auto.delete=auto.delete, chrs=chrs, verbose=verbose)$muttype
+        auto.delete=auto.delete, verbose=verbose)$muttype
     # id83() converts strings into a factor
     id83(substr(id415, 3, nchar(id415[1])))
 }
