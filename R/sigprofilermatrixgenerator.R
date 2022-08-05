@@ -65,12 +65,20 @@ classify.muts <- function(df, genome.string, spectype='SNV',
     }
 
     # Read in the types
+    # SigProfilerMatrixGenerator output files have chromosomes named 1..22 without
+    # the 'chr' prefix, even if the prefix was present in the input vcf.
     annot.files <- paste0(spmgd, '/output/vcf_files/', spectype, '/', c(1:22,'X','Y'), "_seqinfo.txt")
     if (spectype == 'ID') {
         colclasses <- c(V2='character', V5='character', V6='character')
     } else if (spectype == 'SNV') {
         colclasses <- c(V2='character')
     }
+
+    # SigProfilerMatrixGenerator always strips leading 'chr' prefixes. Add
+    # them back if the input had them. Column 2 is chromosome (1 is sample name).
+    if (substr(s$chr[1], 1, 3) == 'chr')
+        annots[[2]] <- paste0('chr', annots[[2]])
+
     annots <- do.call(rbind, lapply(annot.files, function(f) {
         tryCatch(x <- read.table(f, header=F, stringsAsFactors=FALSE,
                 colClasses=colclasses),
