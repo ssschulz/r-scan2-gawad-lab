@@ -63,8 +63,8 @@ genome.string.to.bsgenome.object <- function(genome=c('hs37d5', 'hg38', 'mm10'))
         require(BSgenome.Hsapiens.1000genomes.hs37d5)
         genome <- BSgenome.Hsapiens.1000genomes.hs37d5
     } else if (genome == 'hg38') {
-        require(BSgenome.Hsapiens.NCBI.GRCh38)
-        genome <- BSgenome.Hsapiens.NCBI.GRCh38
+        require(BSgenome.Hsapiens.UCSC.hg38)
+        genome <- BSgenome.Hsapiens.UCSC.hg38
     } else if (genome == 'mm9') {
         require(BSgenome.Mmusculus.UCSC.mm10)
         genome <- BSgenome.Mmusculus.UCSC.mm10
