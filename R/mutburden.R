@@ -4,7 +4,10 @@ get.gbp.by.genome <- function(object) {
     if (object@genome.string == 'hs37d5') {
         return(5.845001134)
     } else {
-        stop(paste('gbp not yet implemented for genome', object@genome.string))
+        return(5.845001134)
+        warn(paste('gbp not yet implemented for genome', object@genome.string))
+        warn("the mutation burden for this analysis is a placeholder!")
+        warn("DO NOT USE!")
     }
 }
 
