@@ -443,6 +443,7 @@ setMethod("concat", signature="SCAN2", function(...) {
         ensure.same(args, 'static.filter.params', mt, 'exclude.dbsnp')
         ensure.same(args, 'static.filter.params', mt, 'cg.id.q')
         ensure.same(args, 'static.filter.params', mt, 'cg.hs.q')
+        ensure.same(args, 'static.filter.params', mt, 'disable.hs.filter')
     }
     ret@static.filter.params <- init@static.filter.params
 
@@ -991,9 +992,9 @@ function(object, config.path, muttype=c('snv', 'indel'),
 })
         
 
-setGeneric("compute.static.filters", function(object, exclude.dbsnp=TRUE)
+setGeneric("compute.static.filters", function(object)
         standardGeneric("compute.static.filters"))
-setMethod("compute.static.filters", "SCAN2", function(object, exclude.dbsnp=TRUE) {
+setMethod("compute.static.filters", "SCAN2", function(object) {
     check.slots(object, c('gatk', 'cigar.data', 'mut.models'))
 
     for (mt in c('snv', 'indel')) {
@@ -1001,8 +1002,8 @@ setMethod("compute.static.filters", "SCAN2", function(object, exclude.dbsnp=TRUE
         object@gatk[muttype == mt, c('cigar.id.test', 'cigar.hs.test', 'lowmq.test',
                 'dp.test', 'abc.test', 'min.sc.alt.test', 'max.bulk.alt.test',
                 'dbsnp.test', 'csf.test') :=
-                    list(id.score > object@excess.cigar.scores[[mt]]$id.score.q,
-                        hs.score > object@excess.cigar.scores[[mt]]$hs.score.q,
+                    list(id.score >= object@excess.cigar.scores[[mt]]$id.score.q,
+                        hs.score >= object@excess.cigar.scores[[mt]]$hs.score.q,
                         is.na(balt.lowmq) | balt.lowmq <= sfp$max.bulk.alt,
                         dp >= sfp$min.sc.dp & bulk.dp >= sfp$min.bulk.dp,
                         abc.pv > 0.05,
