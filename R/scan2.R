@@ -566,9 +566,10 @@ setMethod("compute.ab.fits", "SCAN2", function(object, path, chroms=1:22,
         stop(sprintf('logp.samples.per.step must be a multiple of n.chunks (%d)', n.chunks))
     samples.per.chunk <- ceiling(logp.samples.per.step / n.chunks)
 
-    # Just for convenience. Allow "chroms=1:22" to work for autosomes
+    # Just for convenience. Allow "chroms=1:22" to work for human autosomes
+    chroms <- seqlevels(object@genome.seqinfo)[chroms]
+
     # Check all chroms up front so the loop doesn't die after a significant amount of work
-    chroms <- as.character(chroms)
     not.in <- chroms[!(chroms %in% seqnames(object@genome.seqinfo))]
     if (length(not.in) > 0) {
         cat("the following chromosomes are not recognized:\n")

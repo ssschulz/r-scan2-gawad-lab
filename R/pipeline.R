@@ -34,7 +34,7 @@ run.pipeline <- function(
     genome,
     genome.seqinfo=genome.string.to.seqinfo.object(genome),
     config.yaml=NULL,
-    grs=tileGenome(seqlengths=genome.seqinfo[as.character(1:22)], tilewidth=10e6, cut.last.tile.in.chrom=TRUE),
+    grs=tileGenome(seqlengths=genome.seqinfo[seqlevels(genome.seqinfo)[1:22]], tilewidth=10e6, cut.last.tile.in.chrom=TRUE),
     legacy=FALSE, report.mem=TRUE, verbose=TRUE)
 {
     cat('Starting chunked SCAN2 pipeline on', length(grs), 'chunks\n')
@@ -126,7 +126,7 @@ run.pipeline <- function(
 # read counts for all single cells and bulks.
 make.integrated.table <- function(mmq60.tab, mmq1.tab, phased.vcf,
     bulk.sample, genome, genome.seqinfo=genome.string.to.seqinfo.object(genome), panel=NULL,
-    grs=tileGenome(seqlengths=genome.seqinfo[as.character(1:22)], tilewidth=10e6, cut.last.tile.in.chrom=TRUE),
+    grs=tileGenome(seqlengths=genome.seqinfo[seqlevels(genome.seqinfo)[1:22]], tilewidth=10e6, cut.last.tile.in.chrom=TRUE),
     quiet=TRUE, report.mem=FALSE)
 {
     cat('Starting integrated table pipeline on', length(grs), 'chunks.\n')
@@ -169,7 +169,7 @@ make.integrated.table <- function(mmq60.tab, mmq1.tab, phased.vcf,
 digest.depth.profile <- function(path, sc.sample, bulk.sample,
     genome, genome.seqinfo=genome.string.to.seqinfo.object(genome),
     clamp.dp=500,
-    grs=tileGenome(seqlengths=genome.seqinfo[as.character(1:22)], tilewidth=10e6, cut.last.tile.in.chrom=TRUE),
+    grs=tileGenome(seqlengths=genome.seqinfo[seqlevels(genome.seqinfo)[1:22]], tilewidth=10e6, cut.last.tile.in.chrom=TRUE),
     quiet=TRUE, report.mem=TRUE)
 {
     cat('Digesting depth profile using', length(grs), 'chunks.\n')
@@ -203,7 +203,7 @@ digest.depth.profile <- function(path, sc.sample, bulk.sample,
 make.callable.regions <- function(path, sc.sample, bulk.sample,
     genome, min.sc.dp, min.bulk.dp,
     genome.seqinfo=genome.string.to.seqinfo.object(genome),
-    grs=tileGenome(seqlengths=genome.seqinfo[as.character(1:22)], tilewidth=5e6, cut.last.tile.in.chrom=TRUE),
+    grs=tileGenome(seqlengths=genome.seqinfo[seqlevels(genome.seqinfo)[1:22]], tilewidth=5e6, cut.last.tile.in.chrom=TRUE),
     quiet=TRUE, report.mem=TRUE)
 {
     cat('Getting callable regions using', length(grs), 'chunks.\n')
