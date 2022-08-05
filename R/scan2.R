@@ -219,7 +219,7 @@ setMethod("show", "SCAN2", function(object) {
             cat(" (no data)\n")
         } else {
             # germline indels are not used for AB model training
-            per.hap <- object@gatk[training.site==TRUE, .N, by=phased.gt]
+            per.hap <- object@gatk[training.site==TRUE & muttype == 'snv', .N, by=phased.gt]
             tdata <- object@gatk[training.site==TRUE & muttype=='snv']
             cat('', nrow(tdata),
                 sprintf("phasing: %s=%d, %s=%d\n",
