@@ -71,16 +71,17 @@ classify.muts <- function(df, genome.string, spectype='SNV',
         colclasses <- c(V2='character')
     }
 
-    # SigProfilerMatrixGenerator always strips leading 'chr' prefixes. Add
-    # them back if the input had them. Column 2 is chromosome (1 is sample name).
-    if (substr(s$chr[1], 1, 3) == 'chr')
-        annots[[2]] <- paste0('chr', annots[[2]])
-
     annots <- do.call(rbind, lapply(annot.files, function(f) {
         tryCatch(x <- read.table(f, header=F, stringsAsFactors=FALSE,
                 colClasses=colclasses),
             error=function(e) NULL)
     }))
+
+    # SigProfilerMatrixGenerator always strips leading 'chr' prefixes. Add
+    # them back if the input had them. Column 2 is chromosome (1 is sample name).
+    if (substr(s$chr[1], 1, 3) == 'chr')
+        annots[[2]] <- paste0('chr', annots[[2]])
+
     if (spectype == 'ID') {
         colnames(annots) <- c('sample', 'chr', 'pos', 'iclass', 'refnt', 'altnt', 'unknown')
         newdf <- plyr::join(df, annots[2:6], by = colnames(annots)[-c(1, 4, 7)])
