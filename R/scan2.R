@@ -363,6 +363,9 @@ setMethod("show", "SCAN2", function(object) {
             cat(sprintf("#       %6s: %6d somatic,   %0.1f%% sens,   %0.3f callable Gbp,   %0.1f muts/haploid Gbp,   %0.1f muts per genome\n",
                 mt, mb$ncalls, 100*mb$callable.sens, mb$callable.bp/1e9, mb$rate.per.gb, mb$burden))
         }
+        if (object@call.mutations$suppress.all.indels | object@call.mutations$suppress.shared.indels) {
+            cat(sprintf("#       indel mutation burden estimates ARE NOT VALID (cross-sample panel insufficiency)!\n"))
+        }
     }
 
     cat("#   Mutation rescue by signature: ")
