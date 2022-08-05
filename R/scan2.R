@@ -726,7 +726,8 @@ setMethod("compute.fdr.prior.data", "SCAN2", function(object, mode=c('legacy', '
             hets=object@gatk[muttype == mt & training.site == TRUE & scalt >= sfp$min.sc.alt]
         } else {
             sfp <- object@static.filter.params[[mt]]
-            cand <- object@gatk[muttype == mt & somatic.candidate == TRUE]
+            # somatic.candidate already implies: balt=0, bulk.gt=0/0, dbsnp=.
+            cand <- object@gatk[muttype == mt & somatic.candidate == TRUE & scalt >= sfp$min.sc.alt & bulk.dp >= sfp$min.bulk.dp]
             # This is not supposed to be a highly filtered list. The filtering
             # should be somewhat equivalent to the pre-filtering steps on somatic
             # mutation candidate sites.
@@ -734,7 +735,7 @@ setMethod("compute.fdr.prior.data", "SCAN2", function(object, mode=c('legacy', '
             # Eventually, I think it would make most sense to apply the entire static
             # filter set to both candidates and hets (minus bulk alt filters, which
             # obviously will not work for hets) before computing FDR priors.
-            hets <- object@gatk[muttype == mt & training.site == TRUE & scalt >= sfp$min.sc.alt]
+            hets <- object@gatk[muttype == mt & training.site == TRUE & scalt >= sfp$min.sc.alt & bulk.dp >= sfp$min.bulk.dp]
         }
     
         # Add the mode used to the fdr prior data structure
