@@ -28,6 +28,6 @@ in this order:
     - conda install conda-build
     - conda install -c conda-forge grayskull   # this updates several packages to conda-forge versions
     - conda install -c conda-forge -c bioconda anaconda-client  # for anaconda upload
-    - mamba (and boa? for mamba-build?)
 
-Note for author's personal installation: miniconda3_for_building (NOT conda3_for_building)
+Note for author's personal installation: miniconda3_for_building (NOT conda3_for_building).
+mamba-build was not necessary.
