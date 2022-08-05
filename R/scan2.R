@@ -346,6 +346,11 @@ setMethod("show", "SCAN2", function(object) {
                 as.integer(object@call.mutations[[paste0(mt, '.pass')]]),
                 as.integer(object@call.mutations[[paste0(mt, '.resampled.training.pass')]])))
         }
+        if (object@call.mutations$suppress.all.indels) {
+            cat(sprintf("#       ALL indel calls have been suppressed (insufficient number of single cells in cross-sample filter\n"))
+        } else if (object@call.mutations$suppress.shared.indels) {
+            cat(sprintf("#       indel calls shared between cells have been suppressed (insufficient number of unique individuals in cross-sample filter\n"))
+        }
     }
 
     cat("#   Somatic mutation burden: ")
@@ -1084,12 +1089,19 @@ setMethod("call.mutations", "SCAN2", function(object, target.fdr=0.01, mode=c('n
     object <- compute.fdr.prior.data(object, mode=mode, quiet=quiet)
     object <- compute.fdr(object, mode=mode, quiet=quiet)
 
-    # If the user ignored the requirement that multiple individuals be specified
-    # in the panel, then suppress the indel calls.
-    suppress.indel.calls <- max(object@gatk$unique.donors) == 1
+    # Try to handle indel calling when the cross-sample filter does not meet
+    # the usual requirements (>1 unique individual).
+    #   1. If there is only one unique individual but several cells from that
+    #      individual, then just discard indels shared across cells. With a
+    #      few cells present this likely is a decent filter.
+    #   2. If there is only one cell from one individual, indel calling should
+    #      not be attempted.
+    suppress.shared.indels <- max(object@gatk$unique.donors) == 1
+    suppress.all.indels <- max(object@gatk$unique.cells) == 1
 
     # Pass somatic mutations
-    object@gatk[, pass := static.filter == TRUE & (muttype == 'snv' | !suppress.indel.calls) &
+    object@gatk[, pass := static.filter == TRUE &
+        (muttype == 'snv' | (!suppress.all.indels & (!suppress.shared.indels | unique.cells == 1))) &
         lysis.fdr <= target.fdr & mda.fdr <= target.fdr]
 
     # Pass germline heterozygous sites using L-O-O for sensitivity estimation
@@ -1111,7 +1123,9 @@ setMethod("call.mutations", "SCAN2", function(object, target.fdr=0.01, mode=c('n
         as.list(unlist(object@gatk[muttype == 'indel',
             .(indel.pass=as.integer(sum(pass, na.rm=TRUE)),
               indel.resampled.training.pass=as.integer(sum(resampled.training.pass, na.rm=TRUE)))])),
-        list(mode=mode, target.fdr=target.fdr, suppress.indel.calls=suppress.indel.calls))
+        list(mode=mode, target.fdr=target.fdr,
+            suppress.shared.indels=suppress.shared.indels,
+            suppress.all.indels=suppress.all.indels))
     object
 })
 
