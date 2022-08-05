@@ -1081,11 +1081,15 @@ setMethod("call.mutations", "SCAN2", function(object, target.fdr=0.01, mode=c('n
 
     mode <- match.arg(mode)
 
-    object <- compute.fdr.prior.data(object, mode=mode, quiet=quiet) # there is no non-legacy mode
+    object <- compute.fdr.prior.data(object, mode=mode, quiet=quiet)
     object <- compute.fdr(object, mode=mode, quiet=quiet)
 
+    # If the user ignored the requirement that multiple individuals be specified
+    # in the panel, then suppress the indel calls.
+    suppress.indel.calls <- max(object@gatk$unique.donors) == 1
+
     # Pass somatic mutations
-    object@gatk[, pass := static.filter == TRUE &
+    object@gatk[, pass := static.filter == TRUE & (muttype == 'snv' | !suppress.indel.calls) &
         lysis.fdr <= target.fdr & mda.fdr <= target.fdr]
 
     # Pass germline heterozygous sites using L-O-O for sensitivity estimation
@@ -1107,7 +1111,7 @@ setMethod("call.mutations", "SCAN2", function(object, target.fdr=0.01, mode=c('n
         as.list(unlist(object@gatk[muttype == 'indel',
             .(indel.pass=as.integer(sum(pass, na.rm=TRUE)),
               indel.resampled.training.pass=as.integer(sum(resampled.training.pass, na.rm=TRUE)))])),
-        list(mode=mode, target.fdr=target.fdr))
+        list(mode=mode, target.fdr=target.fdr, suppress.indel.calls=suppress.indel.calls))
     object
 })
 
