@@ -648,8 +648,8 @@ setMethod("compute.ab.estimates", "SCAN2", function(object, n.cores=1, quiet=FAL
             extended.training.hsnps <- read.training.hsnps(path, sample.id=object@single.cell, region=extended.range, quiet=quiet)
             if (!quiet)
                 cat(sprintf("hSNP training sites: %d, extended training sites: %d, flank size: %d\n",
-                    nrow(object@gatk[training.site==TRUE]),
-                    nrow(extended.training.hsnps) - nrow(object@gatk[training.site==TRUE]), flank))
+                    nrow(object@gatk[training.site==TRUE & muttype == 'snv']),
+                    nrow(extended.training.hsnps) - nrow(object@gatk[training.site==TRUE & muttype == 'snv']), flank))
             # there needs to be >1 training hSNPs or else the leave-one-out method
             # will produce NA AB values at the training hSNP (when it's left out)
             if (nrow(extended.training.hsnps) > 1)
