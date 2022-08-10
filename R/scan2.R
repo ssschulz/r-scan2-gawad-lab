@@ -650,15 +650,18 @@ setMethod("compute.ab.estimates", "SCAN2", function(object, n.cores=1, quiet=FAL
                 cat(sprintf("hSNP training sites: %d, extended training sites: %d, flank size: %d\n",
                     nrow(object@gatk[training.site==TRUE]),
                     nrow(extended.training.hsnps) - nrow(object@gatk[training.site==TRUE]), flank))
-            if (nrow(extended.training.hsnps) > 0)
+            # there needs to be >1 training hSNPs or else the leave-one-out method
+            # will produce NA AB values at the training hSNP (when it's left out)
+            if (nrow(extended.training.hsnps) > 1)
                 break
         }
         training.hsnps <- extended.training.hsnps
 
         # nrow(object@gatk) > 0: don't give up in heterochromatic arms of, e.g., chr13
         # where there are neither hSNPs nor somatic candidates.
-        if (nrow(training.hsnps) == 0 & nrow(object@gatk) > 0) {
-            stop(sprintf("no hSNPs found within %d bp of %s:%d-%d, giving up", flank,
+        if (nrow(training.hsnps) < 2 & nrow(object@gatk) > 0) {
+            stop(sprintf("%d hSNPs found within %d bp of %s:%d-%d, need at least 2; giving up",
+                nrow(training.hsnps), flank,
                 seqnames(object@region)[1], start(object@region)[1], end(object@region)[1]))
         }
     } else {
