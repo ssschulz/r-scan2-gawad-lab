@@ -653,7 +653,10 @@ setMethod("compute.ab.estimates", "SCAN2", function(object, n.cores=1, quiet=FAL
                 break
         }
         training.hsnps <- extended.training.hsnps
-        if (nrow(training.hsnps) == 0) {
+
+        # nrow(object@gatk) > 0: don't give up in heterochromatic arms of, e.g., chr13
+        # where there are neither hSNPs nor somatic candidates.
+        if (nrow(training.hsnps) == 0 & nrow(object@gatk) > 0) {
             stop(sprintf("no hSNPs found within %d bp of %s:%d-%d, giving up", flank,
                 seqnames(object@region)[1], start(object@region)[1], end(object@region)[1]))
         }
