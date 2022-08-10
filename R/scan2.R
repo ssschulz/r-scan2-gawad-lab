@@ -619,7 +619,6 @@ setGeneric("compute.ab.estimates", function(object, n.cores=1, quiet=FALSE)
 setMethod("compute.ab.estimates", "SCAN2", function(object, n.cores=1, quiet=FALSE) {
     check.slots(object, c('gatk', 'ab.fits'))
 
-    flank <- 1e5 # currently not configurable by user, partly by design
 
     if (n.cores != 1)
         stop('the n.cores argument is currently unsupported')
@@ -630,18 +629,34 @@ setMethod("compute.ab.estimates", "SCAN2", function(object, n.cores=1, quiet=FAL
     # we already have the full table.
     if (!is.null(object@region)) {
         path <- object@integrated.table.path
-        if (!quiet) cat('Importing extended hSNP training data from', path, 'using extended range\n')
-        # trim() always generates a warning for first and last regions on a chromosome
-        # because adding/subtracting flank goes outside of the chromosome boundaries.
-        # I wish I could disable it, but can't find a way.
-        extended.range <- trim(GRanges(seqnames=seqnames(object@region)[1],
-            ranges=IRanges(start=start(object@region)-flank, end=end(object@region)+flank),
-            seqinfo=object@genome.seqinfo))
-        extended.training.hsnps <- read.training.hsnps(path, sample.id=object@single.cell, region=extended.range, quiet=quiet)
-        if (!quiet)
-            cat(sprintf("hSNP training sites: %d, extended training sites: %d\n",
-                nrow(object@gatk[training.site==TRUE]), nrow(extended.training.hsnps)))
+
+        # look for hSNPs in ever-larger windows around this chunk. exit as soon as any
+        # training hSNPs are found. when using MDA or PTA single cell WGA, there is
+        # essentially no useful AB information in hSNPs > 100kb away, but perhaps this
+        # won't be the case in future amplification technologies.
+        #
+        # N.B. hg38 added some contigs that are far away from the 1000 genomes population
+        # phasing panel. we used to only use flank=100kb, but in hg38 this sometimes leads
+        # to 0 extended training hSNPs and ultimately a failure in infer.gp().
+        for (flank in c(1e5, 1e6, 1e7)) {  # currently not configurable by user, partly by design
+            if (!quiet) cat('Importing extended hSNP training data from', path, 'with flank size =', flank, '\n')
+            # trim() always generates a warning for first and last regions on a chromosome
+            # because adding/subtracting flank goes outside of the chromosome boundaries.
+            extended.range <- trim(GRanges(seqnames=seqnames(object@region)[1],
+                ranges=IRanges(start=start(object@region)-flank, end=end(object@region)+flank),
+                    seqinfo=object@genome.seqinfo))
+            extended.training.hsnps <- read.training.hsnps(path, sample.id=object@single.cell, region=extended.range, quiet=quiet)
+            if (!quiet)
+                cat(sprintf("hSNP training sites: %d, extended training sites: %d, flank size: %d\n",
+                    nrow(object@gatk[training.site==TRUE]), nrow(extended.training.hsnps), flank))
+            if (nrow(extended.training.hsnps) > 0)
+                break
+        }
         training.hsnps <- extended.training.hsnps
+        if (nrow(training.hsnps) == 0) {
+            stop(sprintf("no hSNPs found within %d bp of %s:%d-%d, giving up", flank,
+                seqnames(object@region)[1], start(object@region)[1], end(object@region)[1]))
+        }
     } else {
         training.hsnps <- object@gatk[training.site == TRUE]
     }
@@ -652,7 +667,7 @@ setMethod("compute.ab.estimates", "SCAN2", function(object, n.cores=1, quiet=FAL
     chroms <- unique(sites$chr)
     do.work <- function(chrom, sites, ab.fit, hsnps) {
         if (!quiet)
-            cat(sprintf("inferring AB for %d sites on chr%s:%d-%d\n", 
+            cat(sprintf("inferring AB for %d sites on %s:%d-%d\n", 
                 nrow(sites), chrom, min(sites$pos), max(sites$pos)))
         time.elapsed <- system.time(z <- infer.gp1(ssnvs=sites, fit=ab.fit,
             hsnps=hsnps, flank=1e5, verbose=!quiet))
