@@ -7,25 +7,28 @@ get.gbp.by.genome <- function(object) {
         chrx <- 155270560
         chry <- 59373566
         chrm <- 16571
-        return (total - chrx - chry - chrm)*2 / 1e9 # = 5.845001134
+        return((total - chrx - chry - chrm)*2 / 1e9) # = 5.845001134
     } else if (object@genome.string == 'hg38') {
         # 455 contigs; see http://genomewiki.ucsc.edu/index.php/Hg38_100-way_Genome_size_statistics
         total <- 3209286105
         chrx <- 156040895
         chry <- 57227415
         chrm <- 16569
-        return (total - chrx - chry - chrm)*2 / 1e9 # = 5.992002452
+        return((total - chrx - chry - chrm)*2 / 1e9) # = 5.992002452
     } else if (object@genome.string == 'mm10') {
         # 66 contigs; see http://genomewiki.ucsc.edu/index.php/Hg38_100-way_Genome_size_statistics
         total <- 2730871774
         chrx <- 171031299
         chry <- 91744698
         chrm <- 16299
-        return (total - chrx - chry - chrm)*2 / 1e9 # = 4.936158956
+        return((total - chrx - chry - chrm)*2 / 1e9) # = 4.936158956
     } else {
         warn(paste('gbp not yet implemented for genome', object@genome.string))
         warn("the mutation burden for this analysis is a placeholder!")
         warn("DO NOT USE!")
+        # hopefully returning a negative number will alert people that something
+        # has gone wrong so they don't ignore the warning messages above
+        return(-1)
     }
 }
 
