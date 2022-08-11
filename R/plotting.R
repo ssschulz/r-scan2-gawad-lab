@@ -318,3 +318,27 @@ plot.abmodel.covariance <- function(object, bin.breaks=c(1, 10^seq(1,5,length.ou
         legend=c('Adjacent hSNP approx.', 'MLE fit (avg. over chroms)'))
     abline(v=c(150,300), lty='dotted')
 }
+
+
+plot.depth.profile <- function(object, keep.zero=FALSE, quantile=0.99, ...) {
+    require(viridis)
+    # row and column 1 correspond to 0 depth. these usually completely
+    # drown out the rest of the depth signal.
+    d <- object@depth.profile$dptab
+    maxdp <- object@depth.profile$clamp.dp
+    if (!keep.zero)
+        d <- d[-1,][,-1]
+
+    # Cut the plot down to 95% (=quantile option) of the genome in each direction
+    xmax <- which(cumsum(rowSums(d))/sum(d) >= quantile)[1]
+    if (length(xmax) == 0)  # if not found, take the whole thing
+        xmax <- maxdp
+    ymax <- which(cumsum(colSums(d))/sum(d) >= quantile)[1]
+    if (length(ymax) == 0)  # if not found, take the whole thing
+        ymax <- maxdp
+
+    image(x=1:maxdp, y=1:maxdp, d, col=viridis::viridis(100),
+        xlim=c(0,xmax), ylim=c(0,ymax),
+        xlab=paste(names(dimnames(d))[1], ' (single cell) depth'),
+        ylab=paste(names(dimnames(d))[2], ' (buk) depth'))
+}
