@@ -326,8 +326,13 @@ plot.depth.profile <- function(object, keep.zero=FALSE, quantile=0.99, ...) {
     # drown out the rest of the depth signal.
     d <- object@depth.profile$dptab
     maxdp <- object@depth.profile$clamp.dp
-    if (!keep.zero)
+    x=0:maxdp
+    y=0:maxdp
+    if (!keep.zero) {
         d <- d[-1,][,-1]
+        x <- x[-1]
+        y <- y[-1]
+    }
 
     # Cut the plot down to 95% (=quantile option) of the genome in each direction
     xmax <- which(cumsum(rowSums(d))/sum(d) >= quantile)[1]
@@ -337,7 +342,7 @@ plot.depth.profile <- function(object, keep.zero=FALSE, quantile=0.99, ...) {
     if (length(ymax) == 0)  # if not found, take the whole thing
         ymax <- maxdp
 
-    image(x=1:maxdp, y=1:maxdp, d, col=viridis::viridis(100),
+    image(x=x, y=y, d, col=viridis::viridis(100),
         xlim=c(0,xmax), ylim=c(0,ymax),
         xlab=paste(names(dimnames(d))[1], ' (single cell) depth'),
         ylab=paste(names(dimnames(d))[2], ' (buk) depth'))
