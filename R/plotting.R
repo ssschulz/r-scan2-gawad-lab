@@ -237,7 +237,9 @@ setMethod("plot.region", "SCAN2", function(object, site=NA, chrom=NA, position=N
         gp$gp.mu <- match.ab(af=gp$af, gp.mu=gp$gp.mu)
     }
 
-    plot.gp.confidence(df=gp, add=FALSE)
+    plot.gp.confidence(df=gp, add=FALSE,
+        xlab=paste('Chrom', d$chr[1], 'position'),
+        ylab='Allele fraction')
     points(d[training.site==TRUE]$pos,
         d[training.site==TRUE, phased.hap1/(phased.hap1+phased.hap2)],
         pch=20, cex=1, col=1, ylim=c(-0.2,1))
@@ -261,7 +263,7 @@ setMethod("plot.region", "SCAN2", function(object, site=NA, chrom=NA, position=N
         legend('topright', legend=c('Training hSNP', 'Candidate', 'Target site'),
             pch=c(20,20,4), col=1:3, pt.cex=c(1,1.5,1.5), bty='n')
         # plot everything except the requested site
-        points(position, d[pos != position & somatic.candidate == TRUE]$af,
+        points(d[pos != position & somatic.candidate == TRUE, .(position, af)],
             pch=4, cex=1.5, lwd=2, col=3)
     } else { 
         legend('topright', legend=c('Training hSNP', 'Target site'),
@@ -275,7 +277,7 @@ setMethod("plot.region", "SCAN2", function(object, site=NA, chrom=NA, position=N
 # fraction space may not be an HDR.
 plot.gp.confidence <- function(pos, gp.mu, gp.sd, df, sd.mult=2,
     logspace=FALSE, tube.col=rgb(0.9, 0.9, 0.9),
-    line.col='black', tube.lty='solid', line.lty='solid', add=TRUE)
+    line.col='black', tube.lty='solid', line.lty='solid', add=TRUE, ...)
 {
     if (!missing(df)) {
         pos <- df$pos
@@ -295,7 +297,7 @@ plot.gp.confidence <- function(pos, gp.mu, gp.sd, df, sd.mult=2,
     }
 
     if (!add) {
-        plot(NA, NA, xlim=range(pos), ylim=0:1)
+        plot(NA, NA, xlim=range(pos), ylim=0:1, ...)
     }
 
     polygon(c(pos, rev(pos)), c(gp.mu, rev(sd.lower)),
