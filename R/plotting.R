@@ -181,10 +181,10 @@ plot.fdr <- function(fc, dps=c(10,20,30,60,100,200), target.fdr=0.1, div=2) {
 # Optionally: plot a candidate/putative sSNV.
 # XXX: TODO: restore the ability to compute GP mu/sd at many additional
 # points in the region to give smooth bands/lines.
-setGeneric("plot.region", function(object, site=NA, chrom=NA, position=NA, upstream=5e4, downstream=5e4, gp.extend=1e5, n.gp.points=100, recompute=FALSE)
+setGeneric("plot.region", function(object, site=NA, chrom=NA, position=NA, upstream=5e4, downstream=5e4, gp.extend=1e5, n.gp.points=100, recompute=TRUE, show.all.candidates=FALSE)
     standardGeneric("plot.region"))
 setMethod("plot.region", "SCAN2", function(object, site=NA, chrom=NA, position=NA,
-    upstream=5e4, downstream=5e4, gp.extend=1e5, n.gp.points=100, recompute=FALSE)
+    upstream=5e4, downstream=5e4, gp.extend=1e5, n.gp.points=100, recompute=TRUE, show.all.candidates=FALSE)
 {
     check.slots(object, c('gatk', 'ab.estimates'))
     if (recompute)
@@ -198,6 +198,8 @@ setMethod("plot.region", "SCAN2", function(object, site=NA, chrom=NA, position=N
     if (!missing(site)) {
         chrom <- object@gatk[site,]$chr
         position <- object@gatk[site,]$pos
+        cat('using site', site, '\n')
+        print(object@gatk[site,])
     }
 
     # Sites at which AB was estimated in the genotyper.
@@ -205,14 +207,14 @@ setMethod("plot.region", "SCAN2", function(object, site=NA, chrom=NA, position=N
     # Don't keep sites with no reads in this sample, unless it's a training
     # site. The majority of these 0 read, non-germline sites are here
     # because they had reads in a different sample.
-    bulk.gt <- object@gatk[[object@bulk]]
     d <- object@gatk[chr == chrom &
         pos >= position - upstream & pos <= position + upstream &
-        (training.site | scalt > 0) & bulk.gt != '1/1']
+        (training.site | somatic.candidate) & bulk.gt != '1/1']
 
-    # Old code that computed GP on a fine grid surrounding the target
+    # Recompute does a better job of showing the model, but it does
+    # cost some CPU.
     if (recompute) {
-        cat("estimating AB in region..\n")
+        cat("estimating AB in region with", gp.extend, " basepair flanks..\n")
         # ensure that we estimate at exactly pos and at all sites in 'd'
         # other loci are not sites reported in the GATK table, they are
         # only there to make smooth lines.
@@ -229,15 +231,12 @@ setMethod("plot.region", "SCAN2", function(object, site=NA, chrom=NA, position=N
         gp <- data.frame(chr=chrom, pos=est.at, ab=1/(1+exp(-gp[,'gp.mu'])), gp)
     } else {
         # Rely on precomputed GP mu/sd (relevant for ALLSITES mode)
-        gp <- object@gatk[chr == chrom &
-                pos >= position - upstream & pos <= position + upstream]
+        gp <- d
+        # Flip the allele balance to match VAF, as is done when computing
+        # the AB true and artifact models.
+        gp$gp.mu <- match.ab(af=gp$af, gp.mu=gp$gp.mu)
     }
 
-    # the GP is inferred using "hap1" and "hap2", which are determined by
-    # the phaser. which chromosome is chosen to be "hap1" or "hap2" is
-    # arbitrary, but consistent (once chosen) for all sites on a chrom.
-    # VAF (which always refers to the non-reference allele) destroys this
-    # information, so plotting VAF is not informative.
     plot.gp.confidence(df=gp, add=FALSE)
     points(d[training.site==TRUE]$pos,
         d[training.site==TRUE, phased.hap1/(phased.hap1+phased.hap2)],
@@ -254,12 +253,20 @@ setMethod("plot.region", "SCAN2", function(object, site=NA, chrom=NA, position=N
     # If a site was given, emphasize it
     if (!missing(site)) {
         abline(v=position, lty='dotted')
-        abline(h=object@gatk[pos==position]$af, lty='dotted')
-        points(position, object@gatk[pos == position]$af, pch=4, cex=1.5, lwd=2, col=3)
+        abline(h=d[pos==position]$af, lty='dotted')
+        points(position, d[pos == position]$af, pch=4, cex=1.5, lwd=2, col=3)
     }
 
-    legend('topright', legend=c('Training hSNP', 'Other site', 'Target site'),
-        pch=c(20,20,4), col=1:3, pt.cex=c(1,1.5,1.5))
+    if (show.all.candidates) {
+        legend('topright', legend=c('Training hSNP', 'Candidate', 'Target site'),
+            pch=c(20,20,4), col=1:3, pt.cex=c(1,1.5,1.5), bty='n')
+        # plot everything except the requested site
+        points(position, d[pos != position & somatic.candidate === TRUE]$af,
+            pch=4, cex=1.5, lwd=2, col=3)
+    } else { 
+        legend('topright', legend=c('Training hSNP', 'Target site'),
+            pch=c(20,4), col=c(1,3), pt.cex=c(1,1.5))
+    }
 })
 
 # Add 95% confidence bands for AB model to plot.
