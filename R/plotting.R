@@ -263,8 +263,7 @@ setMethod("plot.region", "SCAN2", function(object, site=NA, chrom=NA, position=N
         legend('topright', legend=c('Training hSNP', 'Candidate', 'Target site'),
             pch=c(20,20,4), col=1:3, pt.cex=c(1,1.5,1.5), bty='n')
         # plot everything except the requested site
-        points(d[pos != position & somatic.candidate == TRUE, .(pos, af)],
-            pch=4, cex=1.5, lwd=2, col=3)
+        points(d[pos != position & somatic.candidate == TRUE, .(pos, af)], pch=20, col=2)
     } else { 
         legend('topright', legend=c('Training hSNP', 'Target site'),
             pch=c(20,4), col=c(1,3), pt.cex=c(1,1.5))
