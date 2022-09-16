@@ -133,6 +133,8 @@ annotate.gatk <- function(gatk, gatk.counts, genome.string, add.mutsig=TRUE) {
     # FIXME: it'd be good to expose this to the end user. Especially for mosaic
     # mutation calling.
     gatk[, somatic.candidate := balt == 0 & bulk.gt == '0/0' & dbsnp == '.' & sum.alts >= 2]
+    if (nrow(gatk[somatic.candidate == TRUE]) == 0)
+        stop('0 somatic candidates detected. SCAN2 requires somatic candidates to have 0 supporting reads in the matched bulk - perhaps your bulk is too closely related to your single cells?')
 }
 
 
