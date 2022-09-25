@@ -368,12 +368,12 @@ make.perms <- function(muts, genome.file, genome.string,
             ret <- make.indel.perms.helper(spectrum=table(id83(muts$mutsig)),
                 genome.object=genome.object, genome.file=genome.file, genome.string=genome.string,
                 callable=callable, seed=this.seed, quiet=quiet,
-                n.sample=random.generation.multiplier*n.sample, ...)
+                k=random.generation.multiplier*k, ...)
         } else {
             ret <- make.snv.perms.helper(muts=muts, spectrum=table(sbs96(muts$mutsig)),
                 genome.object=genome.object, genome.file=genome.file,
                 callable=callable, seed=this.seed, quiet=quiet,
-                k=random.generation.multiplier*k, ...)
+                n.sample=random.generation.multiplier*n.sample, ...)
         }
         i <- i+1
         seeds.used <- c(seeds.used, this.seed)
