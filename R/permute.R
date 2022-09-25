@@ -72,8 +72,12 @@ select.perms <- function(spectrum.to.match, perms, quiet=FALSE)
     }
 
     k <- min(limits, na.rm=T)  # NaNs can occur when there are 0 mutations of an entire class (e.g., T>A)
-    if (k < 1)
-        stop("n.sample too low: unable to complete any permutations")
+    if (k == 0) {
+        return(list(k=0, perms=NULL))
+    }
+    # Don't give up here. Allow the caller to try with a bigger random sample.
+    #if (k < 1)
+        #stop("n.sample too low: unable to complete any permutations")
     
     if (any(is.na(perms$mutsig))) {
         print(perms[is.na(perms$mutsig),])
@@ -105,7 +109,6 @@ select.perms <- function(spectrum.to.match, perms, quiet=FALSE)
         }
         ret
     })))
-        
 }
 
 
@@ -318,7 +321,9 @@ make.indel.perms.helper <- function(spectrum,
 #
 # max RAM usage is ~4GB for n.samples=10 million or k=1/5
 make.perms <- function(muts, genome.file, genome.string,
-    callable, seed.base, muttype=c('snv','indel'), desired.perms=1000,
+    callable, seed.base, muttype=c('snv','indel'),
+    n.sample, k,   # {snv,indel}-generation-params. both must be specified though only one will be used
+    desired.perms=1000,
     genome.object=genome.string.to.bsgenome.object(genome.string),
     quiet=FALSE, ...)
 {
@@ -349,6 +354,7 @@ make.perms <- function(muts, genome.file, genome.string,
         ))
     }
 
+    random.generation.multiplier <- 1
     while (desired.perms - total.solved > 0) {
         # runif() will be controlled by future.apply
         # seed.base is intended to give a unique seeding to this sample so that
@@ -361,17 +367,31 @@ make.perms <- function(muts, genome.file, genome.string,
         if (muttype== 'indel') {
             ret <- make.indel.perms.helper(spectrum=table(id83(muts$mutsig)),
                 genome.object=genome.object, genome.file=genome.file, genome.string=genome.string,
-                callable=callable, seed=this.seed, quiet=quiet, ...)
+                callable=callable, seed=this.seed, quiet=quiet,
+                n.sample=random.generation.multiplier*n.sample, ...)
         } else {
             ret <- make.snv.perms.helper(muts=muts, spectrum=table(sbs96(muts$mutsig)),
                 genome.object=genome.object, genome.file=genome.file,
-                callable=callable, seed=this.seed, quiet=quiet, ...)
+                callable=callable, seed=this.seed, quiet=quiet,
+                k=random.generation.multiplier*k, ...)
         }
         i <- i+1
         seeds.used <- c(seeds.used, this.seed)
         total.solved <- total.solved + ret$k
         permuted.muts <- rbind(permuted.muts, ret$perms)
         # overshooting the requested perms is fine
+
+        # the randomly generated sites could not solve a single permutation
+        # (i.e., the mutation spectrum of all random sites contained < 1
+        # copy of the input spectrum). try increasing the number of random
+        # sites to compensate.
+        if (ret$k == 0) {
+            random.generation.multiplier <- random.generation.multiplier + 1
+            if (random.generation.multiplier > 10) {
+                stop(paste0('failed to solve a single permutation even with random.generation.multiplier = 10 - giving up. this error might be solvable by increasing --permtool-', muttype, '-generation-param'))
+            }
+            cat('iteration', i, 'solved 0 permutations. increasing number of randomly generated sites by a factor of', random.generation.multiplier, '\n')
+        }
     }
 
     # chop up the mutations into individual permutation sets
