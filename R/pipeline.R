@@ -267,19 +267,21 @@ make.permuted.mutations <- function(sc.sample, muts, callable.bed, genome.string
         p(amount=0, class='sticky', perfcheck(print.header=TRUE))
         xs <- future.apply::future_lapply(1:n.chunks, function(i) {
             pc <- perfcheck(paste('make.perms',i), {
-                    if (muttype == 'snv') {
+                    # The only difference between SNV and indel is the control
+                    # parameters - n.sample for SNVs and k for indels.
+                    #if (muttype == 'snv') {
                         perms <- make.perms(muts=muts, callable=callable.bed,
                             genome.string=genome.string, genome.file=genome.file,
                             seed.base=seed.base,
                             muttype=muttype, desired.perms=perms.per.chunk[i],
-                            quiet=quiet, n.sample=snv.N)
-                    } else if (muttype == 'indel') {
-                        perms <- make.perms(muts=muts, callable=callable.bed,
-                            genome.string=genome.string, genome.file=genome.file,
-                            seed.base=seed.base,
-                            muttype=muttype, desired.perms=perms.per.chunk[i],
-                            quiet=quiet, k=indel.K)
-                    }
+                            quiet=quiet, n.sample=snv.N, k=indel.K)
+                    #} else if (muttype == 'indel') {
+                        #perms <- make.perms(muts=muts, callable=callable.bed,
+                            #genome.string=genome.string, genome.file=genome.file,
+                            #seed.base=seed.base,
+                            #muttype=muttype, desired.perms=perms.per.chunk[i],
+                            #quiet=quiet, k=indel.K)
+                    #}
                 },
                 report.mem=report.mem)
             p(class='sticky', amount=1, pc)
