@@ -33,6 +33,7 @@ run.pipeline <- function(
     dptab,
     genome,
     genome.seqinfo=genome.string.to.seqinfo.object(genome),
+    target.fdr=0.01,
     config.yaml=NULL,
     grs=tileGenome(seqlengths=genome.seqinfo[seqlevels(genome.seqinfo)[1:22]], tilewidth=10e6, cut.last.tile.in.chrom=TRUE),
     legacy=FALSE, report.mem=TRUE, verbose=TRUE)
@@ -113,7 +114,9 @@ run.pipeline <- function(
     cat("Chunked pipeline complete.\n")
 
     x <- do.call(concat, xs)
-    x <- call.mutations(x, target.fdr=0.01, mode=ifelse(legacy, 'legacy', 'new'), quiet=!verbose)
+    x <- compute.fdr.prior(x, mode=ifelse(legacy, 'legacy', 'new'), quiet=!verbose)
+    x <- compute.fdr(x, mode=ifelse(legacy, 'legacy', 'new'), quiet=!verbose)
+    x <- call.mutations(x, target.fdr=target.fdr, quiet=!verbose)
     x <- add.depth.profile(x, depth.path=dptab)
     x <- compute.mutburden(x)
     x
@@ -125,9 +128,13 @@ run.pipeline <- function(
 # contains many site-specific annotations and the full matrix of alt and ref
 # read counts for all single cells and bulks.
 make.integrated.table <- function(mmq60.tab, mmq1.tab, phased.vcf,
-    bulk.sample, genome, genome.seqinfo=genome.string.to.seqinfo.object(genome), panel=NULL,
+    bulk.sample,
+    snv.max.bulk.alt, snv.max.bulk.af,
+    indel.max.bulk.alt, indel.max.bulk.af,
+    genome, genome.seqinfo=genome.string.to.seqinfo.object(genome),
+    panel=NULL,
     grs=tileGenome(seqlengths=genome.seqinfo[seqlevels(genome.seqinfo)[1:22]], tilewidth=10e6, cut.last.tile.in.chrom=TRUE),
-    quiet=TRUE, report.mem=FALSE)
+    legacy=FALSE, quiet=TRUE, report.mem=FALSE)
 {
     cat('Starting integrated table pipeline on', length(grs), 'chunks.\n')
     cat('Parallelizing with', future::nbrOfWorkers(), 'cores.\n')
@@ -148,11 +155,16 @@ make.integrated.table <- function(mmq60.tab, mmq1.tab, phased.vcf,
                 sitewide <- gatk[,1:7]
                 samplespecific <- gatk[,-(1:7)]
 
-                annotate.gatk.bulk(sitewide, samplespecific, bulk.sample, quiet=quiet)
-                annotate.gatk(gatk=sitewide, gatk.counts=samplespecific, genome.string=genome, add.mutsig=TRUE)
+                annotate.gatk.bulk(sitewide, samplespecific, bulk.sample, legacy=legacy, quiet=quiet)
+                annotate.gatk(gatk=sitewide, genome.string=genome, add.mutsig=TRUE)
                 annotate.gatk.lowmq(sitewide, path=mmq1.tab, bulk=bulk.sample, region=gr, quiet=quiet)
                 annotate.gatk.phasing(sitewide, phasing.path=phased.vcf, region=gr, quiet=quiet)
                 annotate.gatk.panel(sitewide, panel.path=panel, region=gr, quiet=quiet)
+                annotate.gatk.candidate.loci(sitewide,
+                    snv.max.bulk.alt=snv.max.bulk.alt,
+                    snv.max.bulk.af=snv.max.bulk.af,
+                    indel.max.bulk.alt=indel.max.bulk.alt,
+                    indel.max.bulk.af=indel.max.bulk.af)
             }, report.mem=report.mem)
             p(class='sticky', amount=1, pc)
 
@@ -161,6 +173,12 @@ make.integrated.table <- function(mmq60.tab, mmq1.tab, phased.vcf,
     })
 
     gatk <- rbindlist(xs)
+
+    # Must happen after combining across chunks. Individual chunks may have 0
+    # candidates.
+    if (nrow(gatk[somatic.candidate == TRUE]) == 0)
+        stop('0 somatic candidates detected. SCAN2 requires somatic candidates to have 0 supporting reads in the matched bulk - perhaps your bulk is too closely related to your single cells?')
+
     resampling.details <- gatk.resample.phased.sites(gatk)
     list(gatk=gatk, resampling.details=resampling.details)
 }
