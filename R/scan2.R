@@ -1,4 +1,4 @@
-setClassUnion('null.or.df', c('NULL', 'data.frame'))
+eetClassUnion('null.or.df', c('NULL', 'data.frame'))
 setClassUnion('null.or.dt.or.raw', c('NULL', 'data.table', 'raw'))
 setClassUnion('null.or.Seqinfo', c('NULL', 'Seqinfo'))
 setClassUnion('null.or.GRanges', c('NULL', 'GRanges'))
@@ -165,7 +165,7 @@ check.slots <- function(object, slots, abort=TRUE) {
         if (is.null(slot(object, s))) {
             error.occurred = TRUE
             if (s == 'gatk')
-                cat("must import GATK read counts first (see: read.gatk())\n")
+                cat("must import GATK read counts first (see: read.integrated.table())\n")
             if (s == 'ab.fits')
                 cat('must import AB model parameters (see: add.ab.fits())\n')
             if (s == 'ab.estimates')
@@ -184,205 +184,6 @@ check.slots <- function(object, slots, abort=TRUE) {
         stop("One or more required slots are missing. See above for details.")
     return(error.occurred)
 }
-
-
-setMethod("show", "SCAN2", function(object) {
-    cat("#", is(object)[[1]], "\n")
-    if (!is.null(object@region)) {
-        cat("#   Region:")
-        if (length(object@region) > 1) {
-            cat("\n")
-            print(object@region)
-        } else {
-            cat('',length(object@region),'intervals\n')
-        }
-    }
-    cat("#   Genome:", object@genome.string, "\n")
-    cat("#   Single cell ID:", object@single.cell, "\n")
-    cat("#   Bulk ID:", object@bulk, "\n")
-    cat("#   GATK:")
-    if (is.null(object@gatk)) {
-        cat(" (no data)\n")
-    } else {
-        if (is.compressed(object)) {
-            cat(' (compressed)\n')
-        } else {
-            cat('', nrow(object@gatk), "raw sites\n")
-        }
-    }
-
-    cat("#   AB model training hSNPs:")
-    if (is.compressed(object)) {
-        cat(' (table compressed)\n')
-    } else {
-        if (!('training.site' %in% colnames(object@gatk))) {
-            cat(" (no data)\n")
-        } else {
-            # germline indels are not used for AB model training
-            per.hap <- object@gatk[training.site==TRUE & muttype == 'snv', .N, by=phased.gt]
-            tdata <- object@gatk[training.site==TRUE & muttype=='snv']
-            cat('', nrow(tdata),
-                sprintf("phasing: %s=%d, %s=%d\n",
-                    per.hap$phased.gt[1], per.hap$N[1],
-                    per.hap$phased.gt[2], per.hap$N[2]))
-            neighbor.approx <- approx.abmodel.covariance(object, bin.breaks=10^(0:5))
-            cors <- round(neighbor.approx$y, 3)
-                cat('#       VAF correlation between neighboring hSNPs:\n')
-            cat('#           <10 bp', cors[1], '<100 bp', cors[2],
-                '<1000 bp', cors[3], '<10 kbp', cors[4], '<100 kbp', cors[5], '\n')
-            if ('resampled.training.site' %in% colnames(object@gatk)) {
-                cat('#        ', nrow(object@gatk[resampled.training.site == TRUE & muttype == 'snv']),
-                    'resampled hSNPs\n')
-                cat('#        ', nrow(object@gatk[resampled.training.site == TRUE & muttype == 'indel']),
-                    'resampled hIndels\n')
-            }
-        }
-    }
-    
-    cat("#   AB model parameters:")
-    if (is.null(object@ab.fits)) {
-        cat(" (no data)\n")
-    } else {
-        cat(sprintf('\n#       average (over chromosomes): a=%0.3f, b=%0.3f, c=%0.3f, d=%0.3f\n',
-            mean(object@ab.fits$a),
-            mean(object@ab.fits$b),
-            mean(object@ab.fits$c),
-            mean(object@ab.fits$d)))
-    }
-
-    cat("#   Allele balance:")
-    if (is.compressed(object)) {
-        cat(' (table compressed)\n')
-    } else { 
-        if (is.null(object@ab.estimates)) {
-            cat(" (not computed)\n")
-        } else {
-            s <- summary(object@gatk$gp.sd)
-            cat('\n#       mean (0 is neutral):',
-                round(mean(object@gatk$gp.mu), 3), '\n')
-            cat('#       uncertainty (Q25, median, Q75):',
-                round(s['1st Qu.'], 3),
-                round(s['Median'], 3),
-                round(s['3rd Qu.'], 3), '\n')
-            if ('training.site' %in% colnames(object@gatk)) {
-                xs <- round(object@gatk[training.site==TRUE & muttype == 'snv',
-                    .(mean=mean(gp.mu), cor=cor(af, ab, use='complete.obs'))],3)
-                cat('#       mean at training hSNPs:', xs$mean, '\n')
-            }
-        }
-    }
-    
-    cat("#   Mutation models:")
-    if (is.null(object@mut.models)) {
-        cat(" (not computed)\n")
-    } else {
-        cat(" computed\n")
-    }
-
-    cat("#   CIGAR data:")
-    if (is.null(object@cigar.data)) {
-        cat(" (no data)\n")
-    } else {
-        cat(' single cell:', object@cigar.data$sc.sites, "sites, ")
-        cat('bulk:', object@cigar.data$bulk.sites, "sites\n")
-    }
-
-    cat("#   Static filters: ")
-    if (is.compressed(object)) {
-        cat(' (table compressed)\n')
-    } else {
-        if (!('static.filter' %in% colnames(object@gatk))) {
-            cat("(not applied)\n")
-        } else {
-            cat('\n')
-            na.or.val <- function(x, val=0) ifelse(is.na(x), val, x)
-            for (mt in c('snv', 'indel')) {
-                tb <- table(object@gatk[muttype == mt, static.filter], useNA='always')
-                cat(sprintf('#       %6s: %8d retained %8d removed %8d NA\n',
-                    mt, na.or.val(tb['TRUE']), na.or.val(tb['FALSE']), na.or.val(tb['NA'])))
-            }
-        }
-    }
-
-    cat("#   FDR prior data: ")
-    if (is.null(object@fdr.prior.data)) {
-        cat("(not computed)\n")
-    } else {
-        cat('\n')
-        for (mt in names(object@fdr.prior.data)) {
-            cat(sprintf("#       %6s: %8d candidates %8d germline hets %8d max burden\n",
-                mt, object@fdr.prior.data[[mt]]$candidates.used,
-                object@fdr.prior.data[[mt]]$hsnps.used,
-                object@fdr.prior.data[[mt]]$burden[2]))
-        }
-    }
-
-    cat("#   Depth profile: ")
-    if (is.null(object@depth.profile)) {
-        cat("(not added)\n")
-    } else {
-        cat('\n')
-        for (mt in names(object@fdr.prior.data)) {
-            sfp <- object@static.filter.params[[mt]]
-            dptab <- object@depth.profile$dptab
-            cat(sprintf("#       %6s: genome <:   min. bulk DP %0.1f%%,   min. sc DP %0.1f%%,   either %0.1f%%\n",
-                mt,
-                100*sum(dptab[, 1:sfp$min.bulk.dp])/sum(dptab),
-                100*sum(dptab[1:sfp$min.sc.dp,])/sum(dptab),
-                100*(1 - (sum(dptab[(sfp$min.sc.dp+1):nrow(dptab),(sfp$min.bulk.dp+1):ncol(dptab)])/sum(dptab)))))
-        }
-    }
-
-    cat("#   Somatic mutation calls: ")
-    if (is.null(object@call.mutations)) {
-        cat("(not called)\n")
-    } else {
-        cat(sprintf("mode=%s, target.fdr=%0.3f\n",
-            object@call.mutations$mode,
-            object@call.mutations$target.fdr))
-        for (mt in c('snv', 'indel')) {
-            cat(sprintf("#       %6s: %8d called %8d resampled training calls\n",
-                mt,
-                as.integer(object@call.mutations[[paste0(mt, '.pass')]]),
-                as.integer(object@call.mutations[[paste0(mt, '.resampled.training.pass')]])))
-        }
-        if (object@call.mutations$suppress.all.indels) {
-            cat(sprintf("#       ALL indel calls have been suppressed (insufficient number of single cells in cross-sample filter\n"))
-        } else if (object@call.mutations$suppress.shared.indels) {
-            cat(sprintf("#       indel calls shared between cells have been suppressed (insufficient number of unique individuals in cross-sample filter\n"))
-        }
-    }
-
-    cat("#   Somatic mutation burden: ")
-    if (is.null(object@mutburden)) {
-        cat("(not computed)\n")
-    } else {
-        cat('\n')
-        for (mt in c('snv', 'indel')) {
-            mb <- object@mutburden[[mt]][2,]  # row 2 is middle 50%
-            cat(sprintf("#       %6s: %6d somatic,   %0.1f%% sens,   %0.3f callable Gbp,   %0.1f muts/haploid Gbp,   %0.1f muts per genome\n",
-                mt, mb$ncalls, 100*mb$callable.sens, mb$callable.bp/1e9, mb$rate.per.gb, mb$burden))
-        }
-        if (object@call.mutations$suppress.all.indels | object@call.mutations$suppress.shared.indels) {
-            cat(sprintf("#       indel mutation burden estimates ARE NOT VALID (cross-sample panel insufficiency)!\n"))
-        }
-    }
-
-    cat("#   Mutation rescue by signature: ")
-    if (is.null(object@mutsig.rescue)) {
-        cat("(not computed)\n")
-    } else {
-        # XXX: assumes SNV and indel use the same FDR.  currently correct, may break later
-        cat(sprintf('rescue.target.fdr=%0.3f\n',
-            object@mutsig.rescue[['snv']]$rescue.target.fdr))
-        for (mt in c('snv', 'indel')) {
-            msr <- object@mutsig.rescue[[mt]]
-            cat(sprintf("#       %6s: %6d/%d candidates rescued,   %0.1f%% rel. error,   sig. weights:  %0.3f true,   %0.3f artifact\n",
-                mt, nrow(object@gatk[muttype == mt & rescue]), msr$nmuts,
-                100*msr$relative.error, msr$weight.true, msr$weight.artifact))
-        }
-    }
-})
 
 
 # to use: e.g., x <- do.call(concat, xs)
@@ -448,6 +249,7 @@ setMethod("concat", signature="SCAN2", function(...) {
         ensure.same(args, 'static.filter.params', mt, 'min.sc.dp')
         ensure.same(args, 'static.filter.params', mt, 'min.bulk.dp')
         ensure.same(args, 'static.filter.params', mt, 'max.bulk.alt')
+        ensure.same(args, 'static.filter.params', mt, 'max.bulk.af')
         ensure.same(args, 'static.filter.params', mt, 'exclude.dbsnp')
         ensure.same(args, 'static.filter.params', mt, 'cg.id.q')
         ensure.same(args, 'static.filter.params', mt, 'cg.hs.q')
@@ -513,6 +315,13 @@ setMethod("read.integrated.table", "SCAN2", function(object, path, quiet=FALSE) 
     object@gatk <- read.and.annotate.integrated.table(path=path, sample.id=object@single.cell,
         region=object@region, quiet=quiet)
     object@integrated.table.path <- path
+
+    id <- object@gatk[,paste(chr, pos, refnt, altnt)]
+    dupid <- duplicated(id)
+    if (sum(dupid)) {
+        stop(paste('found', sum(dupid), 'duplicate (chr,pos,refnt,altnt) instances in integrated table. This is likely a bug, please report it.'))
+    }
+
     object
 })
 
@@ -732,6 +541,9 @@ setGeneric("compute.fdr.prior.data", function(object, mode=c('legacy', 'new'), q
     standardGeneric("compute.fdr.prior.data"))
 setMethod("compute.fdr.prior.data", "SCAN2", function(object, mode=c('legacy', 'new'), quiet=FALSE) {
     check.slots(object, c('gatk', 'static.filter.params'))
+    # ALL candidates must be present for FDR estimation. So this function cannot be applied
+    # to a chunked SCAN2 object (these are used for parallelization).
+    check.chunked(object, 'compute.fdr.prior must be called on a SCAN2 object containing all sites, not a chunked parallelized object')
 
     mode <- match.arg(mode)
     if (!('static.filter' %in% colnames(object@gatk)))
@@ -845,142 +657,6 @@ setMethod("compute.fdr", "SCAN2", function(object, path, mode=c('legacy', 'new')
 })
 
 
-cigar.emp.score <- function (training, test, which = c("id", "hs"), legacy=FALSE, quiet=FALSE) {
-    xt <- training[[paste0(which, ".score.x")]]
-    yt <- training[[paste0(which, ".score.y")]]
-    x <- test[[paste0(which, ".score.x")]]
-    y <- test[[paste0(which, ".score.y")]]
-
-    dp <- test$dp.cigars
-    bulkdp <- test$dp.cigars.bulk
-
-    progressr::with_progress({
-        if (!quiet) p <- progressr::progressor(along=1:(length(x)/100))
-        # in legacy mode, NA and NaN values in x or y weren't caught
-        if (legacy) {
-            ret <- future.apply::future_mapply(function(dp, bulkdp, x, y, i) {
-                if (!quiet & i %% 100 == 1) p()
-                mean(xt >= x & yt >= y, na.rm = T)
-            }, test$dp.cigars, test$dp.cigars.bulk, x, y, 1:length(x))
-        } else {
-            ret <- future.apply::future_mapply(function(dp, bulkdp, x, y, i) {
-                if (!quiet & i %% 100 == 1) p()
-                ifelse(dp == 0 | bulkdp == 0, 0,
-                    mean(xt >= x & yt >= y, na.rm = T))
-            }, test$dp.cigars, test$dp.cigars.bulk, x, y, 1:length(x))
-        }
-    }, enable=!quiet)
-
-    # future_mapply returns list() when x is length 0. make this a 0-length
-    # numeric so quantile() doesn't fail on it later.
-    if (length(ret) == 0)
-        return(numeric(0))
-    else
-        return(ret)
-}
-
-
-compute.cigar.scores <- function(cigar.data) {
-    cigar.data[, c('id.score.y', 'id.score.x', 'hs.score.y', 'hs.score.x') :=
-        list(ID.cigars / dp.cigars,
-             ID.cigars.bulk / dp.cigars.bulk,
-             HS.cigars / dp.cigars,
-             HS.cigars.bulk / dp.cigars.bulk)]
-}
-
-
-read.cigar.data <- function(path, region, quiet=FALSE) {
-    if (!quiet) cat('Importing CIGAR stats from', path, '\n')
-    col.classes <- c('character', rep('integer', 6))
-    read.tabix.data(path=path, region=region, quiet=quiet, colClasses=col.classes)
-}
-
-        
-setGeneric("add.cigar.data", function(object, sc.cigars.path, bulk.cigars.path, quiet=FALSE)
-    standardGeneric("add.cigar.data"))
-setMethod("add.cigar.data", "SCAN2", function(object, sc.cigars.path, bulk.cigars.path, quiet=FALSE) {
-    check.slots(object, 'gatk')
-
-    sc <- read.cigar.data(sc.cigars.path, region=object@region, quiet=quiet)
-    bulk <- read.cigar.data(bulk.cigars.path, region=object@region, quiet=quiet)
-
-    if (!quiet) cat('joining CIGAR data..\n')
-    object@gatk[sc, on=c('chr', 'pos'),
-        c('M.cigars', 'ID.cigars', 'HS.cigars', 'other.cigars', 'dp.cigars') :=
-            list(i.M.cigars, i.ID.cigars, i.HS.cigars, i.other.cigars, i.dp.cigars)]
-    object@gatk[bulk, on=c('chr', 'pos'),
-        c('M.cigars.bulk', 'ID.cigars.bulk', 'HS.cigars.bulk', 'other.cigars.bulk', 'dp.cigars.bulk') :=
-            list(i.M.cigars, i.ID.cigars, i.HS.cigars, i.other.cigars, i.dp.cigars)]
-
-    if (!quiet) cat('computing CIGAR op rates..\n')
-    compute.cigar.scores(object@gatk)  # modifies by reference
-    object@cigar.data <- data.frame(sc.sites=nrow(sc), bulk.sites=nrow(bulk),
-        sc.path=sc.cigars.path, bulk.path=bulk.cigars.path)
-    object
-})
-
-
-cigar.get.null.sites <- function(object, path=NULL, legacy=TRUE, quiet=FALSE) {
-    if (is.null(path)) {
-        check.slots(object, c('gatk', 'cigar.data'))
-        if (legacy) {
-            null.sites <- object@gatk[resampled.training.site==TRUE]
-        } else {
-            null.sites <- object@gatk[training.site==TRUE]
-        }
-    } else {
-        null.sites <- data.table::fread(path)
-    }
-
-    null.sites
-}
-
-
-setGeneric("compute.excess.cigar.scores", function(object, path=NULL, legacy=TRUE, quiet=FALSE)
-    standardGeneric("compute.excess.cigar.scores"))
-setMethod("compute.excess.cigar.scores", "SCAN2", function(object, path=NULL, legacy=TRUE, quiet=FALSE) {
-    check.slots(object, c('gatk', 'static.filter.params', 'cigar.data'))
-    null.sites <- cigar.get.null.sites(object, path, legacy, quiet)
-    compute.cigar.scores(null.sites)
-    if (!quiet) {
-        if (legacy) {
-            cat(sprintf('LEGACY: computing CIGAR op rates only at resampled training sites (n=%d)..\n',
-                nrow(null.sites)))
-        } else {
-            cat(sprintf('WARNING: using the full set of training het germline sites (n=%d) for CIGAR op calculations may be prohibitively slow\n',
-                nrow(null.sites)))
-        }
-    }
-    muttypes <- c('snv', 'indel')
-    object@excess.cigar.scores <- setNames(lapply(muttypes, function(mt) {
-        null.sites.mt <- null.sites[muttype == mt]
-        pc <- perfcheck("excess CIGAR ops",
-            object@gatk[muttype == mt, c('id.score', 'hs.score') := list(
-                    cigar.emp.score(training=null.sites.mt, test=.SD, which='id', quiet=quiet, legacy=legacy),
-                    cigar.emp.score(training=null.sites.mt, test=.SD, which='hs', quiet=quiet, legacy=legacy)
-            )],
-            report.mem=FALSE)
-        if (!quiet) cat(pc, '\n')
-
-        # it is only necessary to score training sites to get the
-        # quantiles for test cutoff.
-        null.sites.mt[, c('id.score', 'hs.score') := list(
-            cigar.emp.score(training=null.sites.mt, test=null.sites.mt, which='id', quiet=quiet, legacy=legacy),
-            cigar.emp.score(training=null.sites.mt, test=null.sites.mt, which='hs', quiet=quiet, legacy=legacy)
-        )]
-        sfp <- object@static.filter.params[[mt]]
-        data.frame(sites=nrow(object@gatk[muttype==mt]),
-            null.sites=nrow(null.sites.mt),
-            # These must not be calculated on chunked objects; the full
-            # set of null sites must be available.
-            id.score.q=quantile(null.sites.mt$id.score, prob=sfp$cg.id.q, na.rm=TRUE),
-            hs.score.q=quantile(null.sites.mt$hs.score, prob=sfp$cg.hs.q, na.rm=TRUE),
-            legacy=legacy)
-    }), muttypes)
-    object
-})
-
-
 setGeneric("add.static.filter.params", function(object, config.path,
     muttype=c('snv', 'indel'), min.sc.alt=2, min.sc.dp=6,
     max.bulk.alt=0, min.bulk.dp=11, exclude.dbsnp=TRUE, cg.id.q=0.05, cg.hs.q=0.05)
@@ -1003,6 +679,7 @@ function(object, config.path, muttype=c('snv', 'indel'),
                 min.sc.alt=yaml[[paste0(mt, '_min_sc_alt')]],
                 min.sc.dp=yaml[[paste0(mt, '_min_sc_dp')]],
                 max.bulk.alt=yaml[[paste0(mt, '_max_bulk_alt')]],
+                max.bulk.af=yaml[[paste0(mt, '_max_bulk_af')]],
                 min.bulk.dp=yaml[[paste0(mt, '_min_bulk_dp')]],
                 # exclude.dbsnp, cg.id.q and cg.hs.q are not user configurable
                 # at the moment. the defaults in this function's signature are
@@ -1015,7 +692,8 @@ function(object, config.path, muttype=c('snv', 'indel'),
     } else {
         object@static.filter.params[[muttype]] <- list(
             min.sc.alt=min.sc.alt, min.sc.dp=min.sc.dp,
-            max.bulk.alt=max.bulk.alt, min.bulk.dp=min.bulk.dp,
+            max.bulk.alt=max.bulk.alt, max.bulk.af=1,  # ignored, cede control to max.bulk.alt
+            min.bulk.dp=min.bulk.dp,
             exclude.dbsnp=exclude.dbsnp, cg.id.q=cg.id.q, cg.hs.q=cg.hs.q)
     }
     object
@@ -1030,7 +708,8 @@ setMethod("compute.static.filters", "SCAN2", function(object) {
     for (mt in c('snv', 'indel')) {
         sfp <- object@static.filter.params[[mt]]
         object@gatk[muttype == mt, c('cigar.id.test', 'cigar.hs.test', 'lowmq.test',
-                'dp.test', 'abc.test', 'min.sc.alt.test', 'max.bulk.alt.test',
+                'dp.test', 'abc.test', 'min.sc.alt.test',
+                'max.bulk.alt.test', 'max.bulk.af.test',
                 'dbsnp.test', 'csf.test') :=
                     list(id.score >= object@excess.cigar.scores[[mt]]$id.score.q,
                         hs.score >= object@excess.cigar.scores[[mt]]$hs.score.q,
@@ -1039,19 +718,93 @@ setMethod("compute.static.filters", "SCAN2", function(object) {
                         abc.pv > 0.05,
                         scalt >= sfp$min.sc.alt,
                         balt <= sfp$max.bulk.alt,
+                        bulk.af <= sfp$max.bulk.af,
                         !sfp$exclude.dbsnp | dbsnp == '.',
                         muttype == 'snv' | unique.donors <= 1 | max.out <= 2)]
         object@gatk[, static.filter :=
             cigar.id.test & cigar.hs.test & lowmq.test & dp.test &
-            abc.test & min.sc.alt.test & max.bulk.alt.test & dbsnp.test & csf.test]
+            abc.test & min.sc.alt.test & max.bulk.alt.test & max.bulk.af.test &
+            dbsnp.test & csf.test]
     }
     object
 })
 
 
-# When reading the integrated table: read all metadata columns (currently 1-25)
+# Do not change any static filter parameter manually if any of fdr.priors, fdr or
+# call.mutations have been run. The output of these routines depends on the
+# initial set of candidates (the fraction of true positives within this set is
+# estimated), so changing the candidate set (by changing the static filters) will
+# change the result.
+#
+# This function is intended for those who wish to experiment with changing
+# parameters; it is not feasible to completely rerun the SCAN2 tool, or even the
+# final call_mutations step many 10s or 100s of times to explore the param space.
+#
+# N.B. if you want to update target.fdr, this is not the function you are looking
+#      for. target.fdr can be updated without the cumbersome recalculation of FDR
+#      priors/FDR rates. Use call.mutations().
+#
+# `new.params` - must be a 2 element list, named 'snv' and 'indel', each of which
+#                are also lists. These lists may contain named members corresponding
+#                to already existing static filter parameters.
+# `fdr.prior.mode` - `mode` argument to compute.fdr.prior
+# `fdr.mode` - `mode` argument to compute.fdr
+setGeneric("update.static.filter.params", function(object, new.params=list(snv=list(), indel=list()), fdr.prior.mode=c('new', 'legacy'), fdr.mode=c('new', 'legacy'), quiet=FALSE)
+    standardGeneric("update.static.filter.params"))
+setMethod("update.static.filter.params", "SCAN2", function(object, new.params=list(snv=list(), indel=list()), fdr.prior.mode=c('new', 'legacy'), fdr.mode=c('new', 'legacy'), quiet=FALSE) {
+    for (mt in c('snv', 'indel')) {
+        new.sfp <- new.params[[mt]]
+        old.sfp <- object@static.filter.params[[mt]]
+        for (p in names(new.sfp)) {
+            if (p %in% names(old.sfp) & sfp[p] != old.sfp[p]) {
+                if (!quiet) cat(paste0("    (",mt,") updating ", p, ": ", old.sfp[i], " -> ", new.sfp[i], '\n'))
+            } else {
+                if (!quiet) cat(paste0("    (",mt,") ignoring unrecognized parameter ", p, '\n'))
+            }
+        }
+    }
+
+    # Update somatic candidate loci and recompute static filters
+    sfp <- object@static.filter.params
+    annotate.gatk.candidate.loci(object@gatk,
+        snv.max.bulk.alt=sfp$snv$max.bulk.alt,
+        snv.max.bulk.af=sfp$snv$max.bulk.af,
+        indel.max.bulk.alt=sfp$indel$max.bulk.alt,
+        indel.max.bulk.af=sfp$indel$max.bulk.af)
+    object <- compute.static.filters(object)
+
+    if (!is.null(slot(object, 'fdr.prior.data'))) {
+        if (!quiet) cat("    voiding N_T/N_A FDR prior calculations\n")
+        object@fdr.prior.data <- NULL
+        object@gatk[, nt := NA]
+        object@gatk[, na := NA]
+        object <- compute.fdr.prior(object, mode=mode, quiet=quiet)
+    }
+    if (!is.null(slot(object, 'fdr'))) {
+        if (!quiet) cat("    voiding per-locus FDR calculations\n")
+        object@fdr <- NULL
+        object@gatk[, lysis.fdr := NA]
+        object@gatk[, mda.fdr := NA]
+        object <- compute.fdr(object, mode=mode, quiet=quiet)
+    }
+    if (!is.null(slot(object, 'call.mutations'))) {
+        if (!quiet) cat("    recalling all mutations\n")
+        object@gatk[, pass := NA]
+        object <- call.mutations(object)
+    }
+    if (!is.null(slot(object, 'mutsig.rescue'))) {
+        if (!quiet) cat("    voiding mutation signature-based rescue calls\n")
+        object@mutsig.rescue <- NULL
+        object@gatk[, rescue := NA]
+    }
+
+    object 
+})
+
+# When reading the integrated table: read all metadata columns
 # and only the 3 genotype/count columns corresponding to `sample.id`. This can
-# save significant memory overhead in large (100+ cell) projects.
+# save significant memory overhead in large (100+ cell) projects.  This optimized
+# reading is handled by read.integrated.table.1sample().
 #
 # Next, annotate the integrated table with information corresponding to
 # `sample.id`. This includes training site definitions (which varies from cell
@@ -1064,7 +817,7 @@ setMethod("compute.static.filters", "SCAN2", function(object) {
 # cells is useful to improve phasing and the final phase decision should be
 # consistent across single cells.
 read.and.annotate.integrated.table <- function(path, sample.id, region=NULL, quiet=FALSE) {
-    tr <- read.table.1sample(path, sample.id, n.meta.cols=25, region=region, quiet=quiet)
+    tr <- read.integrated.table.1sample(path, sample.id, region=region, quiet=quiet)
     setindex(tr, resampled.training.site)
 
     # Add some convenient calculations
@@ -1102,17 +855,10 @@ read.training.hsnps <- function(path, sample.id, region=NULL, quiet=FALSE) {
 #
 # N.B. because call.mutations must not be called on chunked SCAN2 objects,
 # mode=legacy is not computationally feasible.
-setGeneric("call.mutations", function(object, target.fdr=0.01, mode=c('new', 'legacy'), quiet=FALSE)
+setGeneric("call.mutations", function(object, target.fdr=0.01, quiet=FALSE)
         standardGeneric("call.mutations"))
-setMethod("call.mutations", "SCAN2", function(object, target.fdr=0.01, mode=c('new', 'legacy'), quiet=FALSE) {
-    check.slots(object, c('gatk', 'static.filter.params', 'mut.models', 'excess.cigar.scores'))
-
-    check.chunked(object, 'call.mutations must be called on a SCAN2 object containing all sites, not a chunked parallelized object')
-
-    mode <- match.arg(mode)
-
-    object <- compute.fdr.prior.data(object, mode=mode, quiet=quiet)
-    object <- compute.fdr(object, mode=mode, quiet=quiet)
+setMethod("call.mutations", "SCAN2", function(object, target.fdr=0.01, quiet=FALSE) {
+    check.slots(object, c('gatk', 'static.filter.params', 'mut.models', 'excess.cigar.scores', 'fdr.prior.data', 'fdr'))
 
     # Try to handle indel calling when the cross-sample filter does not meet
     # the usual requirements (>1 unique individual).
@@ -1132,8 +878,8 @@ setMethod("call.mutations", "SCAN2", function(object, target.fdr=0.01, mode=c('n
         lysis.fdr <= target.fdr & mda.fdr <= target.fdr]
 
     # Pass germline heterozygous sites using L-O-O for sensitivity estimation
-    object@gatk[resampled.training.site == TRUE,
-        resampled.training.pass := 
+    object@gatk[training.site == TRUE,
+        training.pass := 
             # same tests as static.filter EXCEPT dbsnp.test, lowmq.test, max.bulk.alt.test,
             # which mostly will fail at training het germline sites.
             (cigar.id.test & cigar.hs.test & dp.test & abc.test & min.sc.alt.test) &
@@ -1146,11 +892,11 @@ setMethod("call.mutations", "SCAN2", function(object, target.fdr=0.01, mode=c('n
     object@call.mutations <- c(
         as.list(unlist(object@gatk[muttype == 'snv',
             .(snv.pass=as.integer(sum(pass, na.rm=TRUE)),
-              snv.resampled.training.pass=as.integer(sum(resampled.training.pass, na.rm=TRUE)))])),
+              snv.resampled.training.pass=as.integer(sum(resampled.training.site & training.pass, na.rm=TRUE)))])),
         as.list(unlist(object@gatk[muttype == 'indel',
             .(indel.pass=as.integer(sum(pass, na.rm=TRUE)),
-              indel.resampled.training.pass=as.integer(sum(resampled.training.pass, na.rm=TRUE)))])),
-        list(mode=mode, target.fdr=target.fdr,
+              indel.resampled.training.pass=as.integer(sum(resampled.training.site & training.pass, na.rm=TRUE)))])),
+        list(target.fdr=target.fdr,
             suppress.shared.indels=suppress.shared.indels,
             suppress.all.indels=suppress.all.indels))
     object
