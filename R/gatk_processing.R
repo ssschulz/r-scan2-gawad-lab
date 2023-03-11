@@ -1,16 +1,65 @@
+# Wrappers for read.table.1sample for actual use.
+read.gatk.1sample <- function(path, sample.id, region=NULL, quiet=FALSE) {
+    meta.cols <- c(
+        'character',      # chr
+        'integer',        # pos
+        'character',      # dbsnp
+        'character',      # refnt
+        'character'       # altnt
+    )
+    read.table.1sample(path=path, sample.id=sample.id, region=region,
+        meta.cols=meta.cols, quiet=quiet)
+}
+
+read.integrated.table.1sample <- function(path, sample.id, region=NULL, quiet=FALSE) {
+    meta.cols <- c(
+        'character',      # chr
+        'integer',        # pos
+        'character',      # dbsnp
+        'character',      # refnt
+        'character'       # altnt
+        'numeric',        # mq
+        'numeric',        # mqrs
+        'character',      # bulk.gt
+        'integer',        # bref
+        'integer',        # balt
+        'integer',        # bulk.dp
+        'numeric',        # bulk.af
+        'integer',        # tref
+        'integer',        # talt
+        'character',      # muttype
+        'character',      # mutsig  # used to be: 'logical', # moving 'somatic.candidate'
+        'integer',        # balt.lowmq
+        'character',      # phased.gt
+        'integer',        # nalleles
+        'integer',        # unique.donors
+        'integer',        # unique.cells
+        'integer',        # unique.bulks
+        'integer',        # max.out
+        'integer',        # sum.out
+        'integer',        # sum.bulk
+        'logical',        # somatic.candidate
+        'logical'         # resampled.training.site
+    )
+    read.table.1sample(path=path, sample.id=sample.id, region=region,
+        meta.cols=meta.cols, quiet=quiet)
+}
+
+
 # Some extra work to make sure we only read in the part of the
 # table relevant to one sample. Otherwise, memory can become
 # an issue for projects with 10s-100s of cells.
 #
+# meta.cols - columns that should be read in addition to columns
+#             specific to `sample.id`.
+#
 # region can be a GRanges object with a single interval to read only
 # a subset of the GATK table. The table is tabix indexed, so this can
 # be done quickly.
-#
-# This function should eventually replace the older 2sample version.
-#
-# n.meta.cols - 5 for GATK tables, 25 for integrated table
-read.table.1sample <- function(path, sample.id, region=NULL, n.meta.cols=25, quiet=FALSE) {
+read.table.1sample <- function(path, sample.id, meta.cols, region=NULL, quiet=FALSE) {
     if (!quiet) cat("Importing GATK table..\n")
+
+    n.meta.cols <- length(meta.cols)
 
     # Step 1: just get the header and detect the columns corresponding to sample.id
     tf <- Rsamtools::TabixFile(path)
@@ -34,13 +83,8 @@ read.table.1sample <- function(path, sample.id, region=NULL, n.meta.cols=25, qui
     
     # Step 2: really read the tables in, but only the relevant columns
     cols.to.read <- rep("NULL", tot.cols)
-    # First 5 are chr, pos, dbsnp, refnt, altnt. Applies to both GATK and integrated
-    cols.to.read[1:5] <- c('character', 'integer', rep('character', 3))
-    if (n.meta.cols == 25) {
-        cols.to.read[6:25] <- c('numeric', 'numeric', 'character', 'integer',
-            'integer', 'integer', 'numeric', 'character', 'character', 'logical',
-            'integer', 'character', rep('integer', 7), 'logical')
-    }
+    cols.to.read[1:n.meta.cols] <- meta.cols
+
     # Read 3 columns for the single cell, 3 columns for bulk
     cols.to.read[sample.idx + 0:2] <- c('character', 'integer', 'integer')
 
@@ -63,8 +107,19 @@ read.table.1sample <- function(path, sample.id, region=NULL, n.meta.cols=25, qui
 # which are the bulk genotype string assigned by HaplotypeCaller, bulk depth, bulk VAF, the number
 # of ref supporting bulk reads and mutation supporting bulk reads.
 #
+# also add the total sum of alt/ref reads across all single cells in the batch.
+#
+# sc.samples - list of all sample IDs supplied to SCAN2 as --sc-bam arguments
+#
+# legacy - SCANSNV's legacy behavior was to sum alt-supporting reads from ALL BAMs
+#          except the named bulk sample to determine somatic candidate sites.
+#          This can cause problems if the user supplies additional single cells
+#          not for primary analysis (like large sets of low-depth cells) or
+#          additional bulks that are not the primary bulk comparison (i.e., bulks
+#          from other tissues).
+#
 # only `gatk.meta` is modified (by reference).
-annotate.gatk.bulk <- function(gatk.meta, gatk, bulk.sample, quiet=FALSE) {
+annotate.gatk.bulk <- function(gatk.meta, gatk, bulk.sample, sc.samples, legacy=FALSE, quiet=FALSE) {
     col.strings <- colnames(gatk)
     tot.cols <- length(col.strings)
     bulk.idx <- Inf
@@ -83,6 +138,23 @@ annotate.gatk.bulk <- function(gatk.meta, gatk, bulk.sample, quiet=FALSE) {
     gatk.meta[, c('bulk.gt', 'bref', 'balt') :=
         list(gatk[[bulk.idx]], gatk[[bulk.idx+1]], gatk[[bulk.idx+2]])]
     gatk.meta[, c('bulk.dp', 'bulk.af') := list(bref+balt, balt/(bref+balt))]
+
+    if (legacy) {
+        # legacy SCANSNV behavior used every alt read count
+        alts <- which(colnames(gatk) == 'alt')
+        refs <- which(colnames(gatk) == 'ref')
+    } else {
+        sample.col.idxs <- seq(8, ncol(gatk), 3)    # all sample column IDs
+        # adding the bulk sample so that the `- bref` and `- balt` calculations below can
+        # be applied whether legacy mode is chosen or not.
+        sample.col.idxs <- sample.col.idxs[colnames(gatk) %in% c('bulk.sample', sc.samples)]
+
+        refs <- sample.col.idxs + 1
+        alts <- sample.col.idxs + 1
+    }
+    # Annotate the total number of single cell alt and ref reads across all SC samples.
+    gatk.meta[, tref := rowSums(as.matrix(gatk[,..refs])) - bref]
+    gatk.meta[, talt := rowSums(as.matrix(gatk[,..alts])) - balt]
 }
 
 
@@ -91,7 +163,7 @@ annotate.gatk.bulk <- function(gatk.meta, gatk, bulk.sample, quiet=FALSE) {
 #
 # This can be slow with add.mutsig, particularly for indels. Best used
 # on chunked data.
-annotate.gatk <- function(gatk, gatk.counts, genome.string, add.mutsig=TRUE) {
+annotate.gatk <- function(gatk, genome.string, add.mutsig=TRUE) {
     data.table::setkey(gatk, chr, pos, refnt, altnt)
 
     # Determine SNV/indel status and then annotate mutation signature channels
@@ -117,30 +189,12 @@ annotate.gatk <- function(gatk, gatk.counts, genome.string, add.mutsig=TRUE) {
         chs <- classify.indels(gatk[muttype == 'indel'], genome.string=genome.string)
         gatk[muttype == 'indel', mutsig := chs]
     }
-
-    # FIXME: legacy SCANSNV behavior did indeed use every alt read count
-    # other than the named bulk sample to determine somatic candidate sites.
-    # This does not account for jointly analyzing other bulk samples (that
-    # perhaps were not the primary bulk to be compared against) or other
-    # single cells that were not included in analysis for whatever reason
-    # (like low-depth cells).
-    # We are continuing legacy behavior, but I'd prefer to fix it at some
-    # point.
-    alts <- which(colnames(gatk.counts) == 'alt')
-    sum.alts <- rowSums(as.matrix(gatk.counts[,..alts])) - gatk$balt
-
-    # N.B. rowSums requred >= min.sc.alt, but in legacy uses this was always 2.
-    # FIXME: it'd be good to expose this to the end user. Especially for mosaic
-    # mutation calling.
-    gatk[, somatic.candidate := balt == 0 & bulk.gt == '0/0' & dbsnp == '.' & sum.alts >= 2]
-    if (nrow(gatk[somatic.candidate == TRUE]) == 0)
-        stop('0 somatic candidates detected. SCAN2 requires somatic candidates to have 0 supporting reads in the matched bulk - perhaps your bulk is too closely related to your single cells?')
 }
 
 
 # 'gatk' is a data.table to be modified by reference
 annotate.gatk.lowmq <- function(gatk, path, bulk, region, quiet=FALSE) {
-    lowmq <- read.table.1sample(path, sample.id=bulk, region=region, n.meta.cols=5, quiet=quiet)
+    lowmq <- read.gatk.1sample(path, sample.id=bulk, region=region, quiet=quiet)
     data.table::setkey(lowmq, chr, pos, refnt, altnt)
 
     gatk[lowmq, on=.(chr,pos,refnt,altnt), balt.lowmq := i.scalt]
@@ -212,6 +266,32 @@ annotate.gatk.panel <- function(gatk, panel.path, region=NULL, quiet=FALSE) {
             c('nalleles', 'unique.donors', 'unique.cells', 'unique.bulks', 'max.out', 'sum.out', 'sum.bulk') :=
                 list(0, 0, 0, 0, 0, 0, 0)]
     }
+}
+
+
+# Adds a columns `somatic.candidate` to `gatk` by reference. Loci with
+# somatic.candidate=TRUE pass some of the basic requirements to be considered
+# a mutation locus, meaning the site may be a candidate in at least one single
+# cell.
+#
+# XXX: any filter not dependent on specific single cell info (like min.bulk.dp)
+# should really be applied here.
+annotate.gatk.candidate.loci <- function(gatk, snv.max.bulk.alt, snv.max.bulk.af, indel.max.bulk.alt, indel.max.bulk.af) {
+    snv.allow.bulk.gt <- snv.max.bulk.alt > 0 | snv.max.bulk.af > 0
+    indel.allow.bulk.gt <- indel.max.bulk.alt > 0 | indel.max.bulk.af > 0
+
+    gatk[, somatic.candidate :=
+        ((muttype == 'snv' & balt <= snv.max.bulk.alt & bulk.af <= snv.max.bulk.af &
+          (is.na(balt.lowmq) | balt.lowmq <= snv.max.bulk.alt) &
+          # to continue old SCAN2 (mostly non-clonal calling) behavior, require bulk.gt==0/0
+          # when the user doesn't allow any bulk read support.
+          (snv.allow.bulk.gt | bulk.gt == '0/0')) |
+         (muttype == 'indel' & balt <= indel.max.bulk.alt & bulk.af <= indel.max.bulk.af &
+          (is.na(balt.lowmq) | balt.lowmq <= indel.max.bulk.alt) &
+          (indel.allow.bulk.gt | bulk.gt == '0/0'))
+        ) &
+        # N.B. rowSums required >= min.sc.alt, but in legacy uses this was always 2.
+        dbsnp == '.' & talt >= 2]
 }
 
 
