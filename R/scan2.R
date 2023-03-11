@@ -1,4 +1,4 @@
-eetClassUnion('null.or.df', c('NULL', 'data.frame'))
+setClassUnion('null.or.df', c('NULL', 'data.frame'))
 setClassUnion('null.or.dt.or.raw', c('NULL', 'data.table', 'raw'))
 setClassUnion('null.or.Seqinfo', c('NULL', 'Seqinfo'))
 setClassUnion('null.or.GRanges', c('NULL', 'GRanges'))
