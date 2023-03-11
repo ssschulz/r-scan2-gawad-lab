@@ -329,7 +329,7 @@ plot.abmodel.covariance <- function(object, bin.breaks=c(1, 10^seq(1,5,length.ou
 
 
 plot.depth.profile <- function(object, keep.zero=FALSE, quantile=0.99, ...) {
-    require(viridis)
+    require(viridisLite)
     # row and column 1 correspond to 0 depth. these usually completely
     # drown out the rest of the depth signal.
     d <- object@depth.profile$dptab
@@ -350,7 +350,7 @@ plot.depth.profile <- function(object, keep.zero=FALSE, quantile=0.99, ...) {
     if (length(ymax) == 0)  # if not found, take the whole thing
         ymax <- maxdp
 
-    image(x=x, y=y, d, col=viridis::viridis(100),
+    image(x=x, y=y, d, col=viridisLite::viridis(100),
         xlim=c(0,xmax), ylim=c(0,ymax),
         xlab=paste(names(dimnames(d))[1], ' (single cell) depth'),
         ylab=paste(names(dimnames(d))[2], ' (buk) depth'))
