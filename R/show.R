@@ -25,7 +25,7 @@ setMethod("show", "SCAN2", function(object) {
     show.mutsig.rescue(object)
 })
 
-
+setGeneric("show.gatk", function(object) standardGeneric("show.gatk"))
 setMethod("show.gatk", "SCAN2", function(object) {
     cat("#   GATK:")
     if (is.null(object@gatk)) {
@@ -40,6 +40,7 @@ setMethod("show.gatk", "SCAN2", function(object) {
 })
 
 
+setGeneric("show.abmodel.training.sites", function(object) standardGeneric("show.abmodel.training.sites"))
 setMethod("show.abmodel.training.sites", "SCAN2", function(object) {
     cat("#   AB model training hSNPs:")
     if (is.compressed(object)) {
@@ -71,6 +72,7 @@ setMethod("show.abmodel.training.sites", "SCAN2", function(object) {
 })
     
 
+setGeneric("show.abmodel.params", function(object) standardGeneric("show.abmodel.params"))
 setMethod("show.abmodel.params", "SCAN2", function(object) {
     cat("#   AB model parameters:")
     if (is.null(object@ab.fits)) {
@@ -85,6 +87,7 @@ setMethod("show.abmodel.params", "SCAN2", function(object) {
 })
 
 
+setGeneric("show.abmodel.ab.distn", function(object) standardGeneric("show.abmodel.ab.distn"))
 setMethod("show.abmodel.ab.distn", "SCAN2", function(object) {
     cat("#   Allele balance:")
     if (is.compressed(object)) {
@@ -110,6 +113,7 @@ setMethod("show.abmodel.ab.distn", "SCAN2", function(object) {
 })
 
 
+setGeneric("show.abmodel", function(object) standardGeneric("show.abmodel"))
 setMethod("show.abmodel", "SCAN2", function(object) {
     abmodel.training.sites(object)
     abmodel.params(object)
@@ -117,6 +121,7 @@ setMethod("show.abmodel", "SCAN2", function(object) {
 })
 
     
+setGeneric("show.mut.models", function(object) standardGeneric("show.mut.models"))
 setMethod("show.mut.models", "SCAN2", function(object) {
     cat("#   Mutation models:")
     if (is.null(object@mut.models)) {
@@ -127,6 +132,7 @@ setMethod("show.mut.models", "SCAN2", function(object) {
 })
 
 
+setGeneric("show.cigar.data", function(object) standardGeneric("show.cigar.data"))
 setMethod("show.cigar.data", "SCAN2", function(object) {
     cat("#   CIGAR data:")
     if (is.null(object@cigar.data)) {
@@ -138,6 +144,7 @@ setMethod("show.cigar.data", "SCAN2", function(object) {
 })
 
 
+setGeneric("show.static.filters", function(object) standardGeneric("show.static.filters"))
 setMethod("show.static.filters", "SCAN2", function(object) {
     cat("#   Static filters: ")
     if (is.compressed(object)) {
@@ -158,6 +165,7 @@ setMethod("show.static.filters", "SCAN2", function(object) {
 })
 
 
+setGeneric("show.fdr.prior", function(object) standardGeneric("show.fdr.prior"))
 setMethod("show.fdr.prior", "SCAN2", function(object) {
     cat("#   FDR prior data: ")
     if (is.null(object@fdr.prior.data)) {
@@ -174,6 +182,7 @@ setMethod("show.fdr.prior", "SCAN2", function(object) {
 })
 
 
+setGeneric("show.depth.profile", function(object) standardGeneric("show.depth.profile"))
 setMethod("show.depth.profile", "SCAN2", function(object) {
     cat("#   Depth profile: ")
     if (is.null(object@depth.profile)) {
@@ -193,6 +202,7 @@ setMethod("show.depth.profile", "SCAN2", function(object) {
 })
 
 
+setGeneric("show.call.mutations", function(object) standardGeneric("show.call.mutations"))
 setMethod("show.call.mutations", "SCAN2", function(object) {
     cat("#   Somatic mutation calls: ")
     if (is.null(object@call.mutations)) {
@@ -215,6 +225,7 @@ setMethod("show.call.mutations", "SCAN2", function(object) {
 })
 
 
+setGeneric("show.mutburden", function(object) standardGeneric("show.mutburden"))
 setMethod("show.mutburden", "SCAN2", function(object) {
     cat("#   Somatic mutation burden: ")
     if (is.null(object@mutburden)) {
@@ -224,7 +235,7 @@ setMethod("show.mutburden", "SCAN2", function(object) {
         for (mt in c('snv', 'indel')) {
             mb <- object@mutburden[[mt]][2,]  # row 2 is middle 50%
             cat(sprintf("#       %6s: %6d somatic,   %0.1f%% sens,   %0.3f callable Gbp,   %0.1f muts/haploid Gbp,   %0.1f muts per genome\n",
-                mt, mb$ncalls, 100*mb$callable.sens, mb$callable.bp/1e9, mb$rate.per.gb, mutburden(object, muttype=mt))
+                mt, mb$ncalls, 100*mb$callable.sens, mb$callable.bp/1e9, mb$rate.per.gb, mutburden(object, muttype=mt)))
         }
         if (object@call.mutations$suppress.all.indels | object@call.mutations$suppress.shared.indels) {
             cat(sprintf("#       indel mutation burden estimates ARE NOT VALID (cross-sample panel insufficiency)!\n"))
@@ -233,6 +244,7 @@ setMethod("show.mutburden", "SCAN2", function(object) {
 })
 
 
+setGeneric("show.mutsig.rescue", function(object) standardGeneric("show.mutsig.rescue"))
 setMethod("show.mutsig.rescue", "SCAN2", function(object) {
     cat("#   Mutation rescue by signature: ")
     if (is.null(object@mutsig.rescue)) {
@@ -249,4 +261,3 @@ setMethod("show.mutsig.rescue", "SCAN2", function(object) {
         }
     }
 })
-
