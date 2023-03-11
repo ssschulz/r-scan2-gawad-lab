@@ -90,7 +90,7 @@ setMethod("compute.mutburden", "SCAN2", function(object, gbp.per.genome=get.gbp.
             # around can also be interesting.
             ret <- data.frame(
                 ncalls=sapply(qstouse, function(q) sum(s[dpq == q]$pass, na.rm=TRUE)),
-                callable.sens=sapply(qstouse, function(q) mean(g[bulk.dp >= sfp$min.bulk.dp & dpq == q]$resampled.training.pass, na.rm=TRUE)),
+                callable.sens=sapply(qstouse, function(q) mean(g[bulk.dp >= sfp$min.bulk.dp & dpq == q & resampled.training.site == TRUE]$training.pass, na.rm=TRUE)),  # only use resampled training sites to estimate sensitivity (hSNPs in general are closer to other hSNPs than somatic candidates are to hSNPs, leading to better local allele balance estimates and thus would overestimate sensitivity. Resampling the sites to match candidate-to-hSNP distances reduces this bias)
                 callable.bp=sapply(split(dptab[,-(1:sfp$min.bulk.dp)], rowqs), sum)
             )
         }
@@ -109,4 +109,24 @@ setMethod("compute.mutburden", "SCAN2", function(object, gbp.per.genome=get.gbp.
     }), muttypes)
 
     object
+})
+
+
+setMethod("mutburden", "SCAN2", function(object, muttype=c('all', 'snv', 'indel')) {
+    muttype <- match.arg(muttype)
+    if (muttype == 'all')
+        muttype <- c('snv', 'indel')
+
+    # We use the middle 50% of the depth distribution to avoid biasing
+    # the mutation burden by sensitivity differences in very low or very high
+    # depth regions. Row 2 corresponds to the middle 50%; row 1 is the bottom
+    # 25% and row 3 is the top 25%.
+    sapply(muttype, function(mt) {
+        ret <- object@mutburden[[mt]][2,]$burden
+
+        if (mt == 'indel' & (object@call.mutations$suppress.all.indels | object@call.mutations$suppress.shared.indels)) {
+            warning("#       indel mutation burden estimates ARE NOT VALID (cross-sample panel insufficiency)!")
+            ret <- NA
+        }
+    })
 })
