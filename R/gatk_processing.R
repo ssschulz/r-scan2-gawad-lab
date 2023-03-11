@@ -17,7 +17,7 @@ read.integrated.table.1sample <- function(path, sample.id, region=NULL, quiet=FA
         'integer',        # pos
         'character',      # dbsnp
         'character',      # refnt
-        'character'       # altnt
+        'character',      # altnt
         'numeric',        # mq
         'numeric',        # mqrs
         'character',      # bulk.gt
