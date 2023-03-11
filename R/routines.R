@@ -1,16 +1,3 @@
-# change the pass flag to match a new target FDR
-rescore <- function(df, target.fdr, use.pon=FALSE, min.pon.dp=10, quiet=TRUE) {
-    newpass <- df$hard.filter &
-        df$lysis.fdr <= target.fdr & df$mda.fdr <= target.fdr
-    if (use.pon)
-        newpass <- newpass & (df$dp >= min.pon.dp & (df$unique.donors <= 1 | df$max.out <= 2))
-    if (!quiet)
-        cat(sprintf("rescore: %d passing -> %d passing\n", sum(df$pass), sum(newpass)))
-    df$pass <- newpass
-    df
-}
-
-
 # given two data frames of somatic and germline locations, annotate
 # the somatic data frame with the position of the nearest germline entry.
 find.nearest.germline <- function (som, germ, chrs = c(1:22, "X")) {
