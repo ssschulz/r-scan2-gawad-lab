@@ -77,7 +77,13 @@ testpipe <- function(test.data=c('legacy_tiny', 'legacy_chr22', 'legacy_custom')
     int.tab.gz.path <- paste0(int.tab.path, '.gz')
     x <- make.integrated.table(mmq60.tab=mmq60, mmq1.tab=mmq1,
         phased.vcf=phased.vcf, panel=panel,
-        bulk.sample=bulk.sample, genome='hs37d5', grs=grs)
+        bulk.sample=bulk.sample,
+        # new support for clonal mutations: allow alt read support in bulk. but legacy did not allow this.
+        snv.max.bulk.alt=0,
+        snv.max.bulk.af=0,
+        indel.max.bulk.alt=0, 
+        indel.max.bulk.af=0, 
+        genome='hs37d5', legacy=legacy, grs=grs)
     write.integrated.table(inttab=x$gatk, out.tab=int.tab.path, out.tab.gz=int.tab.gz.path)
 
     ret <- run.pipeline(sc.sample=sc.sample, bulk.sample=bulk.sample,
