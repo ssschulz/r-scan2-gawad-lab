@@ -1,17 +1,50 @@
+# Very simple approximation of how correlation is affected by binomial sampling.
+binomial.effect.on.correlation <- function(cor, depth, n.samples=1e4) {
+    # latent variable in normal space
+    L <- MASS::mvrnorm(n=n.samples, mu=c(0,0), Sigma=matrix(c(1,cor,cor,1),nrow=2))
+    # Transform into [0,1] space
+    B <- 1/(1+exp(-L))
+    # Draw discrete counts from N=depth using prob=B
+    N <- apply(B, 2, function(col) rbinom(n=length(col), size=depth, prob=col))
+
+    cor(N/depth)[1,2]
+}
+
+
 # get an approximate idea of correlation between training hSNPs
 # by only looking at adjacent hSNPs. d is the distance between
 # them and (phaf, phaf2) are the allele frequencies of hSNP i
 # and its upstream neighbor hSNP i+1.
 approx.abmodel.covariance <- function(object, bin.breaks=10^(0:5)) {
     z <- object@gatk[training.site==TRUE & muttype=='snv',
-        .(d=c(diff(pos),0), phaf=phased.hap1/(phased.hap1+phased.hap2))][, phafd:=c(diff(phaf),0)][, phaf2 := phaf+phafd]
+        .(phased.dp=phased.hap1 + phased.hap2, d=c(diff(pos),0), phaf=phased.hap1/(phased.hap1+phased.hap2))][, phafd:=c(diff(phaf),0)][, phaf2 := phaf+phafd]
 
     # bin the adjacent hSNPs by the distance between them
     z[d < 1e5, cut := cut(d, breaks=bin.breaks, ordered_result=T)]
     
+    # make depth integer for easier indexing into inverse functions
+    ret <- z[!is.na(cut), .(observed.cor=cor(phaf,phaf2,use='complete.obs'),
+                            mean.dp=as.integer(mean(phased.dp))), by=cut][order(cut)]
 
-    data.frame(x=bin.breaks[-1],
-        y=z[!is.na(cut), .(cor=cor(phaf,phaf2,use='complete.obs')), by=cut][order(cut)]$cor)
+    # get a rough inverse function of (observed correlation, dp) -> (underlying correlation, dp)
+    all.dps <- unique(as.integer(ret$mean.dp))
+    inverse.fns.by.depth <- setNames(lapply(all.dps, function(depth) {
+        # use a linear interpolation on the approximate relationship between
+        # sampling correlation (on the latent variable) and observed correlation (after binomial sampling)
+        sampling.cor <- seq(0.01, 1, length.out=50)
+        interp.points <- sapply(sampling.cor, binomial.effect.on.correlation, depth=depth)
+        # rule=2: when observations are outside of the observed range, returns the boundary value
+        approxfun(x=interp.points, y=sampling.cor, rule=2)  # returns a function
+    }), as.character(all.dps))
+
+    # data.table complains about recursive indexing if i try to do this in a := statement
+    corrected.cor <- sapply(1:nrow(ret), function(i) inverse.fns.by.depth[[as.character(ret$mean.dp[i])]](ret$observed.cor[i]))
+    ret[, corrected.cor := corrected.cor]
+    ret[, max.d := bin.breaks[-1]]
+
+    ret
+    #data.frame(x=bin.breaks[-1],
+        #y=z[!is.na(cut), .(cor=cor(phaf,phaf2,use='complete.obs')), by=cut][order(cut)]$cor)
 }
 
 

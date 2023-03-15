@@ -57,8 +57,8 @@ setMethod("show.abmodel.training.sites", "SCAN2", function(object) {
                     per.hap$phased.gt[1], per.hap$N[1],
                     per.hap$phased.gt[2], per.hap$N[2]))
             neighbor.approx <- approx.abmodel.covariance(object, bin.breaks=10^(0:5))
-            cors <- round(neighbor.approx$y, 3)
-                cat('#       VAF correlation between neighboring hSNPs:\n')
+            cors <- round(neighbor.approx$observed.cor, 3)
+                cat('#       OBSERVED VAF correlation between neighboring hSNPs:\n')
             cat('#           <10 bp', cors[1], '<100 bp', cors[2],
                 '<1000 bp', cors[3], '<10 kbp', cors[4], '<100 kbp', cors[5], '\n')
             if ('resampled.training.site' %in% colnames(object@gatk)) {

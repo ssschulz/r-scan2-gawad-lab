@@ -318,12 +318,14 @@ plot.abmodel.covariance <- function(object, bin.breaks=c(1, 10^seq(1,5,length.ou
     neighbor.approx <- approx.abmodel.covariance(object, bin.breaks=bin.breaks)
 
     # [-1] - use right-hand side of interval for plotting
-    plot(neighbor.approx,
-        log='x', type='b', pch=20, ylim=0:1,
+    plot(neighbor.approx[,.(max.d, corrected.cor)],
+        log='x', type='b', pch=16, ylim=0:1,
         xlab='Distance between hSNPs (log10)', ylab='Correlation between hSNP VAFs', ...)
+    lines(neighbor.approx[,.(max.d, observed.cor)],
+        type='b', pch=1, lty='dotted')
     plot.mle.fit(object, add=TRUE, col=2, lwd=2)
-    legend('topright', pch=c(20,NA), lwd=1:2, col=1:2,
-        legend=c('Adjacent hSNP approx.', 'MLE fit (avg. over chroms)'))
+    legend('topright', pch=c(16,1,NA), lwd=c(1,1,2), col=c(1,1,2), lty=c('solid','dotted','solid'),
+        legend=c('Adjacent hSNP approx. (corrected)', 'Adjacent hSNP approx. (observed)', 'MLE fit (avg. over chroms)'))
     abline(v=c(150,300), lty='dotted')
 }
 
