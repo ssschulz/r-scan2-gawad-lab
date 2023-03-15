@@ -127,6 +127,30 @@ read.tabix.data <- function(path, header, region=NULL, colClasses=NULL, quiet=TR
             ret <- ret[-1]
         }
     }
+
+    # Handle a corner case that causes a site to show up in non-overlapping regions.
+    # If an indel spans a region boundary, then tabix returns the indel for each region
+    # spanned. E.g., an indel such as
+    #     5   119999998   .   GAAAAC  G
+    # starts at 119999998 and ends at 120000003. If a chunk boundary exists at 120000001,
+    # then this site will be returned twice: for the chunk before and after the boundary:
+    #     $ tabix mmq60.tab.gz 5:110000001-120000000|tail -n 1|cut -f1-5
+    #     5   119999998   .   GAAAAC  G
+    #     $ tabix mmq60.tab.gz 5:120000001-130000000|head -1|cut -f1-5
+    #     5   119999998   .   GAAAAC  G
+    # If we allow this, it will cause duplicates. It doesn't matter which chunk the site
+    # is assigned to so long as it's consistent.
+    #
+    # For now, print out a notification
+    if (!is.null(region)) {
+        out.of.chunk.site <- data$pos < start(region) | data$pos > end(region)
+        s <- sum(out.of.chunk.site)
+        if (s > 0) {
+            cat(paste0("*** INFO: removing the following ", s, " sites, (out of requested chunk bounds: ", seqnames(region)[1], ":", start(region)[1], "-", end(region[1]), "). this is normal behavior for tabix, but is not desirable."))
+            print(data[out.of.chunk.site==TRUE])
+            data <- data[out.of.chunk.site == FALSE]
+        }
+    }
     
     ret
 }
