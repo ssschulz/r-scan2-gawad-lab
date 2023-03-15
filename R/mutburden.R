@@ -105,6 +105,11 @@ setMethod("compute.mutburden", "SCAN2", function(object, gbp.per.genome=get.gbp.
         ret$burden <- ret$rate.per.gb * gbp.per.genome
         ret$somatic.sens <- ret$ncalls / ret$burden
         ret$pre.genotyping.burden <- pre.geno.burden
+    
+        ret$unsupported.filters <- sfp$max.bulk.alt > 0 | sfp$max.bulk.af > 0
+        if (any(ret$unsupported.filters)) {
+            warning('mutation burdens must be extrapolated without clonal mutations (i.e., max.bulk.alt=0 and max.bulk.af=0)! burdens will be estimated, but they are invalid')
+        }
         ret
     }), muttypes)
 
@@ -126,9 +131,14 @@ setMethod("mutburden", "SCAN2", function(object, muttype=c('all', 'snv', 'indel'
     sapply(muttype, function(mt) {
         ret <- object@mutburden[[mt]][2,]$burden
 
-        if (mt == 'indel' & (object@call.mutations$suppress.all.indels | object@call.mutations$suppress.shared.indels)) {
-            warning("#       indel mutation burden estimates ARE NOT VALID (cross-sample panel insufficiency)!")
+        if (object@mutburden[[mt]]$unsupported.filters[2]) {
+            warning('unsupported static.filter.params were used, invalidating mutburden estimation (this is currently true for allowing mutation supporting reads in bulk)')
             ret <- NA
         }
+        if (mt == 'indel' & (object@call.mutations$suppress.all.indels | object@call.mutations$suppress.shared.indels)) {
+            warning("indel mutation burden estimates ARE NOT VALID (cross-sample panel insufficiency)!")
+            ret <- NA
+        }
+        ret
     })
 })
