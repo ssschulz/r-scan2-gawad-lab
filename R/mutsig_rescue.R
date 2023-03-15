@@ -145,7 +145,10 @@ sig.homogeneity.test <- function(object, true.sig, muttype=c('snv', 'indel')) {
 }
 
 
-sig.homogeneity.test.vs.sig <- function(true.muts, true.sig) {
-    # placeholder for now; replace with old manual script
-    NA
+sig.homogeneity.test.vs.sig <- function(true.muts, true.sig, n.samples=1e5, seed=10) {
+    set.seed(10)   # for reproducibility
+    p.cell <- dmultinom(true.muts, size=sum(true.muts), prob=true.sig, log=TRUE)
+    randoms <- stats::rmultinom(n.samples, sum(true.muts), prob=true.sig)
+    logps <- apply(randoms, 2, dmultinom, size=sum(true.muts), prob=true.sig, log=TRUE)
+    mean(logps < p.cell)
 }
