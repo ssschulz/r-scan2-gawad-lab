@@ -177,7 +177,7 @@ check.slots <- function(object, slots, abort=TRUE) {
             if (s == 'static.filter.params')
                 cat("must apply static site filters first (see: add.static.filters())\n")
             if (s == 'fdr.prior.data')
-                cat("must compute or import FDR priors first (see: compute.fdr.priors())\n")
+                cat("must compute or import FDR priors first (see: compute.fdr.prior.data())\n")
         }
     }
     if (error.occurred & abort)
@@ -540,6 +540,7 @@ setMethod("compute.models", "SCAN2", function(object, verbose=TRUE) {
 setGeneric("compute.fdr.prior.data", function(object, mode=c('legacy', 'new'), quiet=FALSE)
     standardGeneric("compute.fdr.prior.data"))
 setMethod("compute.fdr.prior.data", "SCAN2", function(object, mode=c('legacy', 'new'), quiet=FALSE) {
+    # to a chunked SCAN2 object (these are used for parallelization).
     check.slots(object, c('gatk', 'static.filter.params'))
     # ALL candidates must be present for FDR estimation. So this function cannot be applied
     # to a chunked SCAN2 object (these are used for parallelization).
@@ -547,10 +548,10 @@ setMethod("compute.fdr.prior.data", "SCAN2", function(object, mode=c('legacy', '
 
     mode <- match.arg(mode)
     if (!('static.filter' %in% colnames(object@gatk)))
-        stop('must compute static filters before running compute.fdr.priors')
+        stop('must compute static filters before running compute.fdr.prior.data')
 
     muttypes <- c('snv', 'indel')
-    object@fdr.prior.data <- setNames(lapply(muttypes, function(mt) {
+    object@fdr.prior.data <- c(setNames(lapply(muttypes, function(mt) {
         if (mode == 'legacy') {
             # in legacy mode, only candidate sites passing a small set of pre-genotyping
             # crtieria were used. also, notably, indel-specific hard filters (the only one
@@ -569,8 +570,8 @@ setMethod("compute.fdr.prior.data", "SCAN2", function(object, mode=c('legacy', '
             hets=object@gatk[muttype == mt & training.site == TRUE & scalt >= sfp$min.sc.alt]
         } else {
             sfp <- object@static.filter.params[[mt]]
-            # somatic.candidate already implies: balt=0, bulk.gt=0/0, dbsnp=.
-            cand <- object@gatk[muttype == mt & somatic.candidate == TRUE & scalt >= sfp$min.sc.alt & bulk.dp >= sfp$min.bulk.dp]
+            # somatic.candidate already implies many non-single-cell-specific filters
+            cand <- object@gatk[muttype == mt & somatic.candidate == TRUE & scalt >= sfp$min.sc.alt]
             # This is not supposed to be a highly filtered list. The filtering
             # should be somewhat equivalent to the pre-filtering steps on somatic
             # mutation candidate sites.
@@ -583,7 +584,7 @@ setMethod("compute.fdr.prior.data", "SCAN2", function(object, mode=c('legacy', '
     
         # Add the mode used to the fdr prior data structure
         c(compute.fdr.prior.data.for.candidates(candidates=cand, hsnps=hets, random.seed=0, quiet=quiet), mode=mode)
-    }), muttypes)
+    }), muttypes), list(mode=mode))
 
     object
 })
@@ -605,7 +606,7 @@ setMethod("compute.fdr", "SCAN2", function(object, path, mode=c('legacy', 'new')
     check.slots(object, 'fdr.prior.data')
 
     muttypes <- c('snv', 'indel')
-    object@fdr <- setNames(lapply(muttypes, function(mt) {
+    object@fdr <- c(setNames(lapply(muttypes, function(mt) {
         # First use NT/NA tables to assign NT and NA to every site
         object@gatk[muttype == mt, c('nt', 'na') :=
             estimate.fdr.priors(.SD, object@fdr.prior.data[[mt]], use.ghet.loo=FALSE)]
@@ -650,8 +651,8 @@ setMethod("compute.fdr", "SCAN2", function(object, path, mode=c('legacy', 'new')
                     mda.pv*na / (mda.pv*na + mda.beta*nt))]
             sites <- nrow(object@gatk[muttype == mt])
         }
-        list(sites=sites, mode=mode)
-    }), muttypes)
+        list(sites=sites)
+    }), muttypes), list(mode=mode))
 
     object
 })
@@ -700,10 +701,18 @@ function(object, config.path, muttype=c('snv', 'indel'),
 })
         
 
-setGeneric("compute.static.filters", function(object)
+# legacy mode - id.score/hs.score both must be strictly > the id/hs.score.q cutoffs.
+#               this was later found to be problematic for non-BWA MEM aligners that
+#               generate no such CIGAR ops, causing all points to have the same scores.
+#               in that case, allowing >= cutoff effectively disables the filter, which
+#               is necessary.
+setGeneric("compute.static.filters", function(object, mode=c('new', 'legacy'))
         standardGeneric("compute.static.filters"))
-setMethod("compute.static.filters", "SCAN2", function(object) {
+setMethod("compute.static.filters", "SCAN2", function(object, mode=c('new', 'legacy')) {
     check.slots(object, c('gatk', 'cigar.data', 'mut.models'))
+    mode <- match.arg(mode)
+
+    object@static.filter.params$mode <- mode
 
     for (mt in c('snv', 'indel')) {
         sfp <- object@static.filter.params[[mt]]
@@ -721,7 +730,14 @@ setMethod("compute.static.filters", "SCAN2", function(object) {
                         bulk.af <= sfp$max.bulk.af,
                         !sfp$exclude.dbsnp | dbsnp == '.',
                         muttype == 'snv' | unique.donors <= 1 | max.out <= 2)]
-        object@gatk[, static.filter :=
+
+        if (mode == 'legacy') {
+            object@gatk[muttype == mt, c('cigar.id.test', 'cigar.hs.test') := 
+                    list(id.score > object@excess.cigar.scores[[mt]]$id.score.q,
+                        hs.score > object@excess.cigar.scores[[mt]]$hs.score.q)]
+        }
+
+        object@gatk[muttype == mt, static.filter :=
             cigar.id.test & cigar.hs.test & lowmq.test & dp.test &
             abc.test & min.sc.alt.test & max.bulk.alt.test & max.bulk.af.test &
             dbsnp.test & csf.test]
@@ -747,17 +763,27 @@ setMethod("compute.static.filters", "SCAN2", function(object) {
 # `new.params` - must be a 2 element list, named 'snv' and 'indel', each of which
 #                are also lists. These lists may contain named members corresponding
 #                to already existing static filter parameters.
-# `fdr.prior.mode` - `mode` argument to compute.fdr.prior
-# `fdr.mode` - `mode` argument to compute.fdr
-setGeneric("update.static.filter.params", function(object, new.params=list(snv=list(), indel=list()), fdr.prior.mode=c('new', 'legacy'), fdr.mode=c('new', 'legacy'), quiet=FALSE)
+#
+# XXX.mode - override the mode used for stage XXX. If not specified, the original
+#            mode (recorded in the SCAN2 object) will be used.
+#   - `compute.static.filters.mode`
+#   - `fdr.prior.mode`
+#   - `fdr.mode`
+setGeneric("update.static.filter.params", function(object, fdr.prior.mode, fdr.mode, compute.static.filters.mode, new.params=list(snv=list(), indel=list()), quiet=FALSE)
     standardGeneric("update.static.filter.params"))
-setMethod("update.static.filter.params", "SCAN2", function(object, new.params=list(snv=list(), indel=list()), fdr.prior.mode=c('new', 'legacy'), fdr.mode=c('new', 'legacy'), quiet=FALSE) {
+setMethod("update.static.filter.params", "SCAN2", function(object, fdr.prior.mode, fdr.mode, compute.static.filters.mode, new.params=list(snv=list(), indel=list()), quiet=FALSE) {
+    if (!all(names(new.params) %in% c('snv', 'indel')))
+        stop('new.params must be a list containing at least one list named "snv" or "indel"')
+
     for (mt in c('snv', 'indel')) {
-        new.sfp <- new.params[[mt]]
-        old.sfp <- object@static.filter.params[[mt]]
-        for (p in names(new.sfp)) {
-            if (p %in% names(old.sfp) & sfp[p] != old.sfp[p]) {
-                if (!quiet) cat(paste0("    (",mt,") updating ", p, ": ", old.sfp[i], " -> ", new.sfp[i], '\n'))
+        sfp <- object@static.filter.params[[mt]]
+        new <- new.params[[mt]]
+        for (p in names(new)) {
+            if (p %in% names(sfp)) {
+                if (new[p] != sfp[[p]]) {
+                    if (!quiet) cat(paste0("    (",mt,") updating ", p, ": ", sfp[[p]], " -> ", new[[p]], '\n'))
+                    object@static.filter.params[[mt]][[p]] <- new[[p]]
+                }
             } else {
                 if (!quiet) cat(paste0("    (",mt,") ignoring unrecognized parameter ", p, '\n'))
             }
@@ -767,30 +793,44 @@ setMethod("update.static.filter.params", "SCAN2", function(object, new.params=li
     # Update somatic candidate loci and recompute static filters
     sfp <- object@static.filter.params
     annotate.gatk.candidate.loci(object@gatk,
+        snv.min.bulk.dp=sfp$snv$min.bulk.dp,
         snv.max.bulk.alt=sfp$snv$max.bulk.alt,
         snv.max.bulk.af=sfp$snv$max.bulk.af,
+        indel.min.bulk.dp=sfp$indel$min.bulk.dp,
         indel.max.bulk.alt=sfp$indel$max.bulk.alt,
         indel.max.bulk.af=sfp$indel$max.bulk.af)
-    object <- compute.static.filters(object)
+    object <- compute.static.filters(object,
+        mode=ifelse(missing(compute.static.filters.mode), object@static.filter.params$mode, compute.static.filters.mode))
 
     if (!is.null(slot(object, 'fdr.prior.data'))) {
         if (!quiet) cat("    voiding N_T/N_A FDR prior calculations\n")
+        old.mode <- object@fdr.prior.data$mode
         object@fdr.prior.data <- NULL
         object@gatk[, nt := NA]
         object@gatk[, na := NA]
-        object <- compute.fdr.prior(object, mode=mode, quiet=quiet)
+        object <- compute.fdr.prior.data(object,
+            mode=ifelse(missing(fdr.prior.mode), old.mode, fdr.prior.mode),
+            quiet=quiet)
     }
     if (!is.null(slot(object, 'fdr'))) {
         if (!quiet) cat("    voiding per-locus FDR calculations\n")
+        old.mode <- object@fdr$mode
         object@fdr <- NULL
         object@gatk[, lysis.fdr := NA]
         object@gatk[, mda.fdr := NA]
-        object <- compute.fdr(object, mode=mode, quiet=quiet)
+        object <- compute.fdr(object,
+            mode=ifelse(missing(fdr.mode), old.mode, fdr.mode),
+            quiet=quiet)
     }
     if (!is.null(slot(object, 'call.mutations'))) {
         if (!quiet) cat("    recalling all mutations\n")
         object@gatk[, pass := NA]
         object <- call.mutations(object)
+    }
+    if (!is.null(slot(object, 'mutburden'))) {
+        if (!quiet) cat("    recalling all mutations\n")
+        object@mutburden <- NULL
+        object <- compute.mutburden(object)
     }
     if (!is.null(slot(object, 'mutsig.rescue'))) {
         if (!quiet) cat("    voiding mutation signature-based rescue calls\n")
