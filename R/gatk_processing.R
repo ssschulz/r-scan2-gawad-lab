@@ -1,48 +1,48 @@
-# Wrappers for read.table.1sample for actual use.
+# Wrappers and expected formats for read.table.1sample
+gatk.meta.cols <- c(
+    chr='character',
+    pos='integer',
+    dbsnp='character',
+    refnt='character',
+    altnt='character'
+)
 read.gatk.1sample <- function(path, sample.id, region=NULL, quiet=FALSE) {
-    meta.cols <- c(
-        'character',      # chr
-        'integer',        # pos
-        'character',      # dbsnp
-        'character',      # refnt
-        'character'       # altnt
-    )
     read.table.1sample(path=path, sample.id=sample.id, region=region,
-        meta.cols=meta.cols, quiet=quiet)
+        meta.cols=gatk.meta.cols, quiet=quiet)
 }
 
+integrated.table.meta.cols <- c(
+    chr='character',
+    pos='integer',
+    dbsnp='character',
+    refnt='character',
+    altnt='character',
+    mq='numeric',
+    mqrs='numeric',
+    bulk.gt='character',
+    bref='integer',
+    balt='integer',
+    bulk.dp='integer',
+    bulk.af='numeric',
+    tref='integer',
+    talt='integer',
+    muttype='character',
+    mutsig='character',
+    balt.lowmq='integer',
+    phased.gt='character',
+    nalleles='integer',
+    unique.donors='integer',
+    unique.cells='integer',
+    unique.bulks='integer',
+    max.out='integer',
+    sum.out='integer',
+    sum.bulk='integer',
+    somatic.candidate='logical',
+    resampled.training.site='logical'
+)
 read.integrated.table.1sample <- function(path, sample.id, region=NULL, quiet=FALSE) {
-    meta.cols <- c(
-        'character',      # chr
-        'integer',        # pos
-        'character',      # dbsnp
-        'character',      # refnt
-        'character',      # altnt
-        'numeric',        # mq
-        'numeric',        # mqrs
-        'character',      # bulk.gt
-        'integer',        # bref
-        'integer',        # balt
-        'integer',        # bulk.dp
-        'numeric',        # bulk.af
-        'integer',        # tref
-        'integer',        # talt
-        'character',      # muttype
-        'character',      # mutsig  # used to be: 'logical', # moving 'somatic.candidate'
-        'integer',        # balt.lowmq
-        'character',      # phased.gt
-        'integer',        # nalleles
-        'integer',        # unique.donors
-        'integer',        # unique.cells
-        'integer',        # unique.bulks
-        'integer',        # max.out
-        'integer',        # sum.out
-        'integer',        # sum.bulk
-        'logical',        # somatic.candidate
-        'logical'         # resampled.training.site
-    )
     read.table.1sample(path=path, sample.id=sample.id, region=region,
-        meta.cols=meta.cols, quiet=quiet)
+        meta.cols=integrated.table.meta.cols, quiet=quiet)
 }
 
 
@@ -119,7 +119,7 @@ read.table.1sample <- function(path, sample.id, meta.cols, region=NULL, quiet=FA
 #          from other tissues).
 #
 # only `gatk.meta` is modified (by reference).
-annotate.gatk.bulk <- function(gatk.meta, gatk, bulk.sample, sc.samples, legacy=FALSE, quiet=FALSE) {
+annotate.gatk.counts <- function(gatk.meta, gatk, bulk.sample, sc.samples, legacy=FALSE, quiet=FALSE) {
     col.strings <- colnames(gatk)
     tot.cols <- length(col.strings)
     bulk.idx <- Inf
@@ -139,22 +139,29 @@ annotate.gatk.bulk <- function(gatk.meta, gatk, bulk.sample, sc.samples, legacy=
         list(gatk[[bulk.idx]], gatk[[bulk.idx+1]], gatk[[bulk.idx+2]])]
     gatk.meta[, c('bulk.dp', 'bulk.af') := list(bref+balt, balt/(bref+balt))]
 
+    refs <- c()
+    alts <- c()
     if (legacy) {
         # legacy SCANSNV behavior used every alt read count
         alts <- which(colnames(gatk) == 'alt')
         refs <- which(colnames(gatk) == 'ref')
     } else {
-        sample.col.idxs <- seq(8, ncol(gatk), 3)    # all sample column IDs
+        #sample.col.idxs <- seq(8, ncol(gatk), 3)    # all sample column IDs
         # adding the bulk sample so that the `- bref` and `- balt` calculations below can
         # be applied whether legacy mode is chosen or not.
-        sample.col.idxs <- sample.col.idxs[colnames(gatk) %in% c('bulk.sample', sc.samples)]
+        sample.col.idxs <- which(colnames(gatk) %in% c(bulk.sample, sc.samples))
 
         refs <- sample.col.idxs + 1
-        alts <- sample.col.idxs + 1
+        alts <- sample.col.idxs + 2
     }
+    # data.table is very finicky about accessing variables in the calling scope.
+    # especially bad when data.tables are nested in data.table formulae.
+    tref.var <- rowSums(as.matrix(gatk[, ..refs])) - gatk.meta$bref
+    talt.var <- rowSums(as.matrix(gatk[, ..alts])) - gatk.meta$balt
+
     # Annotate the total number of single cell alt and ref reads across all SC samples.
-    gatk.meta[, tref := rowSums(as.matrix(gatk[,..refs])) - bref]
-    gatk.meta[, talt := rowSums(as.matrix(gatk[,..alts])) - balt]
+    gatk.meta[, c('tref', 'talt') := list(tref.var, talt.var)]
+    gatk.meta
 }
 
 
@@ -276,22 +283,43 @@ annotate.gatk.panel <- function(gatk, panel.path, region=NULL, quiet=FALSE) {
 #
 # XXX: any filter not dependent on specific single cell info (like min.bulk.dp)
 # should really be applied here.
-annotate.gatk.candidate.loci <- function(gatk, snv.max.bulk.alt, snv.max.bulk.af, indel.max.bulk.alt, indel.max.bulk.af) {
-    snv.allow.bulk.gt <- snv.max.bulk.alt > 0 | snv.max.bulk.af > 0
-    indel.allow.bulk.gt <- indel.max.bulk.alt > 0 | indel.max.bulk.af > 0
+annotate.gatk.candidate.loci <- function(gatk, snv.min.bulk.dp, snv.max.bulk.alt, snv.max.bulk.af, indel.min.bulk.dp, indel.max.bulk.alt, indel.max.bulk.af, mode=c('new', 'legacy')) {
+    mode <- match.arg(mode)
 
-    gatk[, somatic.candidate :=
-        ((muttype == 'snv' & balt <= snv.max.bulk.alt & bulk.af <= snv.max.bulk.af &
-          (is.na(balt.lowmq) | balt.lowmq <= snv.max.bulk.alt) &
-          # to continue old SCAN2 (mostly non-clonal calling) behavior, require bulk.gt==0/0
-          # when the user doesn't allow any bulk read support.
-          (snv.allow.bulk.gt | bulk.gt == '0/0')) |
-         (muttype == 'indel' & balt <= indel.max.bulk.alt & bulk.af <= indel.max.bulk.af &
-          (is.na(balt.lowmq) | balt.lowmq <= indel.max.bulk.alt) &
-          (indel.allow.bulk.gt | bulk.gt == '0/0'))
-        ) &
-        # N.B. rowSums required >= min.sc.alt, but in legacy uses this was always 2.
-        dbsnp == '.' & talt >= 2]
+    # In legacy mode, bulk depth and bulk alt reads in the low MMQ GATK table
+    # were checked later in the pipeline. However, since these do not change
+    # from single cell to single cell, we prefer to handle them here.
+    # bulk.af was never checked because max bulk alt was always 0 in legacy.
+    if (mode == 'new') {
+        snv.allow.bulk.gt <- snv.max.bulk.alt > 0 | snv.max.bulk.af > 0
+        indel.allow.bulk.gt <- indel.max.bulk.alt > 0 | indel.max.bulk.af > 0
+
+        gatk[, somatic.candidate :=
+            ((muttype == 'snv' & balt <= snv.max.bulk.alt & 
+                    bulk.dp >= snv.min.bulk.dp &
+                    !is.na(bulk.af) & bulk.af <= snv.max.bulk.af &
+                    (is.na(balt.lowmq) | balt.lowmq <= snv.max.bulk.alt) &
+                    # to continue old SCAN2 (intended for non-clonal calling) behavior, require
+                    # bulk.gt==0/0 when the user doesn't allow any bulk read support.
+                    (snv.allow.bulk.gt | bulk.gt == '0/0')
+            ) |
+            (muttype == 'indel' & balt <= indel.max.bulk.alt &
+                bulk.dp >= indel.min.bulk.dp &
+                !is.na(bulk.af) & bulk.af <= indel.max.bulk.af &
+                (is.na(balt.lowmq) | balt.lowmq <= indel.max.bulk.alt) &
+                (indel.allow.bulk.gt | bulk.gt == '0/0')
+            )) &
+            # N.B. talt >= 2 becomes a less useful cutoff as #cells increases..
+            dbsnp == '.' & talt >= 2]
+    } else if (mode == 'legacy') {
+        gatk[, somatic.candidate :=
+            ((muttype == 'snv' & balt <= snv.max.bulk.alt) |
+             (muttype == 'indel' & balt <= indel.max.bulk.alt)) &
+            bulk.gt == '0/0' & dbsnp == '.' & talt >= 2]
+    } else
+        stop('unrecognized mode')
+
+    gatk
 }
 
 
@@ -310,12 +338,7 @@ annotate.gatk.candidate.loci <- function(gatk, snv.max.bulk.alt, snv.max.bulk.af
 #      CIGAR op filters (indel ops) is actually incorrect either way.
 # In any case, this likely has a relatively insignificant effect so we are leaving it as
 # it was in legacy calling for now.
-#
-# n.meta.cols is a horrible hack to keep metacolumns on the left so that they
-# can be easily selected later. this will certainly be broken inadvertently and
-# cause headaches. notably, this is (final n.meta.cols)-1 because this function
-# adds one new meta column to gatk by reference.
-gatk.resample.phased.sites <- function(gatk, M=20, seed=0, n.meta.cols=24) {
+gatk.resample.phased.sites <- function(gatk, M=20, seed=0) {
     ret <- list()
     for (mt in c('snv', 'indel')) {
         aux.data <- resample.germline(
@@ -332,8 +355,15 @@ gatk.resample.phased.sites <- function(gatk, M=20, seed=0, n.meta.cols=24) {
     }
 
     gatk[is.na(resampled.training.site), resampled.training.site := FALSE]
-    # put resampled.training.site in the left block of columns of metadata
-    data.table::setcolorder(gatk, neworder=c(1:n.meta.cols, ncol(gatk), (n.meta.cols+1):(ncol(gatk)-1)))
+
+    # reorder columns so that resampled.training.site, applicable to all single
+    # cells in the integrated table, is in the left block of columns. the right block of
+    # columns is intended to only contain per-sample read count data.
+    #
+    # must use column numbers because column names are not unique: each sample has a 'ref'
+    # and 'alt' column.
+    n.meta.cols <- length(integrated.table.meta.cols)
+    data.table::setcolorder(gatk, neworder=c(1:(n.meta.cols-1), ncol(gatk), n.meta.cols:(ncol(gatk)-1)))
 
     return(ret)
 }
