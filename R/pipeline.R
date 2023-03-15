@@ -496,9 +496,15 @@ mutsig.rescue <- function(object.paths, add.muts, rescue.target.fdr=0.01,
         })
     }, enable=TRUE)
 
+    # consolidate all SHT test p-values for multiple hypothesis testing correction
+    shts <- data.table(sample=sapply(results, function(r) r$sample),
+        sig.homogeneity.test=sapply(results, function(r) r$sig.homogeneity.test))
+    shts$bonferroni <- p.adjust(p=shts$sig.homogeneity.test, method='bonferroni')
+    shts$holm <- p.adjust(p=shts$sig.homogeneity.test, method='holm')
+    shts$bh.fdr <- p.adjust(p=shts$sig.homogeneity.test, method='fdr')
+
     list(muts=do.call(rbind, lapply(results, function(r) r$muts)),
-         sig.homogeneity.tests=setNames(lapply(results, function(r) r$sig.homogeneity.test),
-                                        sapply(results, function(r) r$sample)))
+         sig.homogeneity.tests=shts)
 }
 
 
