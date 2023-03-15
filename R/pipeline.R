@@ -102,8 +102,9 @@ run.pipeline <- function(
                     report.mem=report.mem)
             p(class='sticky', amount=0, pc)
 
+            # XXX: forcing legacy for now. remember to disable later
             pc <- perfcheck(paste('compute.static.filters',i),
-                gt <- compute.static.filters(gt), report.mem=report.mem)
+                gt <- compute.static.filters(gt, mode='legacy'), report.mem=report.mem)
             p(class='sticky', amount=0, pc)
 
             p()
@@ -114,7 +115,7 @@ run.pipeline <- function(
     cat("Chunked pipeline complete.\n")
 
     x <- do.call(concat, xs)
-    x <- compute.fdr.prior(x, mode=ifelse(legacy, 'legacy', 'new'), quiet=!verbose)
+    x <- compute.fdr.prior.data(x, mode=ifelse(legacy, 'legacy', 'new'), quiet=!verbose)
     x <- compute.fdr(x, mode=ifelse(legacy, 'legacy', 'new'), quiet=!verbose)
     x <- call.mutations(x, target.fdr=target.fdr, quiet=!verbose)
     x <- add.depth.profile(x, depth.path=dptab)
@@ -128,10 +129,11 @@ run.pipeline <- function(
 # contains many site-specific annotations and the full matrix of alt and ref
 # read counts for all single cells and bulks.
 make.integrated.table <- function(mmq60.tab, mmq1.tab, phased.vcf,
-    bulk.sample,
-    snv.max.bulk.alt, snv.max.bulk.af,
-    indel.max.bulk.alt, indel.max.bulk.af,
-    genome, genome.seqinfo=genome.string.to.seqinfo.object(genome),
+    bulk.sample, sc.samples, genome,
+    snv.min.bulk.dp, indel.min.bulk.dp,
+    snv.max.bulk.alt=0, snv.max.bulk.af=0,
+    indel.max.bulk.alt=0, indel.max.bulk.af=0,
+    genome.seqinfo=genome.string.to.seqinfo.object(genome),
     panel=NULL,
     grs=tileGenome(seqlengths=genome.seqinfo[seqlevels(genome.seqinfo)[1:22]], tilewidth=10e6, cut.last.tile.in.chrom=TRUE),
     legacy=FALSE, quiet=TRUE, report.mem=FALSE)
@@ -155,16 +157,20 @@ make.integrated.table <- function(mmq60.tab, mmq1.tab, phased.vcf,
                 sitewide <- gatk[,1:7]
                 samplespecific <- gatk[,-(1:7)]
 
-                annotate.gatk.bulk(sitewide, samplespecific, bulk.sample, legacy=legacy, quiet=quiet)
+                annotate.gatk.counts(gatk.meta=sitewide, gatk=samplespecific,
+                    bulk.sample=bulk.sample, sc.samples=sc.samples, legacy=legacy, quiet=quiet)
                 annotate.gatk(gatk=sitewide, genome.string=genome, add.mutsig=TRUE)
                 annotate.gatk.lowmq(sitewide, path=mmq1.tab, bulk=bulk.sample, region=gr, quiet=quiet)
                 annotate.gatk.phasing(sitewide, phasing.path=phased.vcf, region=gr, quiet=quiet)
                 annotate.gatk.panel(sitewide, panel.path=panel, region=gr, quiet=quiet)
                 annotate.gatk.candidate.loci(sitewide,
+                    snv.min.bulk.dp=snv.min.bulk.dp,
                     snv.max.bulk.alt=snv.max.bulk.alt,
                     snv.max.bulk.af=snv.max.bulk.af,
+                    indel.min.bulk.dp=indel.min.bulk.dp,
                     indel.max.bulk.alt=indel.max.bulk.alt,
-                    indel.max.bulk.af=indel.max.bulk.af)
+                    indel.max.bulk.af=indel.max.bulk.af,
+                    mode=ifelse(legacy, 'legacy', 'new'))   # mode=new is still experimental
             }, report.mem=report.mem)
             p(class='sticky', amount=1, pc)
 
