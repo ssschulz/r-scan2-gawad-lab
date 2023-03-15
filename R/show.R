@@ -115,9 +115,9 @@ setMethod("show.abmodel.ab.distn", "SCAN2", function(object) {
 
 setGeneric("show.abmodel", function(object) standardGeneric("show.abmodel"))
 setMethod("show.abmodel", "SCAN2", function(object) {
-    abmodel.training.sites(object)
-    abmodel.params(object)
-    abmodel.distn(object)
+    show.abmodel.training.sites(object)
+    show.abmodel.params(object)
+    show.abmodel.ab.distn(object)
 })
 
     
@@ -153,6 +153,8 @@ setMethod("show.static.filters", "SCAN2", function(object) {
         if (!('static.filter' %in% colnames(object@gatk))) {
             cat("(not applied)\n")
         } else {
+            if ('mode' %in% names(object@static.filter.params))  # supporting older versions of SCAN2 objects
+                cat(paste0('mode=', object@static.filter.params$mode))
             cat('\n')
             na.or.val <- function(x, val=0) ifelse(is.na(x), val, x)
             for (mt in c('snv', 'indel')) {
@@ -171,8 +173,11 @@ setMethod("show.fdr.prior", "SCAN2", function(object) {
     if (is.null(object@fdr.prior.data)) {
         cat("(not computed)\n")
     } else {
+        if ('mode' %in% names(object@fdr.prior.data))  # supporting older versions of SCAN2 objects
+            cat(paste0('mode=', object@fdr.prior.data$mode))
         cat('\n')
-        for (mt in names(object@fdr.prior.data)) {
+        #for (mt in names(object@fdr.prior.data)) {
+        for (mt in c('snv', 'indel')) {
             cat(sprintf("#       %6s: %8d candidates %8d germline hets %8d max burden\n",
                 mt, object@fdr.prior.data[[mt]]$candidates.used,
                 object@fdr.prior.data[[mt]]$hsnps.used,
@@ -189,7 +194,7 @@ setMethod("show.depth.profile", "SCAN2", function(object) {
         cat("(not added)\n")
     } else {
         cat('\n')
-        for (mt in names(object@fdr.prior.data)) {
+        for (mt in c('snv', 'indel')) {
             sfp <- object@static.filter.params[[mt]]
             dptab <- object@depth.profile$dptab
             cat(sprintf("#       %6s: genome <:   min. bulk DP %0.1f%%,   min. sc DP %0.1f%%,   either %0.1f%%\n",
@@ -234,11 +239,11 @@ setMethod("show.mutburden", "SCAN2", function(object) {
         cat('\n')
         for (mt in c('snv', 'indel')) {
             mb <- object@mutburden[[mt]][2,]  # row 2 is middle 50%
-            cat(sprintf("#       %6s: %6d somatic,   %0.1f%% sens,   %0.3f callable Gbp,   %0.1f muts/haploid Gbp,   %0.1f muts per genome\n",
-                mt, mb$ncalls, 100*mb$callable.sens, mb$callable.bp/1e9, mb$rate.per.gb, mutburden(object, muttype=mt)))
-        }
-        if (object@call.mutations$suppress.all.indels | object@call.mutations$suppress.shared.indels) {
-            cat(sprintf("#       indel mutation burden estimates ARE NOT VALID (cross-sample panel insufficiency)!\n"))
+            cat(sprintf("#       %6s: %6d somatic,   %0.1f%% sens,   %0.3f callable Gbp,   %0.1f muts/haploid Gbp,   %0.1f muts per genome%s%s\n",
+                mt, mb$ncalls, 100*mb$callable.sens, mb$callable.bp/1e9, mb$rate.per.gb, mutburden(object, muttype=mt),
+                ifelse(any(mb$unsupported.filters), ' (INVALID: static.filter.params)', ''),
+                ifelse(mt=='indel' & (object@call.mutations$suppress.all.indels | object@call.mutations$suppress.shared.indels), ' (INVALID: cross-sample panel insufficient)', '')
+                ))
         }
     }
 })
