@@ -571,7 +571,7 @@ setMethod("compute.fdr.prior.data", "SCAN2", function(object, mode=c('legacy', '
         } else {
             sfp <- object@static.filter.params[[mt]]
             # somatic.candidate already implies many non-single-cell-specific filters
-            cand <- object@gatk[muttype == mt & somatic.candidate == TRUE & scalt >= sfp$min.sc.alt]
+            cand <- object@gatk[muttype == mt & somatic.candidate == TRUE & scalt >= sfp$min.sc.alt & dp >= sfp$min.sc.dp]
             # This is not supposed to be a highly filtered list. The filtering
             # should be somewhat equivalent to the pre-filtering steps on somatic
             # mutation candidate sites.
@@ -579,7 +579,7 @@ setMethod("compute.fdr.prior.data", "SCAN2", function(object, mode=c('legacy', '
             # Eventually, I think it would make most sense to apply the entire static
             # filter set to both candidates and hets (minus bulk alt filters, which
             # obviously will not work for hets) before computing FDR priors.
-            hets <- object@gatk[muttype == mt & training.site == TRUE & scalt >= sfp$min.sc.alt & bulk.dp >= sfp$min.bulk.dp]
+            hets <- object@gatk[muttype == mt & training.site == TRUE & scalt >= sfp$min.sc.alt & dp >= sfp$min.sc.dp & bulk.dp >= sfp$min.bulk.dp]
         }
     
         # Add the mode used to the fdr prior data structure
@@ -825,6 +825,7 @@ setMethod("update.static.filter.params", "SCAN2", function(object, fdr.prior.mod
     if (!is.null(slot(object, 'call.mutations'))) {
         if (!quiet) cat("    recalling all mutations\n")
         object@gatk[, pass := NA]
+        object@gatk[, training.pass := NA]
         object <- call.mutations(object)
     }
     if (!is.null(slot(object, 'mutburden'))) {
