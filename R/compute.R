@@ -1,3 +1,39 @@
+# tilewidth purposefully not exposed here
+compute.hsnp.spatial.sens <- function(object, muttype=c('snv', 'indel'), quiet=TRUE) {
+    muttype <- match.arg(muttype)
+
+    if (!quiet) cat("Tiling genome with 10 kb tiles\n")
+    tiles <- tileGenome(seqlengths=seqlengths(results@region), tilewidth=1e4, cut.last.tile.in.chrom=T)
+
+    # For hSNP sensitivity with 10kb windows, acf() suggests useful info only
+    # exists for the nearest tile up- or downstream. Even so, the correlation
+    # is only 0.1.
+    compute.hsnp.sens.for.tiles(object, tiles, smooth.tiles=1, muttype=muttype, quiet=quiet)
+}
+
+
+compute.hsnp.sens.for.tiles <- function(object, tiles, smooth.tiles=0, muttype=c('snv', 'indel'), quiet=TRUE) {
+    muttype <- match.arg(muttype)
+
+    # neither muttype == muttype nor muttype == ..muttype work. whatever.
+    different.variable.name <- muttype
+    hsnps <- object@gatk[training.site == TRUE & muttype == different.variable.name]
+    gr <- GRanges(seqnames=hsnps$chr, ranges=IRanges(start=hsnps$pos, width=1),
+        seqinfo=object@genome.seqinfo)
+    gr$pass <- hsnps$training.pass
+
+    if (!quiet) cat(paste0("Mapping ", nrow(hsnps), " germline ", muttype, "s to ", length(tiles), " non-overlapping tiles\n"))
+    tiles$n.called <- countOverlaps(tiles, gr[gr$pass == TRUE])
+    tiles$n.tested <- countOverlaps(tiles, gr)
+    # this will be 0, just to allow for smoothing, then set to NA
+    tiles$sens <- ifelse(tiles$n.tested > 0, tiles$n.called/tiles$n.tested, 0)
+    tiles$sens.smoothed <- as.numeric(stats::filter(tiles$sens,
+        filter=c(1, rep(1, 2*smooth.tiles))/(1+2*smooth.tiles), sides=2))
+    tiles$sens <- ifelse(tiles$n.tested > 0, tiles$sens, NA)
+    tiles
+}
+
+
 # Very simple approximation of how correlation is affected by binomial sampling.
 binomial.effect.on.correlation <- function(cor, depth, n.samples=1e4) {
     # latent variable in normal space
@@ -384,8 +420,7 @@ estimate.fdr.priors.old <- function(candidates, prior.data)
 }
 
 
-# New implementation of above using a two tables rather than loops
-# XXX: detect hSNP status here and apply NEW FDR adjustment
+# New implementation of above using tables rather than loops
 estimate.fdr.priors <- function(candidates, prior.data, use.ghet.loo=FALSE)
 {
     # Assign each candidate mutation to a (VAF, DP) bin
