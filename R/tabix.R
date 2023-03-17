@@ -143,12 +143,12 @@ read.tabix.data <- function(path, header, region=NULL, colClasses=NULL, quiet=TR
     #
     # For now, print out a notification
     if (!is.null(region)) {
-        out.of.chunk.site <- data$pos < start(region) | data$pos > end(region)
+        out.of.chunk.site <- ret$pos < start(region) | ret$pos > end(region)
         s <- sum(out.of.chunk.site)
         if (s > 0) {
             cat(paste0("*** INFO: removing the following ", s, " sites, (out of requested chunk bounds: ", seqnames(region)[1], ":", start(region)[1], "-", end(region[1]), "). this is normal behavior for tabix, but is not desirable."))
-            print(data[out.of.chunk.site==TRUE])
-            data <- data[out.of.chunk.site == FALSE]
+            print(ret[out.of.chunk.site==TRUE])
+            ret <- ret[out.of.chunk.site == FALSE]
         }
     }
     
