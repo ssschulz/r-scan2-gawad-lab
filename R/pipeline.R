@@ -102,9 +102,8 @@ run.pipeline <- function(
                     report.mem=report.mem)
             p(class='sticky', amount=0, pc)
 
-            # XXX: forcing legacy for now. remember to disable later
             pc <- perfcheck(paste('compute.static.filters',i),
-                gt <- compute.static.filters(gt, mode='legacy'), report.mem=report.mem)
+                gt <- compute.static.filters(gt, mode=ifelse(legacy, 'legacy', 'new')), report.mem=report.mem)
             p(class='sticky', amount=0, pc)
 
             p()
