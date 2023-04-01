@@ -68,29 +68,37 @@ setMethod("compute.mutburden", "SCAN2", function(object, gbp.per.genome=get.gbp.
             # Break data into 4 quantiles based on depth, use the middle 2 (i.e.,
             # middle 50%) to reduce noise caused by very low and very high depth.
             q=4
+            qstouse <- c(1,2,4)
             qbreaks <- quantile(g$dp, prob=0:q/q)
     
-            # s also uses g-based depth quantiles
-            s$dpq <- cut(s$dp, qbreaks, include.lowest=T, labels=F)
-            s$dpq[s$dpq==3] <- 2 # merge 25-75% into a single bin
-            g$dpq <- cut(g$dp, qbreaks, include.lowest=T, labels=F)
-            g$dpq[g$dpq==3] <- 2
+            if (length(unique(qbreaks)) != q+1) {
+                ncalls <- rep(NA, 3)
+                callable.sens <- rep(NA, 3)
+                rowqs <- rep(NA, 3)
+                warning(paste('could not derive unique breakpoints for quartiles of sequencing depth at germline hSNPs. got qbreaks = ', deparse(qbreaks)))
+            } else {
+                # s also uses g-based depth quantiles
+                s$dpq <- cut(s$dp, qbreaks, include.lowest=T, labels=F)
+                s$dpq[s$dpq==3] <- 2 # merge 25-75% into a single bin
+                g$dpq <- cut(g$dp, qbreaks, include.lowest=T, labels=F)
+                g$dpq[g$dpq==3] <- 2
 
-            # select the subset of the depth profile passing the bulk depth requirement
-            # cut down dptab to the max value in g$dp (+1 because 1 corresponds to dp=0)
-            rowqs <- cut(0:(nrow(dptab)-1), qbreaks, include.lowest=T, labels=F)
-            rowqs[rowqs==3] <- 2
+                # select the subset of the depth profile passing the bulk depth requirement
+                # cut down dptab to the max value in g$dp (+1 because 1 corresponds to dp=0)
+                rowqs <- cut(0:(nrow(dptab)-1), qbreaks, include.lowest=T, labels=F)
+                rowqs[rowqs==3] <- 2
     
-            qstouse <- c(1,2,4)
-            s <- s[dpq %in% qstouse]
-            g <- g[dpq %in% qstouse]
+                s <- s[dpq %in% qstouse]
+                g <- g[dpq %in% qstouse]
+
+                ncalls <- sapply(qstouse, function(q) sum(s[dpq == q]$pass, na.rm=TRUE))
+                callable.sens <- sapply(qstouse, function(q) mean(g[bulk.dp >= sfp$min.bulk.dp & dpq == q & resampled.training.site == TRUE]$training.pass, na.rm=TRUE))  # only use resampled training sites to estimate sensitivity (hSNPs in general are closer to other hSNPs than somatic candidates are to hSNPs, leading to better local allele balance estimates and thus would overestimate sensitivity. Resampling the sites to match candidate-to-hSNP distances reduces this bias)
+            }
     
             # this data.frame has 1 row for each quantile. the second row (=middle 50%)
             # is ultimately what we're interested in, but having the other calculations
             # around can also be interesting.
-            ret <- data.frame(
-                ncalls=sapply(qstouse, function(q) sum(s[dpq == q]$pass, na.rm=TRUE)),
-                callable.sens=sapply(qstouse, function(q) mean(g[bulk.dp >= sfp$min.bulk.dp & dpq == q & resampled.training.site == TRUE]$training.pass, na.rm=TRUE)),  # only use resampled training sites to estimate sensitivity (hSNPs in general are closer to other hSNPs than somatic candidates are to hSNPs, leading to better local allele balance estimates and thus would overestimate sensitivity. Resampling the sites to match candidate-to-hSNP distances reduces this bias)
+            ret <- data.frame(ncalls=ncalls, callable.sens=callable.sens,
                 callable.bp=sapply(split(dptab[,-(1:sfp$min.bulk.dp)], rowqs), sum)
             )
         }
