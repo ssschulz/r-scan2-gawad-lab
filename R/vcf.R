@@ -1,3 +1,6 @@
+# ALL DEAD CODE --- keeping around for possible later use to generate VCF files, which users tend to want.
+
+
 # Create VCF output for a single sample called by SCAN-SNV
 # output.fmt may contain a single '%s' which will be replaced by
 # the sample name.
