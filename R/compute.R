@@ -513,7 +513,8 @@ resample.germline <- function(sites, hsnps, M=50, seed=0) {
     # Remember that the nearest hSNP must be on the same chromosome
     tmpsom <- find.nearest.germline(som=sites[order(sites$pos),],
         germ=hsnps,
-        chrs=unique(sites$chr))
+        #chrs=unique(sites$chr))   # unique() might not preserve order
+        chrs=sites$chr[!duplicated(sites$chr)])
     spos <- log10(abs(tmpsom$pos-tmpsom$nearest.het))
 
     # Distribution of hSNP distances
