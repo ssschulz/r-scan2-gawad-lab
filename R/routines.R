@@ -1,6 +1,6 @@
 # given two data frames of somatic and germline locations, annotate
 # the somatic data frame with the position of the nearest germline entry.
-find.nearest.germline <- function (som, germ, chrs = c(1:22, "X")) {
+find.nearest.germline <- function (som, germ, chrs) {
     som$nearest.het <- NA
     for (chr in chrs) {
         gpos <- germ$pos[germ$chr == chr]
