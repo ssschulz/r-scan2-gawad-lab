@@ -53,6 +53,9 @@ genome.string.to.seqinfo.object <- function(genome=c('hs37d5', 'hg38', 'mm10')) 
         return(GenomeInfoDb::Seqinfo(genome='hg38'))
     } else if (genome == 'mm10') {
         return(GenomeInfoDb::Seqinfo(genome='mm10'))
+    } else {
+        # shouldn't be possible
+        stop("unsupported genome string")
     }
 }
 
@@ -65,13 +68,39 @@ genome.string.to.bsgenome.object <- function(genome=c('hs37d5', 'hg38', 'mm10'))
     } else if (genome == 'hg38') {
         require(BSgenome.Hsapiens.UCSC.hg38)
         genome <- BSgenome.Hsapiens.UCSC.hg38
-    } else if (genome == 'mm9') {
+    } else if (genome == 'mm10') {
         require(BSgenome.Mmusculus.UCSC.mm10)
         genome <- BSgenome.Mmusculus.UCSC.mm10
+    } else {
+        # shouldn't be possible
+        stop('unsupported genome string')
     }
     genome
 }
 
+genome.string.to.tiling <- function(genome=c('hs37d5', 'hg38', 'mm10'), tilewidth=10e6, group=c('auto', 'sex', 'circular', 'all')) {
+    genome <- match.arg(genome)
+    group <- match.arg(group)
+
+    if (genome == 'hs37d5') {
+        species <- 'Homo_sapiens'
+    } else if (genome == 'hg38') {
+        species <- 'Homo_sapiens'
+    } else if (genome == 'mm10') {
+        species <- 'Mus_musculus'
+    } else {
+        # shouldn't be possible
+        stop("unsupported genoome string")
+    }
+
+    sqi <- genome.string.to.seqinfo.object(genome)
+    # seqlevelsStyle()[1] - 'hs37d5' returns both NCBI and Ensembl as styles, pick the first one
+    chroms.to.tile <-
+        GenomeInfoDb::extractSeqlevelsByGroup(species=species, style=seqlevelsStyle(sqi)[1], group=group)
+
+    grs <- GenomicRanges::tileGenome(seqlengths=sqi[chroms.to.tile], tilewidth=tilewidth, cut.last.tile.in.chrom=TRUE)
+    grs
+}
 
 make.scan <- function(single.cell, bulk, genome=c('hs37d5', 'hg38', 'mm10'), region=NULL) {
     genome <- match.arg(genome)
@@ -363,13 +392,13 @@ setMethod("add.ab.fits", "SCAN2", function(object, path) {
 #         accuracy.
 #   - alim, blim, clim, dlim - starting bounds for the (a,b,c,d) parameter
 #         space.
-setGeneric("compute.ab.fits", function(object, path, chroms=1:22,
+setGeneric("compute.ab.fits", function(object, path, chroms, #=1:22,
     n.cores=future::availableCores(),
     logp.samples.per.step=20000, refine.n.steps=4, refine.top.n=50,
     n.tiles=250, hsnp.tilesize=100,
     alim=c(-7, 2), blim=c(2, 4), clim=c(-7, 2), dlim=c(2, 6))
     standardGeneric("compute.ab.fits"))
-setMethod("compute.ab.fits", "SCAN2", function(object, path, chroms=1:22,
+setMethod("compute.ab.fits", "SCAN2", function(object, path, chroms, #=1:22,
     n.cores=future::availableCores(),
     logp.samples.per.step=20000, refine.n.steps=4, refine.top.n=50,
     n.tiles=250, hsnp.tilesize=100,
@@ -384,12 +413,13 @@ setMethod("compute.ab.fits", "SCAN2", function(object, path, chroms=1:22,
         stop(sprintf('logp.samples.per.step must be a multiple of n.chunks (%d)', n.chunks))
     samples.per.chunk <- ceiling(logp.samples.per.step / n.chunks)
 
+    # XXX: Now requiring fully formed chromosome names
     # Just for convenience. Allow "chroms=1:22" to work for human autosomes
     # If the user specifies characters, then we assume those are fully formed
     # names.
-    if (is.integer(chroms)) {
-        chroms <- seqlevels(object@genome.seqinfo)[chroms]
-    }
+    #if (is.integer(chroms)) {
+        #chroms <- seqlevels(object@genome.seqinfo)[chroms]
+    #}
 
     # Check all chroms up front so the loop doesn't die after a significant amount of work
     not.in <- chroms[!(chroms %in% seqnames(object@genome.seqinfo))]
