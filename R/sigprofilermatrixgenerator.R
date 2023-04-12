@@ -64,7 +64,8 @@ classify.muts <- function(df, genome.string, spectype='SNV',
     # Read in the types
     # SigProfilerMatrixGenerator output files have chromosomes named 1..22 without
     # the 'chr' prefix, even if the prefix was present in the input vcf.
-    annot.files <- paste0(spmgd, '/output/vcf_files/', spectype, '/', c(1:22,'X','Y'), "_seqinfo.txt")
+    chrs.to.read <- sub('chr', '', s$chr[!duplicated(s$chr)])
+    annot.files <- paste0(spmgd, '/output/vcf_files/', spectype, '/', chrs.to.read, "_seqinfo.txt")
     if (spectype == 'ID') {
         colclasses <- c(V2='character', V5='character', V6='character')
     } else if (spectype == 'SNV') {
@@ -109,7 +110,7 @@ classify.muts <- function(df, genome.string, spectype='SNV',
 genome.to.spmgr.format <- c(
     hs37d5='GRCh37',
     hg38='GRCh38',
-    mm9='GRCm37')
+    mm10='mm10')
 
 # new version: just returns the vector of indel classes
 # FORCES ID83 FOR NOW
