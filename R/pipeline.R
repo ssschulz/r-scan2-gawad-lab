@@ -32,10 +32,9 @@ run.pipeline <- function(
     sccigars, bulkcigars, trainingcigars,
     dptab,
     genome,
-    genome.seqinfo=genome.string.to.seqinfo.object(genome),
+    grs=genome.string.to.tiling(genome, tilewidth=10e6, group='auto'),
     target.fdr=0.01,
     config.yaml=NULL,
-    grs=tileGenome(seqlengths=genome.seqinfo[seqlevels(genome.seqinfo)[1:22]], tilewidth=10e6, cut.last.tile.in.chrom=TRUE),
     legacy=FALSE, report.mem=TRUE, verbose=TRUE)
 {
     cat('Starting chunked SCAN2 pipeline on', length(grs), 'chunks\n')
@@ -132,9 +131,8 @@ make.integrated.table <- function(mmq60.tab, mmq1.tab, phased.vcf,
     snv.min.bulk.dp, indel.min.bulk.dp,
     snv.max.bulk.alt=0, snv.max.bulk.af=0,
     indel.max.bulk.alt=0, indel.max.bulk.af=0,
-    genome.seqinfo=genome.string.to.seqinfo.object(genome),
     panel=NULL,
-    grs=tileGenome(seqlengths=genome.seqinfo[seqlevels(genome.seqinfo)[1:22]], tilewidth=10e6, cut.last.tile.in.chrom=TRUE),
+    grs=genome.string.to.tiling(genome, tilewidth=10e6, group='auto'),
     legacy=FALSE, quiet=TRUE, report.mem=FALSE)
 {
     cat('Starting integrated table pipeline on', length(grs), 'chunks.\n')
@@ -189,10 +187,69 @@ make.integrated.table <- function(mmq60.tab, mmq1.tab, phased.vcf,
 }
 
 
+
+# The reason for chunking this pipeline is dbSNP can be 10s of GB, which requires
+# quite alot of RAM if read in its entirety.
+join.phased.hsnps <- function(bulk.called.vcf, hsnps.vcf, genome,
+    grs=genome.string.to.tiling(genome, tilewidth=10e6, group='auto'),
+    quiet=TRUE, report.mem=FALSE)
+{
+    cat('Starting phased hSNP joining on', length(grs), 'chunks.\n')
+    cat('Parallelizing with', future::nbrOfWorkers(), 'cores.\n')
+
+    progressr::with_progress({
+        p <- progressr::progressor(along=1:length(grs))
+        p(amount=0, class='sticky', perfcheck(print.header=TRUE))
+        xs <- future.apply::future_lapply(1:length(grs), function(i) {
+            gr <- grs[i,]
+
+            pc <- perfcheck(paste('read vcfs and join',i), {
+                # the per-sample genotype information is not relevant - we're just annotating
+                # biallelic sites that are called (i.e., not no-called, which is genotype=./.
+                # in GATK parlance) in bulk.
+                gatk.dt <- read.tabix.data(path=bulk.called.vcf, region=gr, quiet=quiet)[,1:9]
+                colnames(gatk.dt)[1:9] <- c('chr', 'pos', 'dbsnp', 'refnt', 'altnt', 'qual', 'filter', 'info', 'format')
+
+                # Don't waste time reading in dbSNP if there are no GATK rows to annotate
+                if (nrow(gatk.dt) == 0) {
+                    # add empty final phased genotype column just to preserve table structure
+                    gatk.dt[, phasedgt := NA]
+                } else {
+                    hsnps.dt <- read.tabix.data(path=hsnps.vcf, region=gr, quiet=quiet,
+                        header='chr\tpos\tdbsnp\trefnt\taltnt\tqual\tfilter\tinfo\tformat\tphasedgt',
+                        colClasses=list(character=c('refnt', 'altnt', 'qual', 'filter', 'info')))
+                    hsnps.dt[, qual := '.']
+                    hsnps.dt[, filter := '.']
+                    hsnps.dt[, info := '.']
+                    hsnps.dt[, format := 'GT']
+
+                    # has the (required) side-effect of coercing all column types to character.
+                    # in particular, when a file has 0 rows of data, data.table::fread will default
+                    # all column types to logical, then it will complain if one tries to join to
+                    # a non-logical type.
+                    gatk.dt[, id := paste(chr, pos, dbsnp, refnt, altnt)]
+                    hsnps.dt[, id := paste(chr, pos, dbsnp, refnt, altnt)]
+
+                    # don't use setkey() here because it can reorder the data
+                    gatk.dt <- merge(hsnps.dt, gatk.dt[, .(id)], by='id', all=FALSE, sort=FALSE)
+                    gatk.dt$id <- NULL # no longer needed
+                }
+            }, report.mem=report.mem)
+            p(class='sticky', amount=1, pc)
+
+            gatk.dt
+        })
+    })
+
+    gatk <- rbindlist(xs)
+    gatk
+}
+
+
+
 digest.depth.profile <- function(path, sc.sample, bulk.sample,
-    genome, genome.seqinfo=genome.string.to.seqinfo.object(genome),
-    clamp.dp=500,
-    grs=tileGenome(seqlengths=genome.seqinfo[seqlevels(genome.seqinfo)[1:22]], tilewidth=10e6, cut.last.tile.in.chrom=TRUE),
+    genome, clamp.dp=500,
+    grs=genome.string.to.tiling(genome, tilewidth=10e6, group='auto'),
     quiet=TRUE, report.mem=TRUE)
 {
     cat('Digesting depth profile using', length(grs), 'chunks.\n')
@@ -225,8 +282,7 @@ digest.depth.profile <- function(path, sc.sample, bulk.sample,
 # here are basepair resolution and cover essentially the entire genome.
 make.callable.regions <- function(path, sc.sample, bulk.sample,
     genome, min.sc.dp, min.bulk.dp,
-    genome.seqinfo=genome.string.to.seqinfo.object(genome),
-    grs=tileGenome(seqlengths=genome.seqinfo[seqlevels(genome.seqinfo)[1:22]], tilewidth=5e6, cut.last.tile.in.chrom=TRUE),
+    grs=genome.string.to.tiling(genome, tilewidth=5e6, group='auto'),
     quiet=TRUE, report.mem=TRUE)
 {
     cat('Getting callable regions using', length(grs), 'chunks.\n')
