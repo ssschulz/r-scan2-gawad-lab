@@ -504,7 +504,7 @@ setMethod("compute.ab.estimates", "SCAN2", function(object, n.cores=1, quiet=FAL
                 seqnames(object@region)[1], start(object@region)[1], end(object@region)[1]))
         }
     } else {
-        training.hsnps <- object@gatk[training.site == TRUE]
+        training.hsnps <- object@gatk[training.site == TRUE & muttype == 'snv']
     }
 
     # Splitting by chromosome is not for parallelization; the AB model
