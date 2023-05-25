@@ -54,6 +54,88 @@ tabix.read.only.cols <- function(path, header, colClasses, region=NULL) {
 }
 
 
+# data.table::fread() fails sometimes on very large datasets.
+#
+# For example, in our crossbred mouse cell line data (44676520 lines), 
+#
+# > ret <- fread(text=c(header, data), header=TRUE)
+# |--------------------------------------------------|
+# |==================================================|
+# Warning message:
+# In fread(text = c(header, data), header = TRUE) :
+#   Stopped early on line 24132069. Expected 22 fields but found 0. Consider fill=TRUE and comment.char=. First discarded non-empty line: <<chr9  68361809    rs229061630 C   T   60.00   0.000   0/1 9   11  0/1 27  17  0/1 25  28  0/1 23  13  0/1 19  27>>
+#
+# This line is fully formed with correct separators, newlines and number of columns. So
+# are all lines adjacent to it. Using fill=TRUE as suggested results in a data.table
+# with an NA row. 
+#
+# When fread() is called with a character vector, it internally writes the
+# vector to a file in TMPDIR and then reads that file using the usual logic.
+# So the failure might be related to disk space in TMPDIR. I'd very much
+# prefer not to spill `data` to disk, but changing that now might be too
+# upsetting.
+#
+# So as a workaround, split up the fread() into fairly small chunks that
+# shouldn't overflow most of the time.
+#
+# -----------------------------------------------
+#             WARNING WARNING WARNING
+#
+# The fread() error above can still happen with chunked.fread(). The error happens
+# when a character vector is "too long" (R reports something like 2^32-1 bytes),
+# so even when limiting to 1 million lines, a table with very many columns could
+# still exceed the byte limit. In my experience, an integrated table with 45 cells
+# and 2 bulks exceeds the byte limit by line #4035163. So one would expect that
+# the limit would be hit at line #1,000,000 around ~4-fold more single cells (=180).
+# 
+# The SCAN2 pipeline happens to sidestep this issue by analyzing the genome in
+# small chunks (5-10 MB for most pipelines), which means only ~1/300th of a table's
+# rows are read in at once or by analyzing specific samples, which throws away
+# all columns except a fixed number of column metadata (<30 columns) and 3 columns
+# for single cell and bulk.
+#
+# For these reasons, we promote warning()s in fread() to error()s with options(warn).
+#
+#             WARNING WARNING WARNING
+# -----------------------------------------------
+chunked.fread <- function(header, data, nlines.per.chunk=1e6, ...) {
+    ret <- data.table()
+    trows <- length(data)
+
+    # If there are no lines in the tabix file corresponding to region (or just
+    # no lines at all), then scanTabix returns character(0). fread() doesn't
+    # like this, so replace it with an empty string.
+    # Must set data to '' AFTER calculating trows because data='' has length 1.
+    if (length(data) == 0)
+        data <- ''
+
+    # repeat...break is the closest R has to a do-while loop.
+    # allows length(data)==0 case to be handled.
+    repeat {
+        from <- nrow(ret) + 1
+        to <- min(trows, nrow(ret) + nlines.per.chunk)
+        op <- options('warn'=2)  # treat any warning as an error
+        # when data is empty, from=1, to=0, which works: ""[1:0] == ""
+        ret <- rbind(ret, data.table::fread(text=c(header, data[from:to]), header=TRUE, ...))
+        options(op) # restore options to state before the options(warn=2) call.
+        if (nrow(ret) >= trows)
+            break
+    }
+
+    # There is a strange special case in data.table::fread where if there is only
+    # a single column and no data (data=''), then instead of resolving to an empty,
+    # one column data.table, it produces a 1 row data.table with NA as the column.
+    # Handle this case by removing the row.
+    if (length(data) == 1 & length(strsplit(header, '\t')[[1]]) == 1) {
+        if (data == '') {
+            ret <- ret[-1]
+        }
+    }
+
+    ret
+}
+
+
 # Returns a data.table
 # region can only be a GRanges object with a single interval for the moment
 # (we just don't have any other use cases currently).
@@ -94,12 +176,6 @@ read.tabix.data <- function(path, header, region=NULL, colClasses=NULL, quiet=TR
 
     if (!quiet) cat("Read", length(data), 'lines\n')
 
-    # If there are no lines in the tabix file corresponding to region (or just
-    # no lines at all), then scanTabix returns character(0). fread() doesn't
-    # like this, so replace it with an empty string.
-    if (length(data) == 0)
-        data <- ''
-
     # tabix.read.only.cols has already dropped any NULL colClasses
     # this function does not fully implement colClasses features as in
     # read.table and fread
@@ -113,19 +189,9 @@ read.tabix.data <- function(path, header, region=NULL, colClasses=NULL, quiet=TR
         # be of type character, then the first row is NOT considered a header row. E.g.,
         # if the header contains a column name that is a number (like sample ID=1234), then
         # fread will reject the entire header line and treat it as a data line.
-        ret <- data.table::fread(text=c(header, data), colClasses=colClasses, header=TRUE, ...)
+        ret <- chunked.fread(header=header, data=data, colClasses=colClasses, ...)
     } else {
-        ret <- data.table::fread(text=c(header, data), header=TRUE, ...)
-    }
-
-    # There is a strange special case in data.table::fread where if there is only
-    # a single column and no data (data=''), then instead of resolving to an empty,
-    # one column data.table, it produces a 1 row data.table with NA as the column.
-    # Handle this case by removing the row.
-    if (length(data) == 1 & length(strsplit(header, '\t')[[1]]) == 1) {
-        if (data == '') {
-            ret <- ret[-1]
-        }
+        ret <- chunked.fread(header=header, data=data, ...)
     }
 
     # Handle a corner case that causes a site to show up in non-overlapping regions.
