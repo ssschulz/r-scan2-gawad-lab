@@ -28,7 +28,8 @@ setClass("SCAN2", slots=c(
     call.mutations='null.or.list',
     depth.profile='null.or.list',
     mutburden='null.or.list',
-    mutsig.rescue='null.or.list'))
+    mutsig.rescue='null.or.list',
+    spatial.sensitivity='null.or.GRanges'))
 
 
 # "flip" the GP mu around 0 to best match the AF of each candidate mutation. 
@@ -121,7 +122,8 @@ make.scan <- function(single.cell, bulk, genome=c('hs37d5', 'hg38', 'mm10'), reg
         fdr=NULL,
         call.mutations=NULL,
         mutburden=NULL,
-        mutsig.rescue=NULL)
+        mutsig.rescue=NULL,
+        spatial.sensitivity=NULL)
 }
 
 
@@ -413,14 +415,6 @@ setMethod("compute.ab.fits", "SCAN2", function(object, path, chroms, #=1:22,
         stop(sprintf('logp.samples.per.step must be a multiple of n.chunks (%d)', n.chunks))
     samples.per.chunk <- ceiling(logp.samples.per.step / n.chunks)
 
-    # XXX: Now requiring fully formed chromosome names
-    # Just for convenience. Allow "chroms=1:22" to work for human autosomes
-    # If the user specifies characters, then we assume those are fully formed
-    # names.
-    #if (is.integer(chroms)) {
-        #chroms <- seqlevels(object@genome.seqinfo)[chroms]
-    #}
-
     # Check all chroms up front so the loop doesn't die after a significant amount of work
     not.in <- chroms[!(chroms %in% seqnames(object@genome.seqinfo))]
     if (length(not.in) > 0) {
@@ -453,99 +447,26 @@ setMethod("compute.ab.fits", "SCAN2", function(object, path, chroms, #=1:22,
 # which AB is being estimated. For sites at the edge of each chunk, data
 # either upstream or downstream will not be available. To solve this,
 # training data must be read in AGAIN with the 100kb flanking regions added.
-setGeneric("compute.ab.estimates", function(object, n.cores=1, quiet=FALSE)
+setGeneric("compute.ab.estimates", function(object, quiet=FALSE)
     standardGeneric("compute.ab.estimates"))
-setMethod("compute.ab.estimates", "SCAN2", function(object, n.cores=1, quiet=FALSE) {
+setMethod("compute.ab.estimates", "SCAN2", function(object, quiet=FALSE) {
     check.slots(object, c('gatk', 'ab.fits'))
 
+    training.hsnps <- get.training.sites.for.abmodel(object=object,
+        region=object@region, integrated.table.path=object@integrated.table.path, quiet=quiet)
 
-    if (n.cores != 1)
-        stop('the n.cores argument is currently unsupported')
+    ab <- compute.ab.given.sites.and.training.data(
+        sites=object@gatk[,.(chr,pos,refnt,altnt)],
+        training.hsnps=training.hsnps,
+        ab.fits=object@ab.fits, quiet=quiet)
 
-    sites <- object@gatk[,.(chr,pos,refnt,altnt)]
-
-    # need to extend region only if this is a chunked object. otherwise,
-    # we already have the full table.
-    if (!is.null(object@region)) {
-        path <- object@integrated.table.path
-
-        # look for hSNPs in ever-larger windows around this chunk. exit as soon as any
-        # training hSNPs are found. when using MDA or PTA single cell WGA, there is
-        # essentially no useful AB information in hSNPs > 100kb away, but perhaps this
-        # won't be the case in future amplification technologies.
-        #
-        # N.B. hg38 added some contigs that are far away from the 1000 genomes population
-        # phasing panel. we used to only use flank=100kb, but in hg38 this sometimes leads
-        # to 0 extended training hSNPs and ultimately a failure in infer.gp().
-        for (flank in c(1e5, 1e6, 1e7)) {  # currently not configurable by user, partly by design
-            if (!quiet) cat('Importing extended hSNP training data from', path, 'with flank size =', flank, '\n')
-            # trim() always generates a warning for first and last regions on a chromosome
-            # because adding/subtracting flank goes outside of the chromosome boundaries.
-            extended.range <- trim(GRanges(seqnames=seqnames(object@region)[1],
-                ranges=IRanges(start=start(object@region)-flank, end=end(object@region)+flank),
-                    seqinfo=object@genome.seqinfo))
-            extended.training.hsnps <- read.training.hsnps(path, sample.id=object@single.cell, region=extended.range, quiet=quiet)
-            if (!quiet)
-                cat(sprintf("hSNP training sites: %d, extended training sites: %d, flank size: %d\n",
-                    nrow(object@gatk[training.site==TRUE & muttype == 'snv']),
-                    nrow(extended.training.hsnps) - nrow(object@gatk[training.site==TRUE & muttype == 'snv']), flank))
-            # there needs to be >1 training hSNPs or else the leave-one-out method
-            # will produce NA AB values at the training hSNP (when it's left out)
-            if (nrow(extended.training.hsnps) > 1)
-                break
-        }
-        training.hsnps <- extended.training.hsnps
-
-        # nrow(object@gatk) > 0: don't give up in heterochromatic arms of, e.g., chr13
-        # where there are neither hSNPs nor somatic candidates.
-        if (nrow(training.hsnps) < 2 & nrow(object@gatk) > 0) {
-            stop(sprintf("%d hSNPs found within %d bp of %s:%d-%d, need at least 2; giving up",
-                nrow(training.hsnps), flank,
-                seqnames(object@region)[1], start(object@region)[1], end(object@region)[1]))
-        }
-    } else {
-        training.hsnps <- object@gatk[training.site == TRUE & muttype == 'snv']
-    }
-
-    # Splitting by chromosome is not for parallelization; the AB model
-    # is fit separately for each chromosome and thus applies different
-    # parameter estimates.
-    chroms <- unique(sites$chr)
-    do.work <- function(chrom, sites, ab.fit, hsnps) {
-        if (!quiet)
-            cat(sprintf("inferring AB for %d sites on %s:%d-%d\n", 
-                nrow(sites), chrom, min(sites$pos), max(sites$pos)))
-        time.elapsed <- system.time(z <- infer.gp1(ssnvs=sites, fit=ab.fit,
-            hsnps=hsnps, flank=1e5, verbose=!quiet))
-        if (!quiet) print(time.elapsed)
-        z
-    }
-    if (length(chroms) == 1) {
-        # slightly more efficient for real use cases with chunked computation
-        ab <- do.work(chrom=chroms, sites=sites,
-            ab.fit=object@ab.fits[chroms,,drop=FALSE],
-            hsnps=training.hsnps)
-    } else {
-        ab <- do.call(rbind, lapply(chroms, function(chrom) {
-            hsnps <- training.hsnps[chr == chrom]
-            ab.fit <- object@ab.fits[chrom,,drop=FALSE]
-            do.work(chrom=chrom, sites=sites, ab.fit=ab.fit, hsnps=hsnps)
-        }))
-    }
-
-    if (!is.null(ab)) {
-        object@gatk[, c('ab', 'gp.mu', 'gp.sd') := 
-            list(1/(1+exp(-ab[,'gp.mu'])), ab[,'gp.mu'], ab[,'gp.sd'])]
-        object@ab.estimates <- data.frame(sites=nrow(ab))
-    } else {
-        # Chunks are sometimes empty
-        # Add dummy columns so rbind() works with other non-empty chunks
-        object@gatk[, c('ab', 'gp.mu', 'gp.sd') := 
-            list(numeric(0), numeric(0), numeric(0))]
-        object@ab.estimates <- data.frame(sites=0)
-    }
+    # Add an extra 'ab' column that transforms gp.mu (-Inf, Inf) -> [0, 1]
+    object@gatk[, c('ab', 'gp.mu', 'gp.sd') := 
+        list(1/(1+exp(-ab[,'gp.mu'])), ab[,'gp.mu'], ab[,'gp.sd'])]
+    object@ab.estimates <- data.frame(sites=nrow(ab))
     object
 })
+
 
 
 setGeneric("compute.models", function(object, verbose=TRUE)
@@ -867,6 +788,10 @@ setMethod("update.static.filter.params", "SCAN2", function(object, fdr.prior.mod
         if (!quiet) cat("    voiding mutation signature-based rescue calls\n")
         object@mutsig.rescue <- NULL
         object@gatk[, rescue := NA]
+    }
+    if (!is.null(slot(object, 'spatial.sensitivity'))) {
+        if (!quiet) cat("    voiding spatial sensitivity estimates\n")
+        object@spatial.sensitivity <- NULL
     }
 
     object 
