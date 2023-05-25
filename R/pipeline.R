@@ -278,6 +278,7 @@ digest.depth.profile <- function(path, sc.sample, bulk.sample,
 }
 
 
+
 # Recommended to use smaller tiles than the usual 10 MB. The files processed
 # here are basepair resolution and cover essentially the entire genome.
 make.callable.regions <- function(path, sc.sample, bulk.sample,
