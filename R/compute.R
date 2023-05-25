@@ -1,37 +1,100 @@
-# tilewidth purposefully not exposed here
-compute.hsnp.spatial.sens <- function(object, muttype=c('snv', 'indel'), quiet=TRUE) {
-    muttype <- match.arg(muttype)
+# look for hSNPs in ever-larger windows around this chunk. exit as soon as any
+# training hSNPs are found. when using MDA or PTA single cell WGA, there is
+# essentially no useful AB information in hSNPs > 100kb away, but perhaps this
+# won't be the case in future amplification technologies.
+#
+# N.B. hg38 added some contigs that are far away from the 1000 genomes population
+# phasing panel. we used to only use flank=100kb, but in hg38 this sometimes leads
+# to 0 extended training hSNPs and ultimately a failure in infer.gp().
+get.training.sites.for.abmodel.by.range <- function(region, integrated.table.path,
+    single.cell.id, flanks.to.try=10^(5:7), quiet=FALSE)
+{
+    for (flank in flanks.to.try) {
+        if (!quiet) cat('Importing extended hSNP training data from', integrated.table.path,
+                        'with flank size =', flank, '\n')
 
-    if (!quiet) cat("Tiling genome with 10 kb tiles\n")
-    tiles <- tileGenome(seqlengths=seqlengths(results@region), tilewidth=1e4, cut.last.tile.in.chrom=T)
-
-    # For hSNP sensitivity with 10kb windows, acf() suggests useful info only
-    # exists for the nearest tile up- or downstream. Even so, the correlation
-    # is only 0.1.
-    compute.hsnp.sens.for.tiles(object, tiles, smooth.tiles=1, muttype=muttype, quiet=quiet)
+        # trim() always generates a warning for first and last regions on a chromosome
+        # because adding/subtracting flank goes outside of the chromosome boundaries.
+        extended.range <- trim(GRanges(seqnames=seqnames(region)[1],
+            ranges=IRanges(start=start(region)-flank, end=end(region)+flank),
+                seqinfo=seqinfo(region)))
+        extended.training.hsnps <- read.training.hsnps(integrated.table.path,
+            sample.id=single.cell.id, region=extended.range, quiet=quiet)
+        if (!quiet)
+            cat(sprintf("hSNP training sites: %d, flank size: %d\n",
+                nrow(extended.training.hsnps), as.integer(flank)))
+        # there needs to be >1 training hSNPs or else the leave-one-out method
+        # will produce NA AB values at the training hSNP (when it's left out)
+        if (nrow(extended.training.hsnps) > 1)
+            break
+    }
+    return(extended.training.hsnps)
 }
 
 
-compute.hsnp.sens.for.tiles <- function(object, tiles, smooth.tiles=0, muttype=c('snv', 'indel'), quiet=TRUE) {
-    muttype <- match.arg(muttype)
+get.training.sites.for.abmodel <- function(object, region,
+    integrated.table.path=object@integrated.table.path,
+    seqinfo=genome.string.to.seqinfo.object(object@genome.string),
+    quiet=FALSE)
+{
+    # if this is a chunked object, extend hSNPs up/downstream so that full info is available at edges
+    if (!is.null(region)) {
+        training.hsnps <- get.training.sites.for.abmodel.by.range(region=region,
+            integrated.table.path=integrated.table.path, single.cell.id=object@single.cell, quiet=quiet)
 
-    # neither muttype == muttype nor muttype == ..muttype work. whatever.
-    different.variable.name <- muttype
-    hsnps <- object@gatk[training.site == TRUE & muttype == different.variable.name]
-    gr <- GRanges(seqnames=hsnps$chr, ranges=IRanges(start=hsnps$pos, width=1),
-        seqinfo=object@genome.seqinfo)
-    gr$pass <- hsnps$training.pass
+        # nrow(object@gatk) > 0: don't give up in heterochromatic arms of, e.g., chr13
+        # where there are neither hSNPs nor somatic candidates.
+        if (nrow(training.hsnps) < 2 & nrow(object@gatk) > 0) {
+            stop(sprintf("%d hSNPs found within %d bp of %s:%d-%d, need at least 2; giving up",
+                nrow(training.hsnps), flank,
+                seqnames(region)[1], start(region)[1], end(region)[1]))
+        }
+    } else {
+        training.hsnps <- object@gatk[training.site == TRUE & muttype == 'snv']
+    }
 
-    if (!quiet) cat(paste0("Mapping ", nrow(hsnps), " germline ", muttype, "s to ", length(tiles), " non-overlapping tiles\n"))
-    tiles$n.called <- countOverlaps(tiles, gr[gr$pass == TRUE])
-    tiles$n.tested <- countOverlaps(tiles, gr)
-    # this will be 0, just to allow for smoothing, then set to NA
-    tiles$sens <- ifelse(tiles$n.tested > 0, tiles$n.called/tiles$n.tested, 0)
-    tiles$sens.smoothed <- as.numeric(stats::filter(tiles$sens,
-        filter=c(1, rep(1, 2*smooth.tiles))/(1+2*smooth.tiles), sides=2))
-    tiles$sens <- ifelse(tiles$n.tested > 0, tiles$sens, NA)
-    tiles
+    training.hsnps
 }
+
+
+
+compute.ab.given.sites.and.training.data <- function(sites, training.hsnps, ab.fits, quiet=FALSE)
+{
+    # Splitting by chromosome is not for parallelization; the AB model
+    # is fit separately for each chromosome and thus applies different
+    # parameter estimates.
+    chroms <- unique(sites$chr)
+    do.work <- function(chrom, sites, ab.fit, hsnps) {
+        if (!quiet)
+            cat(sprintf("inferring AB for %d sites on %s:%d-%d\n", 
+                nrow(sites), chrom, as.integer(min(sites$pos)), as.integer(max(sites$pos))))
+        time.elapsed <- system.time(z <- infer.gp1(ssnvs=sites, fit=ab.fit,
+            hsnps=hsnps, flank=1e5, verbose=!quiet))
+        if (!quiet) print(time.elapsed)
+        z
+    }
+    if (length(chroms) == 1) {
+        # slightly more efficient for real use cases with chunked computation
+        ab <- do.work(chrom=chroms, sites=sites,
+            ab.fit=ab.fits[chroms,,drop=FALSE],
+            hsnps=training.hsnps)
+    } else {
+        ab <- do.call(rbind, lapply(chroms, function(chrom) {
+            hsnps <- training.hsnps[chr == chrom]
+            ab.fit <- ab.fits[chrom,,drop=FALSE]
+            do.work(chrom=chrom, sites=sites, ab.fit=ab.fit, hsnps=hsnps)
+        }))
+    }
+
+    # Chunks are sometimes empty. Add dummy columns so that rbind() doesn't
+    # fail when stiching together results from many chunks.
+    if (is.null(ab)) {
+        data.frame(gp.mu=numeric(0), gp.sd=numeric(0))
+    } else {
+        ab
+    }
+}
+
 
 
 # Very simple approximation of how correlation is affected by binomial sampling.
