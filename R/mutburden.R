@@ -128,6 +128,8 @@ setMethod("compute.mutburden", "SCAN2", function(object, gbp.per.genome=get.gbp.
 setGeneric("mutburden", function(object, muttype=c('all', 'snv', 'indel'))
     standardGeneric("mutburden"))
 setMethod("mutburden", "SCAN2", function(object, muttype=c('all', 'snv', 'indel')) {
+    check.slots(object, 'mutburden')
+
     muttype <- match.arg(muttype)
     if (muttype == 'all')
         muttype <- c('snv', 'indel')
