@@ -110,6 +110,8 @@ setMethod("mean.coverage", "SCAN2", function(object) {
 
     # rows correspond to single cell depth values, starting at 0 (row 1 = #bases at dp=0,
     # row 2 = #bases at dp=1, ...). rownames() actually records dp values as strings.
+    # columns correspond to bulk in the same way
     dptab <- object@depth.profile$dptab
-    c(mean.coverage=sum(rowSums(dptab) * as.numeric(rownames(dptab))) / sum(dptab))
+    c(single.cell=sum(rowSums(dptab) * as.numeric(rownames(dptab))) / sum(dptab),
+      bulk=sum(colSums(dptab) * as.numeric(colnames(dptab))) / sum(dptab))
 })
