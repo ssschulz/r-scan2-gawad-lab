@@ -193,7 +193,7 @@ setMethod("show.depth.profile", "SCAN2", function(object) {
     if (is.null(object@depth.profile)) {
         cat("(not added)\n")
     } else {
-        cat('\n')
+        cat(sprintf('mean coverage: %0.2fx (bases with DP>500 set to 500)\n', mean.coverage(object)))
         for (mt in c('snv', 'indel')) {
             sfp <- object@static.filter.params[[mt]]
             dptab <- object@depth.profile$dptab

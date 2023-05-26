@@ -101,3 +101,15 @@ compute.callable.region <- function(path, sc.sample, bulk.sample, min.sc.dp, min
     g <- reduce(GRanges(seqnames=gatk.doc$chr, ranges=IRanges(start=gatk.doc$pos, end=gatk.doc$pos)))
     g
 }
+
+
+
+setGeneric("mean.coverage", function(object) standardGeneric("mean.coverage"))
+setMethod("mean.coverage", "SCAN2", function(object) {
+    check.slots(object, 'depth.profile')
+
+    # rows correspond to single cell depth values, starting at 0 (row 1 = #bases at dp=0,
+    # row 2 = #bases at dp=1, ...). rownames() actually records dp values as strings.
+    dptab <- object@depth.profile$dptab
+    c(mean.coverage=sum(rowSums(dptab) * as.numeric(rownames(dptab))) / sum(dptab))
+})
