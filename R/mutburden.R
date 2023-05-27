@@ -60,7 +60,7 @@ setMethod("compute.mutburden", "SCAN2", function(object, gbp.per.genome=get.gbp.
                 ncalls=NA,
                 callable.sens=NA,
                 callable.bp=NA
-            )[c(1,1,1),]
+            )[c(1,1,1),]  # repeat row 1 3 times
         } else {
             # somatic sites
             s <- object@gatk[pass == TRUE & muttype == mt]
@@ -75,7 +75,8 @@ setMethod("compute.mutburden", "SCAN2", function(object, gbp.per.genome=get.gbp.
                 ncalls <- rep(NA, 3)
                 callable.sens <- rep(NA, 3)
                 rowqs <- rep(NA, 3)
-                warning(paste('could not derive unique breakpoints for quartiles of sequencing depth at germline hSNPs. got qbreaks = ', deparse(qbreaks)))
+                callable.bp <- rep(NA, 3)
+                warning(paste('could not derive unique breakpoints for quartiles of sequencing depth at germline hSNPs.  this usually indicates that sequencing depth is heavily skewed toward low depths (typically DP=0)\ngot qbreaks = ', deparse(qbreaks)))
             } else {
                 # s also uses g-based depth quantiles
                 s$dpq <- cut(s$dp, qbreaks, include.lowest=T, labels=F)
@@ -92,15 +93,14 @@ setMethod("compute.mutburden", "SCAN2", function(object, gbp.per.genome=get.gbp.
                 g <- g[dpq %in% qstouse]
 
                 ncalls <- sapply(qstouse, function(q) sum(s[dpq == q]$pass, na.rm=TRUE))
+                callable.bp <- sapply(split(dptab[,-(1:sfp$min.bulk.dp)], rowqs), sum)
                 callable.sens <- sapply(qstouse, function(q) mean(g[bulk.dp >= sfp$min.bulk.dp & dpq == q & resampled.training.site == TRUE]$training.pass, na.rm=TRUE))  # only use resampled training sites to estimate sensitivity (hSNPs in general are closer to other hSNPs than somatic candidates are to hSNPs, leading to better local allele balance estimates and thus would overestimate sensitivity. Resampling the sites to match candidate-to-hSNP distances reduces this bias)
             }
     
             # this data.frame has 1 row for each quantile. the second row (=middle 50%)
             # is ultimately what we're interested in, but having the other calculations
             # around can also be interesting.
-            ret <- data.frame(ncalls=ncalls, callable.sens=callable.sens,
-                callable.bp=sapply(split(dptab[,-(1:sfp$min.bulk.dp)], rowqs), sum)
-            )
+            ret <- data.frame(ncalls=ncalls, callable.sens=callable.sens, callable.bp=callable.bp)
         }
 
         # "callable" means:
