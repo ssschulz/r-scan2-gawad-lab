@@ -36,10 +36,11 @@ compute.hsnp.sens.for.tiles <- function(object, tiles, smooth.tiles=0, muttype=c
 
 
 # Spatial sensitivity applies only to VAF-based calling! Not to mutation signature-based rescue!
+# Use small tiles for parallelization (~1MB) because of basepair resolution.
 compute.spatial.sensitivity.depth <- function(single.cell.id, bulk.id,
     static.filter.params, joint.dptab.path, genome.string,
     grs.for.sens=genome.string.to.tiling(genome.string, tilewidth=1e3, group='auto'),
-    grs.for.parallelization=genome.string.to.tiling(genome.string, tilewidth=10e6, group='auto'),
+    grs.for.parallelization=genome.string.to.tiling(genome.string, tilewidth=1e6, group='auto'),
     quiet=TRUE, report.mem=TRUE)
 {
     cat('Gathering read depth data for spatial somatic calling sensitivity using', length(grs.for.parallelization), 'chunks.\n')
@@ -167,6 +168,30 @@ compute.spatial.sensitivity.abmodel <- function(
 
 
 
+    
+# sites should be filtered for training.site==TRUE and one muttype
+count.germline.sites.for.sens <- function(grs, sites, seqinfo) {
+    sites.to.gr <- function(sites) {
+        GenomicRanges::GRanges(seqnames=sites$chr,
+                ranges=IRanges::IRanges(start=sites$pos, width=1),
+                seqinfo=seqinfo)
+    }
+    data.table::data.table(
+        n.training=IRanges::countOverlaps(grs,
+            sites.to.gr(sites)),
+        n.training.maj=IRanges::countOverlaps(grs,
+            sites.to.gr(sites[af >= 0.5])),
+        n.training.min=IRanges::countOverlaps(grs,
+            sites.to.gr(sites[af < 0.5])),
+        n.training.passed=IRanges::countOverlaps(grs,
+            sites.to.gr(sites[training.pass == TRUE])),
+        n.training.passed.maj=IRanges::countOverlaps(grs,
+            sites.to.gr(sites[training.pass == TRUE & af >= 0.5])),
+        n.training.passed.min=IRanges::countOverlaps(grs,
+            sites.to.gr(sites[training.pass == TRUE & af < 0.5])))
+}
+
+
 # abmodel.covs - compute.spatial.sensitivity.abmodel() output
 # depth.covs - compute.spatial.sensitivity.depth() output
 # This function doesn't use future() for multicore support, so passing the large
@@ -174,44 +199,22 @@ compute.spatial.sensitivity.abmodel <- function(
 integrate.spatial.sensitivity.covariates <- function(object, abmodel.covs, depth.covs,
     grs.for.sens=genome.string.to.tiling(object@genome.string, tilewidth=1e3, group='auto'))
 {
-    cat('Counting germline training hSNP sites..\n')
-    ab.data <- data.table(chr=as.character(seqnames(grs.for.sens)),
+    ab.data <- data.table::data.table(chr=as.character(seqnames(grs.for.sens)),
         start=start(grs.for.sens), end=end(grs.for.sens))
-    hsnps <- object@gatk[training.site == TRUE & muttype == 'snv']
-    ab.data$n.training.hsnps <- IRanges::countOverlaps(grs.for.sens,
-        GRanges(seqnames=hsnps$chr, ranges=IRanges(start=hsnps$pos, width=1),
-            seqinfo=genome.string.to.seqinfo.object(object@genome.string)))
-    hsnps <- object@gatk[training.site == TRUE & muttype == 'snv' & af >= 0.5]
-    ab.data$n.training.hsnps.maj <- IRanges::countOverlaps(grs.for.sens,
-        GRanges(seqnames=hsnps$chr, ranges=IRanges(start=hsnps$pos, width=1),
-            seqinfo=genome.string.to.seqinfo.object(object@genome.string)))
-    hsnps <- object@gatk[training.site == TRUE & muttype == 'snv' & af < 0.5]
-    ab.data$n.training.hsnps.min <- IRanges::countOverlaps(grs.for.sens,
-        GRanges(seqnames=hsnps$chr, ranges=IRanges(start=hsnps$pos, width=1),
-            seqinfo=genome.string.to.seqinfo.object(object@genome.string)))
-    # now just the called sites, for sens estimation
-    hsnps <- object@gatk[training.pass == TRUE & muttype == 'snv']
-    ab.data$n.training.hsnps.passed <- IRanges::countOverlaps(grs.for.sens,
-        GRanges(seqnames=hsnps$chr, ranges=IRanges(start=hsnps$pos, width=1),
-            seqinfo=genome.string.to.seqinfo.object(object@genome.string)))
-    hsnps <- object@gatk[training.pass == TRUE & muttype == 'snv' & af >= 0.5]
-    ab.data$n.training.hsnps.maj.passed <- IRanges::countOverlaps(grs.for.sens,
-        GRanges(seqnames=hsnps$chr, ranges=IRanges(start=hsnps$pos, width=1),
-            seqinfo=genome.string.to.seqinfo.object(object@genome.string)))
-    hsnps <- object@gatk[training.pass == TRUE & muttype == 'snv' & af < 0.5]
-    ab.data$n.training.hsnps.min.passed <- IRanges::countOverlaps(grs.for.sens,
-        GRanges(seqnames=hsnps$chr, ranges=IRanges(start=hsnps$pos, width=1),
-            seqinfo=genome.string.to.seqinfo.object(object@genome.string)))
 
-    cat('Counting germline het indel sites..\n')
-    hindels <- object@gatk[training.site == TRUE & muttype == 'indel']
-    ab.data$n.training.hindels <- IRanges::countOverlaps(grs.for.sens,
-        GRanges(seqnames=hindels$chr, ranges=IRanges(start=hindels$pos, width=1),
-            seqinfo=genome.string.to.seqinfo.object(object@genome.string)))
-    hindels <- hindels[training.pass == TRUE]  # now just the called sites, for sens estimation
-    ab.data$n.training.hindels.passed <- IRanges::countOverlaps(grs.for.sens,
-        GRanges(seqnames=hindels$chr, ranges=IRanges(start=hindels$pos, width=1),
-            seqinfo=genome.string.to.seqinfo.object(object@genome.string)))
+    cat('Counting germline training hSNP sites..\n')
+    hsnps <- count.germline.sites.for.sens(grs=grs.for.sens,
+        sites=object@gatk[training.site == TRUE & muttype == 'snv'],
+        seqinfo=genome.string.to.seqinfo.object(object@genome.string))
+    colnames(hsnps) <- paste0('snv.', colnames(hsnps))
+    ab.data <- cbind(ab.data, hsnps)
+
+    cat('Counting germline training het indel sites..\n')
+    hindels <- count.germline.sites.for.sens(grs=grs.for.sens,
+        sites=object@gatk[training.site == TRUE & muttype == 'indel'],
+        seqinfo=genome.string.to.seqinfo.object(object@genome.string))
+    colnames(hindels) <- paste0('indel.', colnames(hindels))
+    ab.data <- cbind(ab.data, hindels)
 
     cat("Merging with AB model covariates..\n")
     ret <- merge(ab.data, abmodel.covs, by=c('chr', 'start', 'end'))
