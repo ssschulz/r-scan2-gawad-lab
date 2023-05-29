@@ -6,8 +6,11 @@
 # N.B. hg38 added some contigs that are far away from the 1000 genomes population
 # phasing panel. we used to only use flank=100kb, but in hg38 this sometimes leads
 # to 0 extended training hSNPs and ultimately a failure in infer.gp().
+# Genome-wide AB model estimation for spatial sensitivity covers the whole genome.
+# The short arms of acrocentric chromosomes (e.g., chr22) are so large (16MB) that
+# 10MB extensions are also sometimes necessary.
 get.training.sites.for.abmodel.by.range <- function(region, integrated.table.path,
-    single.cell.id, flanks.to.try=10^(5:7), quiet=FALSE)
+    single.cell.id, flanks.to.try=10^(5:8), quiet=FALSE)
 {
     for (flank in flanks.to.try) {
         if (!quiet) cat('Importing extended hSNP training data from', integrated.table.path,
