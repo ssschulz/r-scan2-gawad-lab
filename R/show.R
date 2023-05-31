@@ -23,6 +23,7 @@ setMethod("show", "SCAN2", function(object) {
     show.call.mutations(object)
     show.mutburden(object)
     show.mutsig.rescue(object)
+    show.spatial.sensitivity(object)
 })
 
 setGeneric("show.gatk", function(object) standardGeneric("show.gatk"))
@@ -265,6 +266,44 @@ setMethod("show.mutsig.rescue", "SCAN2", function(object) {
             cat(sprintf("#       %6s: %6d/%d candidates rescued,   %0.1f%% rel. error,   sig. weights:  %0.3f true,   %0.3f artifact\n",
                 mt, nrow(object@gatk[muttype == mt & rescue]), msr$nmuts,
                 100*msr$relative.error, msr$weight.true, msr$weight.artifact))
+        }
+    }
+})
+
+
+
+setGeneric("show.spatial.sensitivity", function(object) standardGeneric("show.spatial.sensitivity"))
+setMethod("show.spatial.sensitivity", "SCAN2", function(object) {
+    cat("#   Spatial sensitivity: ")
+    ss <- object@spatial.sensitivity
+    if (is.null(ss)) {
+        cat("(not computed)\n")
+    } else {
+        cat(sprintf("applies only to VAF-based calling (NOT mutsig rescue!)\n#       %d tiles of width %d, neighborhood size for training hSNPs %d (%d tiles)\n",
+            nrow(ss$data), ss$tilewidth, ss$tilewidth * (1 + 2*ss$neighborhood.tiles),
+            ss$neighborhood.tiles))
+        ss <- object@spatial.sensitivity$somatic.sensitivity
+        cat(sprintf("#                  either allele              maj allele               min allele\n"))
+        cat(sprintf("#              germ.   predicted (SD)   germ.   predicted (SD)   germ.   predicted (SD)\n"))
+        for (mt in c('snv', 'indel')) {
+            cat(sprintf("#       %6s: %2.1f%%   %2.1f%% +/- %2.1f   %2.1f%%   %2.1f%% +/- %2.1f   %2.1f%%   %2.1f%% +/- %2.1f\n",
+                mt,
+                100*ss[[mt]]['germline.training', 'both'],
+                100*ss[[mt]]['predicted.somatic.mean', 'both'],
+                100*ss[[mt]]['predicted.somatic.stdev', 'both'],
+                100*ss[[mt]]['germline.training', 'maj'],
+                100*ss[[mt]]['predicted.somatic.mean', 'maj'],
+                100*ss[[mt]]['predicted.somatic.stdev', 'maj'],
+                100*ss[[mt]]['germline.training', 'min'],
+                100*ss[[mt]]['predicted.somatic.mean', 'min'],
+                100*ss[[mt]]['predicted.somatic.stdev', 'min']))
+        }
+
+        b <- object@spatial.sensitivity$burden
+        cat(sprintf("#      EXPERIMENTAL! equal-allele burden genome-wide estimates:\n"))
+        for (mt in c('snv', 'indel')) {
+            cat(sprintf("#       %6s: %0.1f (95%% CI: %0.1f-%0.1f)\n",
+                mt, b[[mt]]$median, b[[mt]]$ci95[1], b[[mt]]$ci95[2]))
         }
     }
 })
