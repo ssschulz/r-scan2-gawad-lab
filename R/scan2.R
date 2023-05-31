@@ -29,7 +29,7 @@ setClass("SCAN2", slots=c(
     depth.profile='null.or.list',
     mutburden='null.or.list',
     mutsig.rescue='null.or.list',
-    spatial.sensitivity='null.or.dt.or.raw'))
+    spatial.sensitivity='null.or.list'))
 
 
 # "flip" the GP mu around 0 to best match the AF of each candidate mutation. 
