@@ -357,3 +357,56 @@ plot.depth.profile <- function(object, keep.zero=FALSE, quantile=0.99, ...) {
         xlab=paste(names(dimnames(d))[1], ' (single cell) depth'),
         ylab=paste(names(dimnames(d))[2], ' (buk) depth'))
 }
+
+
+# tilewidth=1kb by default. the het germline SNP rate in humans is about 1/1.5kb. so
+# to get a min. genomic region containing roughly ~100 hSNPs, need 150kb = 150 tiles.
+plot.sensitivity <- function(object, min.tiles=150) {
+    layout(t(1:2))
+    for (mt in c('snv', 'indel')) {
+        maj <- assess.predicted.somatic.sensitivity(object, muttype=mt, alleletype='maj')
+        min <- assess.predicted.somatic.sensitivity(object, muttype=mt, alleletype='min')
+        plot(maj[n > min.tiles, .(pred, sens)], lwd=2, type='b', pch=20, col=1, main=mt, ylim=0:1,
+            xlab="Predicted sensitivity based on local covariates",
+            ylab='Actual sensitivity for germline het sites')
+        lines(min[n > min.tiles, .(pred, sens)], lwd=2, type='b', pch=20, col=2)
+        abline(coef=0:1)
+        legend('topleft', lwd=2, col=1:2, legend=c("Major allele", 'Minor allele'))
+    }
+}
+
+
+plot.sensitivity.covs <- function(object, muttype=c('snv', 'indel'),
+    covs=c('gp.mu', 'gp.sd', 'mean.sc.dp', paste0(muttype, '.', 'n.training.neighborhood'),
+           paste0('bases.gt.', muttype, '.sc.min.dp')), min.tiles=150) {
+    muttype <- match.arg(muttype)
+
+    layout(matrix(1:(2*length(covs)), nrow=2))
+    par(mar=c(5,4,1,1))
+    for (cov in covs) {
+        xform <- identity
+        if (cov == 'gp.mu' | cov == 'gp.sd')  # abs() does nothing for gp.sd, which is >0.
+            xform <- function(x) round(abs(x),2)
+        if (cov == 'mean.sc.dp')
+            xform <- function(x) round(x,0)   # integerize, but nearest
+
+        pred.maj <- paste0('pred.', muttype, '.maj')
+        pred.min <- paste0('pred.', muttype, '.min')
+        # is.na(mean.bulk.dp) is essentially an alias for tiles in unassembled genome
+        # regions. there are ~71 tiles containing hSNPs with is.na(mean.bulk.dp) vs.
+        # 195,046 tiles with no hSNPs in the neighborhood of +/- 10kb.
+        tab <- object@spatial.sensitivity$data[!is.na(mean.bulk.dp),
+            .(sens.maj=mean(get(pred.maj), na.rm=TRUE),
+              sens.min=mean(get(pred.min), na.rm=TRUE),
+              n.tiles=nrow(.SD)),
+            by=.(cov=xform(get(cov)))][order(cov)][n.tiles >= min.tiles]
+        plot(tab[,.(cov, sens.maj)], pch=20, ylim=0:1,
+            xlab=cov, ylab='Predicted sensitivity')
+        lines(tab[,.(cov, sens.maj)])
+        points(tab[,.(cov, sens.min)], pch=20, col=2)
+        lines(tab[,.(cov, sens.min)], col=2)
+        legend('bottomright', legend=c('Major allele', 'Minor allele'), col=1:2, pch=20, lwd=1)
+        plot(tab[,.(cov, 100*n.tiles/sum(n.tiles))], pch=20,
+            xlab=cov, ylab='Percent of genome')
+    }
+}
