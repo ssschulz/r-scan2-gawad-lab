@@ -4,7 +4,7 @@
 # Spatial sensitivity applies only to VAF-based calling! Not to mutation signature-based rescue!
 # Use small tiles for parallelization (~1MB) because of basepair resolution.
 compute.spatial.sensitivity.depth <- function(single.cell.id, bulk.id,
-    static.filter.params, joint.dptab.path, genome.string, sens.tilewidth,
+    static.filter.params, joint.dptab.path, genome.string, sens.tilewidth=1e3,
     grs.for.sens=genome.string.to.tiling(genome.string, tilewidth=sens.tilewidth, group='auto'),
     grs.for.parallelization=genome.string.to.tiling(genome.string, tilewidth=1e6, group='auto'),
     quiet=TRUE, report.mem=TRUE)
