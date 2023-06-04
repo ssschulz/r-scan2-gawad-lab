@@ -293,14 +293,19 @@ somatic.sensitivity <- function(object, data=object@spatial.sensitivity$data,
 #      from the fact that NegBin is not applicable to N_i=0 or sensitivity_i=0,
 #      so many bins must be assigned X_i=0.
 sim.negbin.estimator <- function(strat.tab, n.sims) {
-        # use a negative binomial process to estimate total number of mutations in
-        # each sensitivity bin (i.e., number called and number missed(=negbin value))
-        # This is usually not a great estimate because of the two conditions below:
-        # sens > 0 & ncalls > 0. The areas of the genome with no calls or no sensitivity
-        # must be ignored because the negative binomial distribution does not support
-        # size=0 or prob=0.
-    sims <- rowSums(apply(strat.tab[sens > 0 & ncalls > 0,.(ncalls, sens)], 1, function(row)
-        row[1] + rnbinom(n=n.sims, size=row[1], prob=row[2])))
+    # use a negative binomial process to estimate total number of mutations in
+    # each sensitivity bin (i.e., number called and number missed(=negbin value))
+    # This is usually not a great estimate because of the two conditions below:
+    # sens > 0 & ncalls > 0. The areas of the genome with no calls or no sensitivity
+    # must be ignored because the negative binomial distribution does not support
+    # size=0 or prob=0.
+    sims <- rowSums(apply(strat.tab[sens > 0,.(ncalls, sens)], 1, function(row)
+        if (row[1] == 0) {
+            rep(0, n.sims)
+        } else {
+            row[1] + rnbinom(n=n.sims, size=row[1], prob=row[2])
+        }
+    ))
 
     list(
         n.sims=n.sims,
