@@ -299,7 +299,7 @@ sim.negbin.estimator <- function(strat.tab, n.sims) {
     # sens > 0 & ncalls > 0. The areas of the genome with no calls or no sensitivity
     # must be ignored because the negative binomial distribution does not support
     # size=0 or prob=0.
-    sims <- rowSums(apply(strat.tab[sens > 0,.(ncalls, sens)], 1, function(row)
+    sims <- rowSums(apply(strat.tab[sens > 0 & ntotal > 0,.(ncalls, sens)], 1, function(row)
         if (row[1] == 0) {
             rep(0, n.sims)
         } else {
@@ -322,9 +322,13 @@ sim.negbin.estimator <- function(strat.tab, n.sims) {
 #      are known to be spatial biased toward (i.e., overrepresented) in closed
 #      chromatin regions.
 poisson.estimator <- function(strat.tab) {
-    pois.m <- stats::glm(ncalls ~ sens + offset(log(n)), data=strat.tab, family=poisson)
-    poisson.estimate <- list(
-        model=pois.m,
+    pois.m <- stats::glm(ncalls ~ sens + offset(log(n)),
+        # ntotal > 0: for low depth cells, can have cases where 0 germline sites
+        # are within bins with a similar sensitivity prediction.  Leads to sens=NaN.
+        data=strat.tab[sens > 0 & ntotal > 0],
+        family=poisson)
+
+    list(model=pois.m,
         burden=exp(predict(object=pois.m, newdata=data.frame(sens=1, n=sum(strat.tab$n)))))
         # The total extrapolation uses a bin the size of the whole genome (sum(strat.tab$n))
         # with detection sensitivity = 100%.  The rate parameter estimated by the model is
@@ -332,16 +336,23 @@ poisson.estimator <- function(strat.tab) {
 #   3. Negative binomial regression on N_i / S_i ~ sensitivity_i.  This is the
 #      same model as (2), but with an added overdispersion parameter.
 negbin.estimator <- function(strat.tab) {
-    negbin.m <- MASS::glm.nb(ncalls ~ sens + offset(log(n)), data=strat.tab)
-    negbin.estimate <- list(
-        model=negbin.m,
-        burden=exp(predict(object=negbin.m, newdata=data.frame(sens=1, n=sum(strat.tab$n)))))
+    data <- strat.tab[sens > 0 & ntotal > 0]
+    # glm.nb fails if all of ncalls=0. glm(family=poisson) does not have this issue
+    if (sum(data$ncalls) == 0) {
+        negbin.m <- NULL
+        burden <- 0
+    } else {
+        negbin.m <- MASS::glm.nb(ncalls ~ sens + offset(log(n)),
+            data=strat.tab[sens > 0 & ntotal > 0])
+        burden <- exp(predict(object=negbin.m, newdata=data.frame(sens=1, n=sum(strat.tab$n))))
+    }
+    list(model=negbin.m, burden=burden)
 }
 #   4. Mean estimator.
 mean.estimator <- function(strat.tab) {
     # Don't use pred=NA, pred=0 or sens=0 bins to estimate the per-tile rate,
     # but do use all bins in the extrapolation (sum(strat.tab$n)).
-    rate.per.tile.per.sens.bin <- strat.tab[!is.na(pred) & pred > 0 & sens > 0, ncalls / sens / n]
+    rate.per.tile.per.sens.bin <- strat.tab[!is.na(pred) & pred > 0 & sens > 0 & ntotal > 0, ncalls / sens / n]
     rate.per.tile <- mean(rate.per.tile.per.sens.bin)
     list(
         rate.per.tile.per.sens.bin=rate.per.tile.per.sens.bin,
