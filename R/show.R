@@ -299,11 +299,12 @@ setMethod("show.spatial.sensitivity", "SCAN2", function(object) {
                 100*ss[[mt]]['predicted.somatic.stdev', 'min']))
         }
 
-        b <- object@spatial.sensitivity$burden
-        cat(sprintf("#      EXPERIMENTAL! equal-allele burden genome-wide estimates:\n"))
-        for (mt in c('snv', 'indel')) {
-            cat(sprintf("#       %6s: %0.1f (95%% CI: %0.1f-%0.1f)\n",
-                mt, b[[mt]]$median, b[[mt]]$ci95[1], b[[mt]]$ci95[2]))
-        }
+        # Don't show these yet. They're experimental and will likely only confuse users.
+        #b <- object@spatial.sensitivity$burden
+        #cat(sprintf("#      EXPERIMENTAL! equal-allele burden genome-wide estimates:\n"))
+        #for (mt in c('snv', 'indel')) {
+            #cat(sprintf("#       %6s: %0.1f (95%% CI: %0.1f-%0.1f)\n",
+                #mt, b[[mt]]$median, b[[mt]]$ci95[1], b[[mt]]$ci95[2]))
+        #}
     }
 })
