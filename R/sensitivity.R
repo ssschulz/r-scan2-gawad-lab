@@ -264,7 +264,11 @@ somatic.sensitivity <- function(object, data=object@spatial.sensitivity$data,
 # rate as the count models both imply; it should have a simple linear
 # relationship.  As such, model (4) might be the best estimate by directly
 # estimating the mean mutation rate per tile, assuming all tiles have the
-# same mutation rate (which is not true).
+# same mutation rate (which is not true). The main drawback of the mean
+# estimator is that it is often skewed by calls in low sensitivity
+# bins (which could be false positive calls or poorly predicted sens.) and/or
+# small bins.  The other methods include the bin size in the probablistic
+# model, which mitigates the extra noise of small bins to some degree.
 #
 # Use an EQUAL-BURDEN ASSUMPTION across major and minor alleles to estimate
 # total somatic burden. That is, assume that the same number of mutations
