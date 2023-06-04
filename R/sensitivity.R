@@ -256,6 +256,16 @@ somatic.sensitivity <- function(object, data=object@spatial.sensitivity$data,
 }
 
 
+# *********** EXPERIMENTAL TOTAL MUTATION BURDEN ESTIMATORS ************
+# MAJOR RESERVATIONS: in low mutation burden settings, the regression on
+# sensitivity for the negative binomial and poisson models below can fail
+# if the few calls happen to land in low sensitivity bins.  Further,
+# sensitivity should not have an exponential relationship with the call
+# rate as the count models both imply; it should have a simple linear
+# relationship.  As such, model (4) might be the best estimate by directly
+# estimating the mean mutation rate per tile, assuming all tiles have the
+# same mutation rate (which is not true).
+#
 # Use an EQUAL-BURDEN ASSUMPTION across major and minor alleles to estimate
 # total somatic burden. That is, assume that the same number of mutations
 # occur on the major allele (VAF >= 50%) as the minor allele. This assumption
@@ -263,6 +273,73 @@ somatic.sensitivity <- function(object, data=object@spatial.sensitivity$data,
 # major allele and leads to noisier estimates. The allele that is major or
 # minor changes with genome location; it does not refer to either the maternal
 # or paternal allele (in humans).
+#
+# 4 methods are used to produce a total burden estimate (i.e., corrected for
+# somatic mutation detection sensitivity) by first stratifying the genome into
+# (non-contiguous) bins with similar somatic sensitivity ("similar" is controlled
+# by stratify.sensitivity.digits). 
+#
+# In order of worst to best, the methods are:
+#   1. Negative binomial simulation. In each bin i, simulate the number of false
+#      negative mutations via
+#         N_i = # of somatic mutation calls in bin i
+#         X_i ~ NegBin(size=N_i, prob=sensitivity_i).
+#      The total number of mutations per bin is then X_i + N_i and summing over i
+#      gives the total number of mutations in the genome.  This method suffers
+#      from the fact that NegBin is not applicable to N_i=0 or sensitivity_i=0,
+#      so many bins must be assigned X_i=0.
+sim.negbin.estimator <- function(strat.tab, n.sims) {
+        # use a negative binomial process to estimate total number of mutations in
+        # each sensitivity bin (i.e., number called and number missed(=negbin value))
+        # This is usually not a great estimate because of the two conditions below:
+        # sens > 0 & ncalls > 0. The areas of the genome with no calls or no sensitivity
+        # must be ignored because the negative binomial distribution does not support
+        # size=0 or prob=0.
+    sims <- rowSums(apply(strat.tab[sens > 0 & ncalls > 0,.(ncalls, sens)], 1, function(row)
+        row[1] + rnbinom(n=n.sims, size=row[1], prob=row[2])))
+
+    list(
+        n.sims=n.sims,
+        burden=mean(sims),
+        mean=mean(sims), median=median(sims),
+        ci95=quantile(sims, probs=c(0.025, 0.975)),
+        ci.99=quantile(sims, probs=c(0.005, 0.995)),
+        sims=sims)
+}
+#   2. Poisson regression on N_i / S_i ~ sensitivity_i, where S_i is the number
+#      of tiles in bin i.  That is, the rate of mutations per tile is being
+#      modeled.  The primary assumption is that spatial sensitivity is independent
+#      of any spatial bias in mutation distribution.  E.g., in cancer mutations
+#      are known to be spatial biased toward (i.e., overrepresented) in closed
+#      chromatin regions.
+poisson.estimator <- function(strat.tab) {
+    pois.m <- stats::glm(ncalls ~ sens + offset(log(n)), data=strat.tab, family=poisson)
+    poisson.estimate <- list(
+        model=pois.m,
+        burden=exp(predict(object=pois.m, newdata=data.frame(sens=1, n=sum(strat.tab$n)))))
+        # The total extrapolation uses a bin the size of the whole genome (sum(strat.tab$n))
+        # with detection sensitivity = 100%.  The rate parameter estimated by the model is
+}
+#   3. Negative binomial regression on N_i / S_i ~ sensitivity_i.  This is the
+#      same model as (2), but with an added overdispersion parameter.
+negbin.estimator <- function(strat.tab) {
+    negbin.m <- MASS::glm.nb(ncalls ~ sens + offset(log(n)), data=strat.tab)
+    negbin.estimate <- list(
+        model=negbin.m,
+        burden=exp(predict(object=negbin.m, newdata=data.frame(sens=1, n=sum(strat.tab$n)))))
+}
+#   4. Mean estimator.
+mean.estimator <- function(strat.tab) {
+    # Don't use pred=NA, pred=0 or sens=0 bins to estimate the per-tile rate,
+    # but do use all bins in the extrapolation (sum(strat.tab$n)).
+    rate.per.tile.per.sens.bin <- strat.tab[!is.na(pred) & pred > 0 & sens > 0, ncalls / sens / n]
+    rate.per.tile <- mean(rate.per.tile.per.sens.bin)
+    list(
+        rate.per.tile.per.sens.bin=rate.per.tile.per.sens.bin,
+        rate.per.tile=rate.per.tile,
+        burden=rate.per.tile*sum(strat.tab$n)
+    )
+}
 #
 # N.B. in this context 'major' and 'minor' alleles refer amplification bias:
 # the allele that was more amplified as "major" and less amplified is "minor".
@@ -278,32 +355,54 @@ estimate.burden.by.spatial.sensitivity <- function(object, data=object@spatial.s
     # group the genome by somatic calling sensitivity. once the model's predicted
     # sensitivity is used to create an aggregated region for each sensitivity value,
     # the GERMLINE sites in each region are used to calculate sensitivity.
-    #
-    # only the major allele is queried
-    strat.tab <- stratify.tiles.by.somatic.sensitivity(
-        data=data, muttype=muttype, alleletype='maj',
-        stratify.sensitivity.digits=stratify.sensitivity.digits)
+    allele.types <- c('both', 'maj', 'min')
+    strat.tabs <- setNames(lapply(allele.types, function(at) {
+        strat.tab <- stratify.tiles.by.somatic.sensitivity(
+            data=data, muttype=muttype, alleletype=at,
+            stratify.sensitivity.digits=stratify.sensitivity.digits)
+    }), allele.types)
 
-    # use a negative binomial process to estimate total number of mutations in
-    # each sensitivity bin (i.e., number called and number missed(=negbin value))
-    sims <- apply(strat.tab[ncalls > 0,.(ncalls, sens)], 1, function(row)
-        row[1] + rnbinom(n=n.sims, size=row[1], prob=row[2]))
+    # Estimate 1.
+    sim.negbin.estimates <- lapply(strat.tabs, sim.negbin.estimator, n.sims=n.sims)
+    # Estimate 2
+    poisson.estimates <- lapply(strat.tabs, poisson.estimator)
+    # Estimate 3
+    negbin.estimates <- lapply(strat.tabs, negbin.estimator)
+    # Estimate 4
+    mean.estimates <- lapply(strat.tabs, mean.estimator)
 
     # EQUAL-BURDEN ASSUMPTION: with a decent estimate of the number of mutations
-    # on the VAF>=50% allele, assume the other allele (diploid assumption, obviously)
-    # has the same number.
-    #
-    # each row is one of `n.sims` simulations, each element in the row is the total
-    # number of mutations (called + estimated uncalled(=neg binom)). the sum is the
-    # genomewide burden.
-    sims <- 2*rowSums(sims)
+    # on the VAF>=50% (major) allele, assume the other allele (diploid assumption,
+    # obviously) has the same number of mutations.
+    sim.negbin.estimates$equal.burden <- sim.negbin.estimates$maj$burden*2
+    poisson.estimates$equal.burden <- poisson.estimates$maj$burden*2
+    negbin.estimates$equal.burden <- negbin.estimates$maj$burden*2
+    mean.estimates$equal.burden <- mean.estimates$maj$burden*2
 
     # return the simulations, metadata and some useful precomputed summaries
-    list(muttype=muttype, n.sims=n.sims, random.seed=random.seed,
-        mean=mean(sims), median=median(sims),
-        ci95=quantile(sims, probs=c(0.025, 0.975)),
-        ci.99=quantile(sims, probs=c(0.005, 0.995)),
-        sims=sims)
+    list(muttype=muttype, random.seed=random.seed,
+        strat.tabs=strat.tabs,
+        sim.negbin.estimates=sim.negbin.estimates,
+        poisson.estimates=poisson.estimates,
+        negbin.estimates=negbin.estimates,
+        mean.estimates=mean.estimates)
+}
+
+
+experimental.mutburden.estimators <- function(object, muttype, estimators=c('sim.negbin.estimates', 'poisson.estimates', 'negbin.estimates', 'mean.estimates')) {
+    sapply(object@spatial.sensitivity$burden[[muttype]][estimators], function(x)
+        c(maj=x$maj$burden, min=x$min$burden, both=x$both$burden, equal.assumption=x$equal.burden))
+}
+
+
+compare.mutburden.estimators <- function(object, muttype=c('snv', 'indel')) {
+    muttype <- match.arg(muttype, several.ok=TRUE)
+
+    setNames(lapply(muttype, function(mt) {
+        original.estimator <- c(maj=NA, min=NA, both=mutburden(object, mt)[[1]], equal.assumption=NA)
+        spatial.estimators <- experimental.mutburden.estimators(object, mt)
+        round(rbind(original.estimator, t(spatial.estimators)), 1)
+    }), muttype)
 }
 
 
