@@ -49,6 +49,8 @@ setMethod("show.abmodel.training.sites", "SCAN2", function(object) {
     } else {
         if (!('training.site' %in% colnames(object@gatk))) {
             cat(" (no data)\n")
+        } else if (nrow(object@gatk[training.site==TRUE]) == 0) {
+            cat(" (training data removed, likely minimized SCAN2 object)\n")
         } else {
             # germline indels are not used for AB model training
             per.hap <- object@gatk[training.site==TRUE & muttype == 'snv', .N, by=phased.gt]
@@ -104,7 +106,7 @@ setMethod("show.abmodel.ab.distn", "SCAN2", function(object) {
                 round(s['1st Qu.'], 3),
                 round(s['Median'], 3),
                 round(s['3rd Qu.'], 3), '\n')
-            if ('training.site' %in% colnames(object@gatk)) {
+            if ('training.site' %in% colnames(object@gatk) & nrow(object@gatk[training.site==TRUE]) > 0) {
                 xs <- round(object@gatk[training.site==TRUE & muttype == 'snv',
                     .(mean=mean(gp.mu), cor=cor(af, ab, use='complete.obs'))],3)
                 cat('#       mean at training hSNPs:', xs$mean, '\n')
@@ -195,8 +197,8 @@ setMethod("show.depth.profile", "SCAN2", function(object) {
         cat("(not added)\n")
     } else {
         mc=mean.coverage(object)
-        cat(sprintf('\n#   mean depth: bulk: %0.2fx,   single cell: %0.2fx (max DP set to 500)\n',
-            mc['bulk'], mc['single.cell']))
+        cat(sprintf('\n#   mean depth: single cell: %0.2fx,   bulk: %0.2fx (max DP set to %d)\n',
+            mc['bulk'], mc['single.cell'], object@depth.profile$clamp.dp))
         for (mt in c('snv', 'indel')) {
             sfp <- object@static.filter.params[[mt]]
             dptab <- object@depth.profile$dptab
@@ -279,8 +281,8 @@ setMethod("show.spatial.sensitivity", "SCAN2", function(object) {
     if (is.null(ss)) {
         cat("(not computed)\n")
     } else {
-        cat(sprintf("applies only to VAF-based calling (NOT mutsig rescue!)\n#       %d tiles of width %d, neighborhood size for training hSNPs %d (%d tiles)\n",
-            nrow(ss$data), ss$tilewidth, ss$tilewidth * (1 + 2*ss$neighborhood.tiles),
+        cat(sprintf("applies only to VAF-based calling (NOT mutsig rescue!)\n#       tiles of width %d, neighborhood size for training hSNPs %d (%d tiles)\n",
+            ss$tilewidth, ss$tilewidth * (1 + 2*ss$neighborhood.tiles),
             ss$neighborhood.tiles))
         ss <- object@spatial.sensitivity$somatic.sensitivity
         cat(sprintf("#                  either allele              maj allele               min allele\n"))
