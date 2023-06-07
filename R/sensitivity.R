@@ -257,6 +257,14 @@ somatic.sensitivity <- function(object, data=object@spatial.sensitivity$data,
 
 
 # *********** EXPERIMENTAL TOTAL MUTATION BURDEN ESTIMATORS ************
+# Use an EQUAL-BURDEN ASSUMPTION across major and minor alleles to estimate
+# total somatic burden. That is, assume that the same number of mutations
+# occur on the major allele (VAF >= 50%) as the minor allele. This assumption
+# is helpful because sensitivity on the minor allele is much lower than the
+# major allele and leads to noisier estimates. The allele that is major or
+# minor changes with genome location; it does not refer to either the maternal
+# or paternal allele (in humans).
+#
 # MAJOR RESERVATIONS: in low mutation burden settings, the regression on
 # sensitivity for the negative binomial and poisson models below can fail
 # if the few calls happen to land in low sensitivity bins.  Further,
@@ -270,13 +278,10 @@ somatic.sensitivity <- function(object, data=object@spatial.sensitivity$data,
 # small bins.  The other methods include the bin size in the probablistic
 # model, which mitigates the extra noise of small bins to some degree.
 #
-# Use an EQUAL-BURDEN ASSUMPTION across major and minor alleles to estimate
-# total somatic burden. That is, assume that the same number of mutations
-# occur on the major allele (VAF >= 50%) as the minor allele. This assumption
-# is helpful because sensitivity on the minor allele is much lower than the
-# major allele and leads to noisier estimates. The allele that is major or
-# minor changes with genome location; it does not refer to either the maternal
-# or paternal allele (in humans).
+# Finally, even though we try to ensure a model fit succeeds, there remain
+# corner cases where one of these models will fail to fit for numerical
+# reasons. This is handled by tryCatch() and, when failure occurs, the
+# model will be NULL.
 #
 # 4 methods are used to produce a total burden estimate (i.e., corrected for
 # somatic mutation detection sensitivity) by first stratifying the genome into
@@ -342,9 +347,11 @@ negbin.estimator <- function(strat.tab) {
         negbin.m <- NULL
         burden <- 0
     } else {
-        negbin.m <- MASS::glm.nb(ncalls ~ sens + offset(log(n)),
-            data=strat.tab[sens > 0 & ntotal > 0])
-        burden <- exp(predict(object=negbin.m, newdata=data.frame(sens=1, n=sum(strat.tab$n))))
+        negbin.m <- tryCatch(MASS::glm.nb(ncalls ~ sens + offset(log(n)), data=strat.tab[sens > 0 & ntotal > 0]),
+            error=function(e) { cat(paste("ERROR occurred in MASS::glm.nb (see below), skipping and returning NULL model\n", e) ); return(NULL) })
+        burden <- 0
+        if (!is.null(negbin.m))
+            burden <- exp(predict(object=negbin.m, newdata=data.frame(sens=1, n=sum(strat.tab$n))))
     }
     list(model=negbin.m, burden=burden)
 }
