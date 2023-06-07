@@ -347,7 +347,7 @@ negbin.estimator <- function(strat.tab) {
         negbin.m <- NULL
         burden <- 0
     } else {
-        negbin.m <- tryCatch(MASS::glm.nb(ncalls ~ sens + offset(log(n)), data=strat.tab[sens > 0 & ntotal > 0]),
+        negbin.m <- tryCatch(MASS::glm.nb(ncalls ~ sens + offset(log(n)), data=data),
             error=function(e) { cat(paste("ERROR occurred in MASS::glm.nb (see below), skipping and returning NULL model\n", e) ); return(NULL) })
         burden <- 0
         if (!is.null(negbin.m))
