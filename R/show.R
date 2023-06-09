@@ -198,7 +198,7 @@ setMethod("show.depth.profile", "SCAN2", function(object) {
     } else {
         mc=mean.coverage(object)
         cat(sprintf('\n#   mean depth: single cell: %0.2fx,   bulk: %0.2fx (max DP set to %d)\n',
-            mc['bulk'], mc['single.cell'], object@depth.profile$clamp.dp))
+            mc['single.cell'], mc['bulk'], object@depth.profile$clamp.dp))
         for (mt in c('snv', 'indel')) {
             sfp <- object@static.filter.params[[mt]]
             dptab <- object@depth.profile$dptab
