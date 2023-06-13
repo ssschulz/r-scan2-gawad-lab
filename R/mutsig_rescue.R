@@ -16,17 +16,6 @@ reduce.table <- function(gatk, target.fdr) {
 }
 
 
-get.objects.for.sig.rescue <- function(object.paths, quiet=FALSE) {
-    os <- lapply(object.paths, function(path) {
-        if (!quiet) print(path)
-        x <- get(load(path))
-        prepare.object(x)
-    })
-    names(os) <- sapply(os, function(o) o@single.cell)
-    os
-}
-
-
 # Modifies 'o' by reference. The returned o is not a particularly valid
 # SCAN2 object.
 #
@@ -141,14 +130,19 @@ get.sig.score <- function(mutsigs, true.sig, artifact.sig, eps=0.001) {
 sig.homogeneity.test <- function(object, true.sig, muttype=c('snv', 'indel')) {
     muttype <- match.arg(muttype)
     true.muts <- get.high.quality.mutations(object@gatk, muttype=muttype)
+    if (muttype == 'snv')
+        true.muts <- table(sbs96(true.muts$mutsig))
+    if (muttype == 'indel')
+        true.muts <- table(id83(true.muts$mutsig))
+    
     sig.homogeneity.test.vs.sig(true.muts, true.sig)
 }
 
 
 sig.homogeneity.test.vs.sig <- function(true.muts, true.sig, n.samples=1e5, seed=10) {
     set.seed(10)   # for reproducibility
-    p.cell <- dmultinom(true.muts, size=sum(true.muts), prob=true.sig, log=TRUE)
+    logp.cell <- dmultinom(true.muts, size=sum(true.muts), prob=true.sig, log=TRUE)
     randoms <- stats::rmultinom(n.samples, sum(true.muts), prob=true.sig)
     logps <- apply(randoms, 2, dmultinom, size=sum(true.muts), prob=true.sig, log=TRUE)
-    mean(logps < p.cell)
+    mean(logps < logp.cell)
 }
