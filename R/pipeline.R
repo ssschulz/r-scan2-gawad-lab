@@ -546,18 +546,25 @@ mutsig.rescue <- function(object.paths, add.muts, rescue.target.fdr=0.01,
                 muts=results@gatk[pass == TRUE | rescue == TRUE],
                 # one entry for each mutation type (snv, indel)
                 sig.homogeneity.test=
-                    lapply(results@mutsig.rescue, function(msr) msr$sig.homogeneity.test)
+                    setNames(lapply(results@mutsig.rescue, function(msr) msr$sig.homogeneity.test),
+                        names(results@mutsig.rescue))
             )
             ret
         })
     }, enable=TRUE)
 
     # consolidate all SHT test p-values for multiple hypothesis testing correction
-    shts <- data.table(sample=sapply(results, function(r) r$sample),
-        sig.homogeneity.test=sapply(results, function(r) r$sig.homogeneity.test))
-    shts$bonferroni <- p.adjust(p=shts$sig.homogeneity.test, method='bonferroni')
-    shts$holm <- p.adjust(p=shts$sig.homogeneity.test, method='holm')
-    shts$bh.fdr <- p.adjust(p=shts$sig.homogeneity.test, method='fdr')
+    # there are separate tests for snvs and indels; multiple hypothesis correction
+    # should be applied to each separately.
+    shts <- do.call(rbind, lapply(c('snv', 'indel'), function(mt) {
+        sht <- data.table(sample=sapply(results, function(r) r$sample),
+                          muttype=mt,
+                          sig.homogeneity.test=sapply(results, function(r) r$sig.homogeneity.test[[mt]]))
+        sht$bonferroni <- p.adjust(p=sht$sig.homogeneity.test, method='bonferroni')
+        sht$holm <- p.adjust(p=sht$sig.homogeneity.test, method='holm')
+        sht$bh.fdr <- p.adjust(p=sht$sig.homogeneity.test, method='fdr')
+        sht
+    }))
 
     list(muts=do.call(rbind, lapply(results, function(r) r$muts)),
          sig.homogeneity.tests=shts)
