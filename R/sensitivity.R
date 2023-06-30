@@ -1,6 +1,3 @@
-
-
-
 # Spatial sensitivity applies only to VAF-based calling! Not to mutation signature-based rescue!
 # Use small tiles for parallelization (~1MB) because of basepair resolution.
 compute.spatial.sensitivity.depth <- function(single.cell.id, bulk.id,
@@ -117,15 +114,21 @@ compute.spatial.sensitivity.abmodel <- function(
                 report.mem=report.mem)
             p(class='sticky', amount=0, pc)
 
-            pc <- perfcheck(paste('compute.ab',i),
-                    ab <- compute.ab.given.sites.and.training.data(
-                        sites=data.table(chr=as.character(seqnames(gr2)), pos=(end(gr2)+start(gr2)) / 2),
-                        training.hsnps=training.sites,
-                        ab.fits=ab.fits, quiet=TRUE),  # have to set quiet=TRUE or progress bar will get overridden
-                report.mem=report.mem)
+            if (nrow(training.sites) == 0) {
+                pc <- paste('skipping compute.ab', i, '(empty)')
+                ret <- NULL
+            } else {
+                pc <- perfcheck(paste('compute.ab',i),
+                        ab <- compute.ab.given.sites.and.training.data(
+                            sites=data.table(chr=as.character(seqnames(gr2)), pos=(end(gr2)+start(gr2)) / 2),
+                            training.hsnps=training.sites,
+                            ab.fits=ab.fits, quiet=TRUE),  # have to set quiet=TRUE or progress bar will get overridden
+                    report.mem=report.mem)
+                ret <- cbind(data.table(chr=as.character(seqnames(gr2)), start=start(gr2), end=end(gr2)), ab)
+            }
             p(class='sticky', amount=1, pc)
 
-            cbind(data.table(chr=as.character(seqnames(gr2)), start=start(gr2), end=end(gr2)), ab)
+            ret
         })
     }, enable=TRUE)
 
