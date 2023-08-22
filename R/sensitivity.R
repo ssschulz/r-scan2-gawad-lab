@@ -27,7 +27,15 @@ compute.spatial.sensitivity.depth <- function(single.cell.id, bulk.id,
 
             pc <- perfcheck(paste('read.depth.2sample', i),
                 dp <- read.depth.2sample(path=joint.dptab.path, sc.sample=single.cell.id,
-                    bulk.sample=bulk.id, keep.coords=TRUE, region=reduce(gr2), quiet=quiet),
+                    bulk.sample=bulk.id, keep.coords=TRUE,
+                    # N.B. read.depth.2sample requires region to be a GRanges with only
+                    # one range in it. Cases arise in regular use where excluding ranges
+                    # from grs.for.sens that do not *start* in gr can lead to disjoint
+                    # ranges. To be safe, read in depth info for the union of gr2 and gr
+                    # (because gr2 can also extend outside of gr). This makes sure all
+                    # possible depth data is available AND that only one contigous range
+                    # is present in `region`.
+                    region=reduce(c(gr, gr2)), quiet=quiet),
                 report.mem=report.mem)
             p(class='sticky', pc, amount=0)
 
@@ -109,7 +117,16 @@ compute.spatial.sensitivity.abmodel <- function(
 
             pc <- perfcheck(paste('get.training.sites',i),
                     training.sites <- get.training.sites.for.abmodel.by.range(
-                        region=reduce(gr2), integrated.table.path=integrated.table.path,
+                        # N.B. get.training.sites.for.abmodel.by.rnage requires `region` to be
+                        # a GRanges with only
+                        # one range in it. Cases arise in regular use where excluding ranges
+                        # from grs.for.sens that do not *start* in gr can lead to disjoint
+                        # ranges. To be safe, read in training sites covering the union of gr2
+                        # and gr (because gr2 can also extend outside of gr). This makes sure all
+                        # possible training sites are available AND that only one contigous range
+                        # is present in `region`.
+                        region=reduce(c(gr, gr2)),
+                        integrated.table.path=integrated.table.path,
                         single.cell.id=single.cell.id, quiet=quiet),
                 report.mem=report.mem)
             p(class='sticky', amount=0, pc)
