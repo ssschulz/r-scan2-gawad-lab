@@ -13,7 +13,8 @@ get.gbp.by.genome <- function(object) {
     } else if (object@genome.string == 'hg38') {
         # 455 contigs; see http://genomewiki.ucsc.edu/index.php/Hg38_100-way_Genome_size_statistics
         total <- 3209286105
-        chrx <- 156040895 chry <- 57227415
+        chrx <- 156040895 
+	chry <- 57227415
         chrm <- 16569
         return((total - chrx - chry - chrm)*2 / 1e9) # = 5.992002452
     } else if (object@genome.string == 'mm10') {
