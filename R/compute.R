@@ -185,9 +185,6 @@ fcontrol <- function(germ.df, som.df, bins=20, rough.interval=0.99, eps=0.1) {
     approx.ns <- estimate.somatic.burden(fc=list(g=g, s=s),
         min.s=1, max.s=sum(s), n.subpops=min(sum(s), 100),
         rough.interval=rough.interval)
-	cat("attempting to print the contents of germ.df and som.df")
-	cat(print(germ.df))
-	cat(print(som.df))
     cat(sprintf("fcontrol: dp=%d, max.s=%d (%d), n.subpops=%d, min=%d, max=%d\n",
         germ.df$dp[1], nrow(som.df), sum(s), min(nrow(som.df),100),
         as.integer(approx.ns[1]), as.integer(approx.ns[2])))
