@@ -84,7 +84,7 @@ setMethod("compute.mutburden", "SCAN2", function(object, gbp.per.genome=get.gbp.
 			print(s)
 			print("printing s$dp")
 			print(s$dp)
-            tryCatch(s$dpq <- cut(s$dp, qbreaks, include.lowest=T, labels=F,
+            tryCatch(s$dpq <- cut(s$dp, qbreaks, include.lowest=T, labels=F),
 					error = function(e) {
 					message("cut to generate quantiles failed, is your rdata object generating a sensible dp column?")
 			})
