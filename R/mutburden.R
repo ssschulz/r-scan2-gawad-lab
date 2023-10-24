@@ -16,6 +16,8 @@ get.gbp.by.genome <- function(object) {
         chrx <- 156040895 
 	chry <- 57227415
         chrm <- 16569
+	#easier for me to trace from here, prob should remove later
+	save(object, "/scratch/users/sschulz/pre_cut.rda")
         return((total - chrx - chry - chrm)*2 / 1e9) # = 5.992002452
     } else if (object@genome.string == 'mm10') {
         # 66 contigs; see http://genomewiki.ucsc.edu/index.php/Hg38_100-way_Genome_size_statistics
