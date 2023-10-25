@@ -101,7 +101,9 @@ read.table.1sample <- function(path, sample.id, meta.cols, region=NULL, quiet=FA
     cols.to.keep <- c(cols.to.keep, sample.id, c('scref', 'scalt'))
 
     gatk <- gatk[,..cols.to.keep]
-
+    cat("Printing gatk \n")
+    cat(print(gatk))
+    cat("\n")
     gatk
 }
 
