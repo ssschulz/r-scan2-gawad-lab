@@ -88,6 +88,7 @@ read.table.1sample <- function(path, sample.id, meta.cols, region=NULL, quiet=FA
     # Read 3 columns for the single cell, 3 columns for bulk
     cols.to.read[sample.idx + 0:2] <- c('character', 'integer', 'integer')
     cat(print(cols.to.read))
+    cat("\n")
     gatk <- read.tabix.data(path=path, region=region, header=header, quiet=quiet, colClasses=cols.to.read)
     cat("DEBUG: 92 \n")
     new.sample.idx <- which(colnames(gatk) == sample.id)
