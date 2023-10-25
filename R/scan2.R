@@ -664,6 +664,10 @@ setMethod("compute.static.filters", "SCAN2", function(object, mode=c('new', 'leg
     mode <- match.arg(mode)
 
     object@static.filter.params$mode <- mode
+    print("saving object \n")
+    print(object)
+    save(object, "pre_static_filer.rda")
+
 
     for (mt in c('snv', 'indel')) {
         sfp <- object@static.filter.params[[mt]]
