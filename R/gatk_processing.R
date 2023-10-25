@@ -80,14 +80,14 @@ read.table.1sample <- function(path, sample.id, meta.cols, region=NULL, quiet=FA
             }
         }
     }
-    cat("DEBUG: 83 \n")
+    
     # Step 2: really read the tables in, but only the relevant columns
     cols.to.read <- rep("NULL", tot.cols)
     cols.to.read[1:n.meta.cols] <- meta.cols
 
     # Read 3 columns for the single cell, 3 columns for bulk
     cols.to.read[sample.idx + 0:2] <- c('character', 'integer', 'integer')
-    cat("DEBUG: 90 \n")
+    cat(print(cols.to.read))
     gatk <- read.tabix.data(path=path, region=region, header=header, quiet=quiet, colClasses=cols.to.read)
     cat("DEBUG: 92 \n")
     new.sample.idx <- which(colnames(gatk) == sample.id)
