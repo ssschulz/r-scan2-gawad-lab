@@ -1,17 +1,152 @@
+# look for hSNPs in ever-larger windows around this chunk. exit as soon as any
+# training hSNPs are found. when using MDA or PTA single cell WGA, there is
+# essentially no useful AB information in hSNPs > 100kb away, but perhaps this
+# won't be the case in future amplification technologies.
+#
+# N.B. hg38 added some contigs that are far away from the 1000 genomes population
+# phasing panel. we used to only use flank=100kb, but in hg38 this sometimes leads
+# to 0 extended training hSNPs and ultimately a failure in infer.gp().
+# Genome-wide AB model estimation for spatial sensitivity covers the whole genome.
+# The short arms of acrocentric chromosomes (e.g., chr22) are so large (16MB) that
+# 10MB extensions are also sometimes necessary.
+get.training.sites.for.abmodel.by.range <- function(region, integrated.table.path,
+    single.cell.id, flanks.to.try=10^(5:8), quiet=FALSE)
+{
+    for (flank in flanks.to.try) {
+        if (!quiet) cat('Importing extended hSNP training data from', integrated.table.path,
+                        'with flank size =', flank, '\n')
+
+        # trim() always generates a warning for first and last regions on a chromosome
+        # because adding/subtracting flank goes outside of the chromosome boundaries.
+        extended.range <- trim(GRanges(seqnames=seqnames(region)[1],
+            ranges=IRanges(start=start(region)-flank, end=end(region)+flank),
+                seqinfo=seqinfo(region)))
+        extended.training.hsnps <- read.training.hsnps(integrated.table.path,
+            sample.id=single.cell.id, region=extended.range, quiet=quiet)
+        if (!quiet)
+            cat(sprintf("hSNP training sites: %d, flank size: %d\n",
+                nrow(extended.training.hsnps), as.integer(flank)))
+        # there needs to be >1 training hSNPs or else the leave-one-out method
+        # will produce NA AB values at the training hSNP (when it's left out)
+        if (nrow(extended.training.hsnps) > 1)
+            break
+    }
+    return(extended.training.hsnps)
+}
+
+
+get.training.sites.for.abmodel <- function(object, region,
+    integrated.table.path=object@integrated.table.path,
+    seqinfo=genome.string.to.seqinfo.object(object@genome.string),
+    quiet=FALSE)
+{
+    # if this is a chunked object, extend hSNPs up/downstream so that full info is available at edges
+    if (!is.null(region)) {
+        training.hsnps <- get.training.sites.for.abmodel.by.range(region=region,
+            integrated.table.path=integrated.table.path, single.cell.id=object@single.cell, quiet=quiet)
+
+        # nrow(object@gatk) > 0: don't give up in heterochromatic arms of, e.g., chr13
+        # where there are neither hSNPs nor somatic candidates.
+        if (nrow(training.hsnps) < 2 & nrow(object@gatk) > 0) {
+            stop(sprintf("%d hSNPs found within %d bp of %s:%d-%d, need at least 2; giving up",
+                nrow(training.hsnps), flank,
+                seqnames(region)[1], start(region)[1], end(region)[1]))
+        }
+    } else {
+        training.hsnps <- object@gatk[training.site == TRUE & muttype == 'snv']
+    }
+
+    training.hsnps
+}
+
+
+
+compute.ab.given.sites.and.training.data <- function(sites, training.hsnps, ab.fits, quiet=FALSE)
+{
+    # Splitting by chromosome is not for parallelization; the AB model
+    # is fit separately for each chromosome and thus applies different
+    # parameter estimates.
+    chroms <- unique(sites$chr)
+    do.work <- function(chrom, sites, ab.fit, hsnps) {
+        if (!quiet)
+            cat(sprintf("inferring AB for %d sites on %s:%d-%d\n", 
+                nrow(sites), chrom, as.integer(min(sites$pos)), as.integer(max(sites$pos))))
+        time.elapsed <- system.time(z <- infer.gp1(ssnvs=sites, fit=ab.fit,
+            hsnps=hsnps, flank=1e5, verbose=!quiet))
+        if (!quiet) print(time.elapsed)
+        z
+    }
+    if (length(chroms) == 1) {
+        # slightly more efficient for real use cases with chunked computation
+        ab <- do.work(chrom=chroms, sites=sites,
+            ab.fit=ab.fits[chroms,,drop=FALSE],
+            hsnps=training.hsnps)
+    } else {
+        ab <- do.call(rbind, lapply(chroms, function(chrom) {
+            hsnps <- training.hsnps[chr == chrom]
+            ab.fit <- ab.fits[chrom,,drop=FALSE]
+            do.work(chrom=chrom, sites=sites, ab.fit=ab.fit, hsnps=hsnps)
+        }))
+    }
+
+    # Chunks are sometimes empty. Add dummy columns so that rbind() doesn't
+    # fail when stiching together results from many chunks.
+    if (is.null(ab)) {
+        data.frame(gp.mu=numeric(0), gp.sd=numeric(0))
+    } else {
+        ab
+    }
+}
+
+
+
+# Very simple approximation of how correlation is affected by binomial sampling.
+binomial.effect.on.correlation <- function(cor, depth, n.samples=1e4) {
+    # latent variable in normal space
+    L <- MASS::mvrnorm(n=n.samples, mu=c(0,0), Sigma=matrix(c(1,cor,cor,1),nrow=2))
+    # Transform into [0,1] space
+    B <- 1/(1+exp(-L))
+    # Draw discrete counts from N=depth using prob=B
+    N <- apply(B, 2, function(col) rbinom(n=length(col), size=depth, prob=col))
+
+    cor(N/depth)[1,2]
+}
+
+
 # get an approximate idea of correlation between training hSNPs
 # by only looking at adjacent hSNPs. d is the distance between
 # them and (phaf, phaf2) are the allele frequencies of hSNP i
 # and its upstream neighbor hSNP i+1.
 approx.abmodel.covariance <- function(object, bin.breaks=10^(0:5)) {
     z <- object@gatk[training.site==TRUE & muttype=='snv',
-        .(d=c(diff(pos),0), phaf=phased.hap1/(phased.hap1+phased.hap2))][, phafd:=c(diff(phaf),0)][, phaf2 := phaf+phafd]
+        .(phased.dp=phased.hap1 + phased.hap2, d=c(diff(pos),0), phaf=phased.hap1/(phased.hap1+phased.hap2))][, phafd:=c(diff(phaf),0)][, phaf2 := phaf+phafd]
 
     # bin the adjacent hSNPs by the distance between them
     z[d < 1e5, cut := cut(d, breaks=bin.breaks, ordered_result=T)]
     
+    # make depth integer for easier indexing into inverse functions
+    ret <- z[!is.na(cut), .(observed.cor=cor(phaf,phaf2,use='complete.obs'),
+                            mean.dp=as.integer(mean(phased.dp))), by=cut][order(cut)]
 
-    data.frame(x=bin.breaks[-1],
-        y=z[!is.na(cut), .(cor=cor(phaf,phaf2,use='complete.obs')), by=cut][order(cut)]$cor)
+    # get a rough inverse function of (observed correlation, dp) -> (underlying correlation, dp)
+    all.dps <- unique(as.integer(ret$mean.dp))
+    inverse.fns.by.depth <- setNames(lapply(all.dps, function(depth) {
+        # use a linear interpolation on the approximate relationship between
+        # sampling correlation (on the latent variable) and observed correlation (after binomial sampling)
+        sampling.cor <- seq(0.01, 1, length.out=50)
+        interp.points <- sapply(sampling.cor, binomial.effect.on.correlation, depth=depth)
+        # rule=2: when observations are outside of the observed range, returns the boundary value
+        approxfun(x=interp.points, y=sampling.cor, rule=2)  # returns a function
+    }), as.character(all.dps))
+
+    # data.table complains about recursive indexing if i try to do this in a := statement
+    corrected.cor <- sapply(1:nrow(ret), function(i) inverse.fns.by.depth[[as.character(ret$mean.dp[i])]](ret$observed.cor[i]))
+    ret[, corrected.cor := corrected.cor]
+    ret[, max.d := bin.breaks[-1]]
+
+    ret
+    #data.frame(x=bin.breaks[-1],
+        #y=z[!is.na(cut), .(cor=cor(phaf,phaf2,use='complete.obs')), by=cut][order(cut)]$cor)
 }
 
 
@@ -185,6 +320,7 @@ fcontrol <- function(germ.df, som.df, bins=20, rough.interval=0.99, eps=0.1) {
     approx.ns <- estimate.somatic.burden(fc=list(g=g, s=s),
         min.s=1, max.s=sum(s), n.subpops=min(sum(s), 100),
         rough.interval=rough.interval)
+
     cat(sprintf("fcontrol: dp=%d, max.s=%d (%d), n.subpops=%d, min=%d, max=%d\n",
         germ.df$dp[1], nrow(som.df), sum(s), min(nrow(som.df),100),
         as.integer(approx.ns[1]), as.integer(approx.ns[2])))
@@ -350,8 +486,7 @@ estimate.fdr.priors.old <- function(candidates, prior.data)
 }
 
 
-# New implementation of above using a two tables rather than loops
-# XXX: detect hSNP status here and apply NEW FDR adjustment
+# New implementation of above using tables rather than loops
 estimate.fdr.priors <- function(candidates, prior.data, use.ghet.loo=FALSE)
 {
     # Assign each candidate mutation to a (VAF, DP) bin
@@ -444,7 +579,8 @@ resample.germline <- function(sites, hsnps, M=50, seed=0) {
     # Remember that the nearest hSNP must be on the same chromosome
     tmpsom <- find.nearest.germline(som=sites[order(sites$pos),],
         germ=hsnps,
-        chrs=unique(sites$chr))
+        #chrs=unique(sites$chr))   # unique() might not preserve order
+        chrs=sites$chr[!duplicated(sites$chr)])
     spos <- log10(abs(tmpsom$pos-tmpsom$nearest.het))
 
     # Distribution of hSNP distances
