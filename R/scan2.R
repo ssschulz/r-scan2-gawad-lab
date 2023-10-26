@@ -666,7 +666,8 @@ setMethod("compute.static.filters", "SCAN2", function(object, mode=c('new', 'leg
     object@static.filter.params$mode <- mode
     print("saving object \n")
     print(object)
-    save(object, file="pre_static_filer.rda")
+    #no longer saving this object since I think it works now
+    #save(object, file="pre_static_filer.rda")
 
 
     for (mt in c('snv', 'indel')) {
