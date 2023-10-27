@@ -451,7 +451,7 @@ setGeneric("compute.ab.estimates", function(object, quiet=FALSE)
     standardGeneric("compute.ab.estimates"))
 setMethod("compute.ab.estimates", "SCAN2", function(object, quiet=FALSE) {
     check.slots(object, c('gatk', 'ab.fits'))
-
+    print("Hello from compute.ab.estimates")
     training.hsnps <- get.training.sites.for.abmodel(object=object,
         region=object@region, integrated.table.path=object@integrated.table.path, quiet=quiet)
 
@@ -473,7 +473,7 @@ setGeneric("compute.models", function(object, verbose=TRUE)
     standardGeneric("compute.models"))
 setMethod("compute.models", "SCAN2", function(object, verbose=TRUE) {
     check.slots(object, c('gatk', 'ab.estimates'))
-
+    print("hello from compute models")
     if (nrow(object@gatk) > 0) {
         matched.gp.mu <- match.ab(af=object@gatk$af, gp.mu=object@gatk$gp.mu)
         pvb <- compute.pvs.and.betas(object@gatk$scalt, object@gatk$dp,
@@ -492,6 +492,7 @@ setGeneric("compute.fdr.prior.data", function(object, mode=c('legacy', 'new'), q
     standardGeneric("compute.fdr.prior.data"))
 setMethod("compute.fdr.prior.data", "SCAN2", function(object, mode=c('legacy', 'new'), quiet=FALSE) {
     # to a chunked SCAN2 object (these are used for parallelization).
+    print("Hello from compute.fdr.prior.data")
     check.slots(object, c('gatk', 'static.filter.params'))
     # ALL candidates must be present for FDR estimation. So this function cannot be applied
     # to a chunked SCAN2 object (these are used for parallelization).
@@ -545,7 +546,7 @@ setGeneric("compute.fdr", function(object, path, mode=c('legacy', 'new'), quiet=
     standardGeneric("compute.fdr"))
 setMethod("compute.fdr", "SCAN2", function(object, path, mode=c('legacy', 'new'), quiet=FALSE) {
     mode <- match.arg(mode)
-
+    print("hello from compute.fdr")
     check.slots(object, c('gatk', 'ab.estimates', 'mut.models'))
 
     if (!missing(path) & !is.null(slot(object, 'fdr.prior.data')))
@@ -664,11 +665,6 @@ setMethod("compute.static.filters", "SCAN2", function(object, mode=c('new', 'leg
     mode <- match.arg(mode)
 
     object@static.filter.params$mode <- mode
-    print("saving object \n")
-    print(object)
-    #no longer saving this object since I think it works now
-    #save(object, file="pre_static_filer.rda")
-
 
     for (mt in c('snv', 'indel')) {
         sfp <- object@static.filter.params[[mt]]
@@ -860,7 +856,7 @@ setGeneric("call.mutations", function(object, target.fdr=0.01, quiet=FALSE)
         standardGeneric("call.mutations"))
 setMethod("call.mutations", "SCAN2", function(object, target.fdr=0.01, quiet=FALSE) {
     check.slots(object, c('gatk', 'static.filter.params', 'mut.models', 'excess.cigar.scores', 'fdr.prior.data', 'fdr'))
-
+    print("hello from call.mutations")
     # Try to handle indel calling when the cross-sample filter does not meet
     # the usual requirements (>1 unique individual).
     #   1. If there is only one unique individual but several cells from that
@@ -910,7 +906,7 @@ setMethod("add.depth.profile", "SCAN2", function(object, depth.path) {
     vars <- load(depth.path)  # should contain two objects: dptab and clamp.dp
     if (!all(c('dptab', 'clamp.dp') %in% vars))
         stop('depth.profile RDA file expected to contain dptab and clamp.dp objects')
-
+    print("hello from add.depth.profile")
     object@depth.profile <- list(
         dptab=dptab,
         clamp.dp=clamp.dp
