@@ -91,7 +91,7 @@ read.table.1sample <- function(path, sample.id, meta.cols, region=NULL, quiet=FA
     cat("\n")
     #im removing colclasses form her to see if that helps with the new error, rather it works and risk memory problem
     #colClasses=cols.to.read
-    gatk <- read.tabix.data(path=path, region=region, header=header, quiet=quiet)
+    gatk <- read.tabix.data(path=path, region=region, header=header, quiet=quiet, colClasses=cols.to.read)
     cat("DEBUG: 92 \n")
     new.sample.idx <- which(colnames(gatk) == sample.id)
     colnames(gatk)[new.sample.idx+1:2] <- c('scref', 'scalt')
