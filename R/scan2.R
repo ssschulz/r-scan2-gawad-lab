@@ -406,6 +406,7 @@ setMethod("compute.ab.fits", "SCAN2", function(object, path, chroms, #=1:22,
     n.tiles=250, hsnp.tilesize=100,
     alim=c(-7, 2), blim=c(2, 4), clim=c(-7, 2), dlim=c(2, 6)) 
 {
+    cat("DEBUG: starting compute.ab.fits")
     cat("using", n.cores, "cores\n")
     n.chunks <- 100  # 4*n.cores  # using a multiple of n.cores gives a smoother progress bar
     # using n.cores and ceiling can lead to (very small) differences in number
@@ -451,7 +452,7 @@ setGeneric("compute.ab.estimates", function(object, quiet=FALSE)
     standardGeneric("compute.ab.estimates"))
 setMethod("compute.ab.estimates", "SCAN2", function(object, quiet=FALSE) {
     check.slots(object, c('gatk', 'ab.fits'))
-    print("Hello from compute.ab.estimates")
+    print("DEBUG: starting compute.ab.estimates")
     training.hsnps <- get.training.sites.for.abmodel(object=object,
         region=object@region, integrated.table.path=object@integrated.table.path, quiet=quiet)
     print("we are in ab_estimates")
@@ -473,7 +474,7 @@ setGeneric("compute.models", function(object, verbose=TRUE)
     standardGeneric("compute.models"))
 setMethod("compute.models", "SCAN2", function(object, verbose=TRUE) {
     check.slots(object, c('gatk', 'ab.estimates'))
-    print("hello from compute models")
+    print("DEBUG: Starting compute.models")
     if (nrow(object@gatk) > 0) {
         matched.gp.mu <- match.ab(af=object@gatk$af, gp.mu=object@gatk$gp.mu)
         pvb <- compute.pvs.and.betas(object@gatk$scalt, object@gatk$dp,
@@ -492,7 +493,7 @@ setGeneric("compute.fdr.prior.data", function(object, mode=c('legacy', 'new'), q
     standardGeneric("compute.fdr.prior.data"))
 setMethod("compute.fdr.prior.data", "SCAN2", function(object, mode=c('legacy', 'new'), quiet=FALSE) {
     # to a chunked SCAN2 object (these are used for parallelization).
-    print("Hello from compute.fdr.prior.data")
+    print("DEBUG: Starting compute.fdr.prior.data")
     check.slots(object, c('gatk', 'static.filter.params'))
     # ALL candidates must be present for FDR estimation. So this function cannot be applied
     # to a chunked SCAN2 object (these are used for parallelization).
@@ -546,7 +547,7 @@ setGeneric("compute.fdr", function(object, path, mode=c('legacy', 'new'), quiet=
     standardGeneric("compute.fdr"))
 setMethod("compute.fdr", "SCAN2", function(object, path, mode=c('legacy', 'new'), quiet=FALSE) {
     mode <- match.arg(mode)
-    print("hello from compute.fdr")
+    print("DEBUG: Starting compute.fdr")
     check.slots(object, c('gatk', 'ab.estimates', 'mut.models'))
 
     if (!missing(path) & !is.null(slot(object, 'fdr.prior.data')))
@@ -856,7 +857,7 @@ setGeneric("call.mutations", function(object, target.fdr=0.01, quiet=FALSE)
         standardGeneric("call.mutations"))
 setMethod("call.mutations", "SCAN2", function(object, target.fdr=0.01, quiet=FALSE) {
     check.slots(object, c('gatk', 'static.filter.params', 'mut.models', 'excess.cigar.scores', 'fdr.prior.data', 'fdr'))
-    print("hello from call.mutations")
+    print("DEBUG: Starting call.mutations")
     # Try to handle indel calling when the cross-sample filter does not meet
     # the usual requirements (>1 unique individual).
     #   1. If there is only one unique individual but several cells from that
