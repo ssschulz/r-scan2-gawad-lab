@@ -454,7 +454,7 @@ setMethod("compute.ab.estimates", "SCAN2", function(object, quiet=FALSE) {
     print("Hello from compute.ab.estimates")
     training.hsnps <- get.training.sites.for.abmodel(object=object,
         region=object@region, integrated.table.path=object@integrated.table.path, quiet=quiet)
-
+    print("we are in ab_estimates")
     ab <- compute.ab.given.sites.and.training.data(
         sites=object@gatk[,.(chr,pos,refnt,altnt)],
         training.hsnps=training.hsnps,
